@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #7B5CF0;
+  --accent-glow: rgba(123, 92, 240, 0.15);
+  --accent-border: rgba(123, 92, 240, 0.25);
+  --accent-dim: rgba(123, 92, 240, 0.12);
+  --bg-void: #06060B;
+  --bg-primary: #0A0A12;
+  --bg-surface: #0E0E1A;
+  --bg-elevated: #13131F;
+  --bg-input: #161625;
+  --text-primary: rgba(255,255,255,0.9);
+  --text-secondary: rgba(255,255,255,0.45);
+  --text-muted: rgba(255,255,255,0.2);
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-font-smoothing: antialiased; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  /* Prevent rubber-band scroll in Telegram */
+  overscroll-behavior: none;
+}
+
+::-webkit-scrollbar { width: 0; }
+
+input, textarea {
+  background: var(--bg-input);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+  padding: 0 14px;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; } 50% { opacity: 0; }
+}
+
+.animate-float   { animation: float 3s ease-in-out infinite; }
+.animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+
+.ghost-cursor::after {
+  content: '▋';
+  animation: blink 1s step-end infinite;
+  color: var(--accent);
+}
+
+.prose-ghost { color: var(--text-primary); line-height: 1.7; }
+.prose-ghost p { margin-bottom: 10px; }
+.prose-ghost p:last-child { margin-bottom: 0; }
+.prose-ghost strong { color: white; font-weight: 600; }
+.prose-ghost code {
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  padding: 2px 5px;
+  font-size: 12px;
+  font-family: monospace;
+}

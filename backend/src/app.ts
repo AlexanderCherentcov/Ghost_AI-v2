@@ -1,0 +1,132 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
+import cookie from '@fastify/cookie';
+
+import { prisma } from './lib/prisma.js';
+import { redis } from './lib/redis.js';
+import { authenticate } from './middleware/auth.js';
+
+import authRoutes from './routes/auth.js';
+import chatRoutes from './routes/chat.js';
+import paymentRoutes from './routes/payments.js';
+import generateRoutes from './routes/generate.js';
+
+import { startVisionWorker } from './workers/vision.worker.js';
+import { startSoundWorker } from './workers/sound.worker.js';
+import { startReelWorker } from './workers/reel.worker.js';
+
+// ─── Build app ────────────────────────────────────────────────────────────────
+
+export async function buildApp() {
+  const fastify = Fastify({
+    logger: {
+      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+      transport:
+        process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty', options: { colorize: true } }
+          : undefined,
+    },
+  });
+
+  // ── Plugins ───────────────────────────────────────────────────────────────
+  await fastify.register(helmet, { global: true });
+
+  await fastify.register(cors, {
+    origin: [
+      process.env.FRONTEND_URL ?? 'http://localhost:3000',
+      process.env.MINIAPP_URL ?? 'http://localhost:3001',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+
+  await fastify.register(cookie);
+
+  await fastify.register(jwt, {
+    secret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
+  });
+
+  await fastify.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    skipOnError: true,
+  });
+
+  await fastify.register(websocket, {
+    options: { maxPayload: 1048576 }, // 1MB
+  });
+
+  // ── Decorators ────────────────────────────────────────────────────────────
+  fastify.decorate('authenticate', authenticate);
+
+  // ── Routes ────────────────────────────────────────────────────────────────
+  await fastify.register(authRoutes, { prefix: '/api' });
+  await fastify.register(chatRoutes, { prefix: '/api' });
+  await fastify.register(paymentRoutes, { prefix: '/api' });
+  await fastify.register(generateRoutes, { prefix: '/api' });
+
+  // ── Health check ──────────────────────────────────────────────────────────
+  fastify.get('/health', async () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  }));
+
+  // ── Global error handler ──────────────────────────────────────────────────
+  fastify.setErrorHandler((error, _request, reply) => {
+    fastify.log.error(error);
+
+    if (error.name === 'ZodError') {
+      return reply.code(400).send({
+        error: 'Validation error',
+        details: error.message,
+      });
+    }
+
+    if (error.statusCode) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+
+    return reply.code(500).send({ error: 'Internal server error' });
+  });
+
+  return fastify;
+}
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+async function start() {
+  const fastify = await buildApp();
+
+  // Connect to DB and Redis
+  await prisma.$connect();
+  await redis.connect();
+
+  // Start BullMQ workers
+  startVisionWorker();
+  startSoundWorker();
+  startReelWorker();
+
+  // Listen
+  const port = parseInt(process.env.PORT ?? '4000');
+  const host = process.env.HOST ?? '0.0.0.0';
+
+  await fastify.listen({ port, host });
+  fastify.log.info(`GhostLine backend running on http://${host}:${port}`);
+}
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+  await redis.disconnect();
+  process.exit(0);
+});
+
+start().catch((err) => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});

@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+  ULTRA
+  TEAM
+}
+
+enum TxType {
+  USAGE
+  PURCHASE
+  SUBSCRIPTION
+  BONUS
+  REFUND
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentType {
+  TOKEN_PACK
+  SUBSCRIPTION
+}
+
+// ─── MODELS ───────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  birthDate     DateTime?
+  email         String?   @unique
+  telegramId    String?   @unique
+  yandexId      String?   @unique
+  googleId      String?   @unique
+  avatarUrl     String?
+  tokenBalance  Int       @default(50000)
+  plan          Plan      @default(FREE)
+  planExpiresAt DateTime?
+
+  // Onboarding
+  purposes      String[]  @default([])
+  responseStyle String    @default("ghost")
+  onboardingDone Boolean  @default(false)
+
+  // Relations
+  messages     Message[]
+  chats        Chat[]
+  transactions TokenTransaction[]
+  payments     Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([telegramId])
+}
+
+model Chat {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String    @default("Новый чат")
+  mode      String    @default("chat")
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  chatId     String
+  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  role       String   // 'user' | 'assistant'
+  content    String   @db.Text
+  mode       String   // 'chat' | 'vision' | 'sound' | 'reel' | 'think'
+  complexity String?  // 'simple' | 'complex'
+  provider   String?  // internal: 'gemini-flash' | 'claude-sonnet' | ...
+  cacheHit   Boolean  @default(false)
+  tokensCost Int      @default(0)
+  mediaUrl   String?  // for Vision/Sound/Reel
+  createdAt  DateTime @default(now())
+
+  @@index([chatId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TokenTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Int      // negative = spend, positive = receive
+  type      TxType
+  meta      Json?    // { mode, complexity, paymentId, ... }
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  yokassaId     String        @unique
+  amount        Float         // in rubles
+  status        PaymentStatus @default(PENDING)
+  type          PaymentType
+  tokensGranted Int?
+  plan          Plan?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model GenerateJob {
+  id        String   @id @default(cuid())
+  userId    String
+  mode      String   // 'vision' | 'sound' | 'reel'
+  status    String   @default("pending") // pending | processing | done | failed
+  prompt    String   @db.Text
+  mediaUrl  String?
+  error     String?
+  bullJobId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+}

@@ -1,0 +1,109 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { GhostIcon } from '@/components/icons/GhostIcon';
+import { MessageBubble } from './MessageBubble';
+import { useChatStore } from '@/store/chat.store';
+import { useAuthStore } from '@/store/auth.store';
+import { greetingByHour } from '@/lib/utils';
+
+const SUGGESTIONS = [
+  'Напиши слоган для стартапа',
+  'Объясни квантовую физику',
+  'Придумай идею для бизнеса',
+  'Переведи на английский',
+];
+
+interface ChatWindowProps {
+  onSuggestion?: (text: string) => void;
+}
+
+export function ChatWindow({ onSuggestion }: ChatWindowProps) {
+  const { user } = useAuthStore();
+  const { messages, isStreaming, streamContent, activeChat } = useChatStore();
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamContent]);
+
+  const isEmpty = !messages.length && !isStreaming;
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {isEmpty ? (
+        <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <GhostIcon size={64} className="text-accent animate-float mx-auto mb-6" animated />
+            <h1 className="text-3xl font-medium text-white mb-2">Чем займёмся?</h1>
+            <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">
+              {greetingByHour()}{user?.name ? `, ${user.name}` : ''}.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 max-w-lg">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onSuggestion?.(s)}
+                  className="text-left px-4 py-3 rounded-xl border border-[var(--border)] text-sm text-[rgba(255,255,255,0.5)] hover:border-[var(--accent-border)] hover:text-[rgba(255,255,255,0.8)] transition-all"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      ) : (
+        <div className="max-w-[720px] mx-auto px-4 py-6 space-y-1">
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
+          </AnimatePresence>
+
+          {/* Streaming message */}
+          {isStreaming && streamContent && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-3 py-4"
+            >
+              <GhostIcon size={24} className="text-accent flex-shrink-0 mt-0.5" />
+              <div className="flex-1 text-[rgba(255,255,255,0.88)] leading-7 prose-ghost">
+                <span>{streamContent}</span>
+                <span className="ghost-cursor" />
+              </div>
+            </motion.div>
+          )}
+
+          {/* Typing indicator */}
+          {isStreaming && !streamContent && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex gap-3 py-4"
+            >
+              <GhostIcon size={24} className="text-accent flex-shrink-0" />
+              <div className="flex items-center gap-1.5 py-2">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+      )}
+    </div>
+  );
+}

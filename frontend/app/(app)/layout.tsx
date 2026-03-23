@@ -31,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading || !user) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex h-dvh overflow-hidden bg-[var(--bg-primary)]">
       {/* Sidebar — desktop */}
       <div className="hidden lg:block">
         <Sidebar />

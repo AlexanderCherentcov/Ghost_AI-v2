@@ -123,7 +123,7 @@ function ChatApp() {
   const isEmpty = !messages.length && !streaming;
 
   return (
-    <div className="flex flex-col h-screen bg-[#0A0A12]">
+    <div className="flex flex-col h-dvh bg-[#0A0A12]">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
@@ -202,7 +202,8 @@ function ChatApp() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
             placeholder="Сообщение..."
-            className="flex-1 h-11 text-sm"
+            style={{ fontSize: '16px' }} /* prevent iOS auto-zoom */
+            className="flex-1 h-11"
             disabled={streaming}
           />
           <button

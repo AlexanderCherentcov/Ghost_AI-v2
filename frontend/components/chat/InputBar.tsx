@@ -67,8 +67,9 @@ export function InputBar({ onSend, disabled = false, placeholder }: InputBarProp
             placeholder={placeholder ?? 'Напишите что-нибудь...'}
             disabled={disabled}
             rows={1}
+            style={{ fontSize: '16px' }} /* prevent iOS auto-zoom on focus */
             className={cn(
-              'flex-1 bg-transparent resize-none outline-none text-sm text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-6 max-h-[200px]',
+              'flex-1 bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-6 max-h-[200px]',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           />

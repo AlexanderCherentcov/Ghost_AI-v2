@@ -17,7 +17,10 @@ interface Message {
   cacheHit?: boolean;
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:4000';
+// Auto-derive WS URL from API URL so only NEXT_PUBLIC_API_URL is needed
+const _api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL
+  ?? _api.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
 
 export default function TgChatPage() {
   return (

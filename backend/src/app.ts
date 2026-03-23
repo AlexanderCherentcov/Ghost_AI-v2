@@ -35,13 +35,19 @@ export async function buildApp() {
   // ── Plugins ───────────────────────────────────────────────────────────────
   await fastify.register(helmet, { global: true });
 
+  // Support comma-separated CORS_ORIGINS env var, e.g.:
+  // "https://ghostlineai.ru,https://www.ghostlineai.ru,https://t.me"
+  const corsOrigins: string[] = [
+    ...(process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    process.env.MINIAPP_URL ?? 'http://localhost:3001',
+  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+
   await fastify.register(cors, {
-    origin: [
-      process.env.FRONTEND_URL ?? 'http://localhost:3000',
-      process.env.MINIAPP_URL ?? 'http://localhost:3001',
-    ],
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   await fastify.register(cookie);

@@ -11,7 +11,7 @@ import {
 } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
-import { api } from '@/lib/api';
+import { api, type Chat } from '@/lib/api';
 import { formatTokens, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +23,7 @@ const MODES = [
   { id: 'think',  label: 'Think',  href: '/think',  Icon: ThinkIcon },
 ] as const;
 
-function groupChats(chats: ReturnType<typeof useChatStore>['chats']) {
+function groupChats(chats: Chat[]) {
   const now = Date.now();
   const day = 86400000;
 

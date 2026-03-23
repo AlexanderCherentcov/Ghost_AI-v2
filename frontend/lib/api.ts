@@ -110,6 +110,7 @@ export interface User {
   name: string | null;
   email: string | null;
   avatarUrl: string | null;
+  birthDate: string | null;
   tokenBalance: number;
   plan: 'FREE' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;

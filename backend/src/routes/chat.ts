@@ -7,7 +7,7 @@ import { chargeTokens } from '../services/tokens.js';
 import { streamGemini } from '../services/providers/gemini.js';
 import { streamOpenAI } from '../services/providers/openai.js';
 import { streamClaude } from '../services/providers/anthropic.js';
-import type { WebSocket } from '@fastify/websocket';
+import type { WebSocket } from 'ws';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -162,7 +162,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       }
     };
 
-    socket.on('message', async (rawMessage) => {
+    socket.on('message', async (rawMessage: Buffer) => {
       let parsed: z.infer<typeof wsMessageSchema> & { jwt?: string };
 
       try {

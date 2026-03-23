@@ -45,7 +45,7 @@ export async function generateImage(
     response_format: 'url',
   });
 
-  const url = response.data[0]?.url;
+  const url = response.data?.[0]?.url;
   if (!url) throw new Error('No image URL returned from DALL-E');
   return url;
 }

@@ -33,7 +33,7 @@ function signTokens(fastify: FastifyInstance, userId: string, email?: string) {
     { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' }
   );
   const refreshToken = fastify.jwt.sign(
-    { userId, email, type: 'refresh' },
+    { userId, email } as { userId: string; email?: string },
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '30d' }
   );
   return { accessToken, refreshToken };

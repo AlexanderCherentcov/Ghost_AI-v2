@@ -1,8 +1,5 @@
 version: '3.9'
 
-# Подключаемся к уже запущенным postgres + redis через существующую сеть infra_ghost_net
-# Запускаем только сам бэкенд
-
 services:
   backend:
     build:
@@ -21,6 +18,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  bot:
+    build:
+      context: ../bot
+      dockerfile: Dockerfile
+    image: ghostline-bot:latest
+    restart: always
+    env_file: .env
+    environment:
+      - INTERNAL_API_URL=http://backend:4000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ghost_net
 
 networks:
   ghost_net:

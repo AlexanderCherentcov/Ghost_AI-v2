@@ -7,6 +7,7 @@ import { chargeTokens } from '../services/tokens.js';
 import { streamGemini } from '../services/providers/gemini.js';
 import { streamOpenAI } from '../services/providers/openai.js';
 import { streamClaude } from '../services/providers/anthropic.js';
+import { getSystemPrompt } from '../lib/prompts.js';
 import type { SocketStream } from '@fastify/websocket';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -242,8 +243,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Build messages array for AI
+        // Build messages array for AI (system prompt first)
         const messages = [
+          { role: 'system', content: getSystemPrompt(mode) },
           ...history.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: prompt },
         ];

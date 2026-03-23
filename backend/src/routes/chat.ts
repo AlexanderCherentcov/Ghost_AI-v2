@@ -32,16 +32,23 @@ function getProviderStream(
   provider: string,
   messages: Array<{ role: string; content: string }>
 ) {
+  const hasGemini = !!process.env.GOOGLE_AI_API_KEY && process.env.GOOGLE_AI_API_KEY !== 'placeholder';
+  const hasClaude = !!process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'placeholder';
+
   switch (provider) {
     case 'gemini-flash':
-      return streamGemini(messages, 'gemini-1.5-flash');
+      return hasGemini
+        ? streamGemini(messages, 'gemini-1.5-flash')
+        : streamOpenAI(messages, 'gpt-4o-mini');
     case 'gpt4o-mini':
       return streamOpenAI(messages, 'gpt-4o-mini');
     case 'gpt4o':
       return streamOpenAI(messages, 'gpt-4o');
     case 'claude-sonnet':
     default:
-      return streamClaude(messages);
+      return hasClaude
+        ? streamClaude(messages)
+        : streamOpenAI(messages, 'gpt-4o');
   }
 }
 

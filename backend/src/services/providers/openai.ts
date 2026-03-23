@@ -1,6 +1,9 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL, // e.g. https://api.groq.com/openai/v1
+});
 
 export interface StreamChunk {
   type: 'token' | 'done' | 'error';
@@ -10,12 +13,17 @@ export interface StreamChunk {
 
 // ─── Chat streaming ───────────────────────────────────────────────────────────
 
+// Default models — override via env for Groq compatibility
+const MODEL_FAST = process.env.OPENAI_MODEL_FAST ?? 'gpt-4o-mini';
+const MODEL_SMART = process.env.OPENAI_MODEL_SMART ?? 'gpt-4o';
+
 export async function* streamOpenAI(
   messages: Array<{ role: string; content: string }>,
   model: 'gpt-4o' | 'gpt-4o-mini' = 'gpt-4o-mini'
 ): AsyncGenerator<StreamChunk> {
+  const resolvedModel = model === 'gpt-4o-mini' ? MODEL_FAST : MODEL_SMART;
   const stream = await openai.chat.completions.create({
-    model,
+    model: resolvedModel,
     messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     stream: true,
   });

@@ -109,7 +109,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.YANDEX_CLIENT_ID ?? '',
-      redirect_uri: `${process.env.FRONTEND_URL}/api/auth/yandex/callback`,
+      redirect_uri: `${process.env.API_URL}/api/auth/yandex/callback`,
     });
     return reply.redirect(`https://oauth.yandex.ru/authorize?${params}`);
   });
@@ -180,7 +180,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.GOOGLE_CLIENT_ID ?? '',
-      redirect_uri: `${process.env.FRONTEND_URL}/api/auth/google/callback`,
+      redirect_uri: `${process.env.API_URL}/api/auth/google/callback`,
       scope: 'openid email profile',
     });
     return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
@@ -196,7 +196,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         code,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${process.env.FRONTEND_URL}/api/auth/google/callback`,
+        redirect_uri: `${process.env.API_URL}/api/auth/google/callback`,
         grant_type: 'authorization_code',
       }),
     });
@@ -248,8 +248,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (!body?.refreshToken) return reply.code(400).send({ error: 'No refresh token' });
 
     try {
-      const payload = fastify.jwt.verify<{ userId: string; type?: string }>(body.refreshToken);
-      if (payload.type !== 'refresh') throw new Error('Not a refresh token');
+      const payload = fastify.jwt.verify<{ userId: string }>(body.refreshToken);
 
       const user = await prisma.user.findUnique({ where: { id: payload.userId } });
       if (!user) throw new Error('User not found');

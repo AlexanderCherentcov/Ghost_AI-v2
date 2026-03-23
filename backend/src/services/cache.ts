@@ -3,14 +3,17 @@ import { redis } from '../lib/redis.js';
 
 const TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+// Bump this version when system prompts change — invalidates all old cache entries
+const CACHE_VERSION = process.env.CACHE_VERSION ?? 'v1';
+
 function normalizePrompt(prompt: string): string {
   return prompt.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function buildCacheKey(mode: string, tier: string, prompt: string): string {
   const normalized = normalizePrompt(prompt);
-  const raw = `${mode}:${tier}:${normalized}`;
-  return createHash('sha256').update(raw).digest('hex');
+  const raw = `${CACHE_VERSION}:${mode}:${tier}:${normalized}`;
+  return `ghost:${createHash('sha256').update(raw).digest('hex')}`;
 }
 
 export async function getCached(

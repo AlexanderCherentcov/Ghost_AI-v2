@@ -1,20 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
-import { api, setAccessToken } from '@/lib/api';
-import { useAuthStore } from '@/store/auth.store';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TG_BOT_USERNAME ?? 'GhostSuperAI_bot';
-
-declare global {
-  interface Window {
-    onTelegramAuth: (user: Record<string, string | number>) => void;
-  }
-}
 
 function YandexIcon() {
   return (
@@ -36,44 +25,13 @@ function GoogleIcon() {
   );
 }
 
-function TelegramWidget() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const { setAuth } = useAuthStore();
-
-  useEffect(() => {
-    // Register global callback for widget
-    window.onTelegramAuth = async (user) => {
-      try {
-        const data: Record<string, string> = {};
-        for (const [k, v] of Object.entries(user)) {
-          data[k] = String(v);
-        }
-        const res = await api.auth.telegramVerify(data);
-        setAccessToken(res.accessToken);
-        setAuth(res.user, res.accessToken, res.refreshToken);
-        router.replace(res.isNew || !res.user.onboardingDone ? '/onboarding/name' : '/chat');
-      } catch {
-        // ignore — widget stays visible
-      }
-    };
-
-    if (!containerRef.current) return;
-
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', BOT_USERNAME);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '10');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    script.setAttribute('data-request-access', 'write');
-    script.async = true;
-
-    containerRef.current.appendChild(script);
-    return () => { containerRef.current?.removeChild(script); };
-  }, []);
-
-  return <div ref={containerRef} className="flex justify-center" />;
+function TelegramIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="12" fill="#229ED9" />
+      <path d="M5.2 11.8L18 6.5l-2.3 11-4-3.3-2.2 2.1.4-3.5 5.8-5.2-7.3 4.5-3.2-1z" fill="white" />
+    </svg>
+  );
 }
 
 export default function LoginPage() {
@@ -111,13 +69,15 @@ export default function LoginPage() {
               Войти через Google
             </a>
 
-            {/* Official Telegram Login Widget */}
-            <div
-              className="w-full rounded-xl border border-[var(--border-hover)] overflow-hidden"
-              style={{ minHeight: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            <a
+              href="https://t.me/GhostSuperAI_bot?start=auth"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
             >
-              <TelegramWidget />
-            </div>
+              <TelegramIcon />
+              Войти через Telegram
+            </a>
           </div>
 
           <div className="mt-6 pt-5 border-t border-[var(--border)] text-center">

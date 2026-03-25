@@ -242,6 +242,34 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
   });
 
+  // ── Telegram bot-based login (called by bot with x-bot-secret header) ────
+  fastify.post('/auth/telegram-bot', async (request, reply) => {
+    const secret = (request.headers['x-bot-secret'] ?? '') as string;
+    if (secret !== (process.env.BOT_SECRET ?? '')) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = request.body as {
+      id: number; first_name?: string; last_name?: string;
+      username?: string; photo_url?: string;
+    };
+
+    const telegramId = String(body.id);
+    let user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId,
+          name: [body.first_name, body.last_name].filter(Boolean).join(' ') || null,
+          avatarUrl: body.photo_url ?? null,
+        },
+      });
+    }
+
+    const tokens = signTokens(fastify, user.id);
+    return { ...tokens, isNew: !user.onboardingDone };
+  });
+
   // ── Telegram OAuth verify (called from frontend after oauth.telegram.org) ─
   fastify.post('/auth/telegram/verify', async (request, reply) => {
     const body = request.body as Record<string, string>;

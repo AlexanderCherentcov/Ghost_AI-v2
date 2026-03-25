@@ -14,6 +14,45 @@ const bot = new Bot(BOT_TOKEN);
 
 bot.command('start', async (ctx) => {
   const name = ctx.from?.first_name ?? 'пользователь';
+  const payload = ctx.match; // text after /start
+
+  // ── Auth via bot link ──────────────────────────────────────────────────────
+  if (payload === 'auth' && ctx.from) {
+    try {
+      const res = await axios.post(`${API_URL}/api/auth/telegram-bot`, {
+        id: ctx.from.id,
+        first_name: ctx.from.first_name,
+        last_name: ctx.from.last_name,
+        username: ctx.from.username,
+        photo_url: ctx.from.username
+          ? `https://t.me/i/userpic/320/${ctx.from.username}.jpg`
+          : undefined,
+      }, {
+        headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
+      });
+
+      const { accessToken, refreshToken, isNew } = res.data as {
+        accessToken: string;
+        refreshToken: string;
+        isNew: boolean;
+      };
+
+      const redirect = isNew ? '/onboarding/name' : '/chat';
+      const loginUrl = `${FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirect}`;
+
+      await ctx.reply(
+        `🔑 *Ваша ссылка для входа:*\n\nНажмите кнопку ниже — она действует 5 минут.\nНикому не передавайте эту ссылку.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard().url('🚀 Войти в GhostLine', loginUrl),
+        }
+      );
+      return;
+    } catch {
+      await ctx.reply('❌ Ошибка входа. Попробуйте ещё раз.');
+      return;
+    }
+  }
 
   const keyboard = new InlineKeyboard()
     .webApp('🤖 Открыть GhostLine', MINIAPP_URL)

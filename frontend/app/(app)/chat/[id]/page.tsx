@@ -92,7 +92,7 @@ export default function ChatConversationPage({ params }: Props) {
         .slice(-10)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const { tokensCost, cacheHit } = await send({
+      const { tokensCost, cacheHit, title: newTitle } = await send({
         chatId: id,
         mode: mode as 'chat' | 'think',
         prompt,
@@ -114,6 +114,12 @@ export default function ChatConversationPage({ params }: Props) {
       };
 
       commitStream(assistantMsg);
+
+      // Update chat title if backend generated one from first message
+      if (newTitle) {
+        const { updateChat } = useChatStore.getState();
+        updateChat(id, { title: newTitle });
+      }
 
       // Update user token balance
       if (user) {

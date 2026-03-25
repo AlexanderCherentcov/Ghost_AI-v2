@@ -195,12 +195,16 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       const { chatId, mode, prompt, history } = parsed;
 
       try {
-        // Verify chat ownership
-        const chat = await prisma.chat.findFirst({ where: { id: chatId, userId } });
+        // Verify chat ownership + load user response style
+        const [chat, userProfile] = await Promise.all([
+          prisma.chat.findFirst({ where: { id: chatId, userId } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true } }),
+        ]);
         if (!chat) {
           send({ type: 'error', code: 'CHAT_NOT_FOUND' });
           return;
         }
+        const responseStyle = userProfile?.responseStyle ?? null;
 
         // Route request
         const { provider, complexity } = route(prompt, fastify.log);
@@ -245,7 +249,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Build messages array for AI (system prompt first)
         const messages = [
-          { role: 'system', content: getSystemPrompt(mode) },
+          { role: 'system', content: getSystemPrompt(mode, responseStyle) },
           ...history.map((m) => ({ role: m.role, content: m.content })),
           { role: 'user', content: prompt },
         ];
@@ -290,14 +294,15 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
         ]);
 
-        send({ type: 'done', tokensCost, cacheHit: false });
-
-        // Auto-generate title if first message
+        // Auto-generate title from first message
+        let newTitle: string | undefined;
         const messageCount = await prisma.message.count({ where: { chatId } });
         if (messageCount <= 2 && chat.title === 'Новый чат') {
-          const title = prompt.slice(0, 35) + (prompt.length > 35 ? '...' : '');
-          await prisma.chat.update({ where: { id: chatId }, data: { title } });
+          newTitle = prompt.slice(0, 40) + (prompt.length > 40 ? '...' : '');
+          await prisma.chat.update({ where: { id: chatId }, data: { title: newTitle } });
         }
+
+        send({ type: 'done', tokensCost, cacheHit: false, title: newTitle });
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
         send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: err.message });

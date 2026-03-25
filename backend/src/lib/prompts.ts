@@ -38,6 +38,16 @@ export const SYSTEM_PROMPTS: Record<string, string> = {
 Помогай составлять сценарии и описания для видеороликов.`,
 };
 
-export function getSystemPrompt(mode: string): string {
-  return SYSTEM_PROMPTS[mode] ?? SYSTEM_PROMPTS.chat;
+const STYLE_INSTRUCTIONS: Record<string, string> = {
+  ghost:    'Стиль ответа: лаконично, загадочно, с долей поэтики. Минимум слов — максимум смысла.',
+  expert:   'Стиль ответа: детально и структурировано. Технические подробности приветствуются. Используй markdown.',
+  friendly: 'Стиль ответа: просто и понятно, как объясняет умный друг. Никакого жаргона без необходимости.',
+  strict:   'Стиль ответа: только факты и выводы. Никакой воды. Коротко и по делу.',
+  creative: 'Стиль ответа: с метафорами, образами и нестандартными углами зрения. Вдохновляй.',
+};
+
+export function getSystemPrompt(mode: string, responseStyle?: string | null): string {
+  const base = SYSTEM_PROMPTS[mode] ?? SYSTEM_PROMPTS.chat;
+  const styleHint = responseStyle ? STYLE_INSTRUCTIONS[responseStyle] : null;
+  return styleHint ? `${base}\n\n${styleHint}` : base;
 }

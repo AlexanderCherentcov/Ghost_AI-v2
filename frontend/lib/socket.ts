@@ -12,6 +12,7 @@ export interface WSChunk {
   data?: string;
   tokensCost?: number;
   cacheHit?: boolean;
+  title?: string;
   code?: string;
   message?: string;
 }
@@ -58,7 +59,7 @@ export function disconnectWS() {
   ws = null;
 }
 
-export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean }> {
+export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean; title?: string }> {
   return new Promise((resolve, reject) => {
     const socket = connectWS();
 
@@ -67,7 +68,7 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
     const handler = (chunk: WSChunk) => {
       if (chunk.type === 'done') {
         cleanup();
-        resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false });
+        resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false, title: chunk.title });
       } else if (chunk.type === 'error') {
         cleanup();
         reject(Object.assign(new Error(chunk.message ?? chunk.code ?? 'WS error'), { code: chunk.code }));

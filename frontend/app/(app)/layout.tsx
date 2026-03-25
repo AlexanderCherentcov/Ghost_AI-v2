@@ -6,12 +6,26 @@ import { useAuthStore } from '@/store/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { useChatStore } from '@/store/chat.store';
-import { api } from '@/lib/api';
+import { api, setAccessToken } from '@/lib/api';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, isLoading } = useAuthStore();
   const { setChats } = useChatStore();
+
+  // Auto-refresh access token on page load using persisted refresh token
+  useEffect(() => {
+    const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
+    if (user) return;
+    if (!refreshToken) { clearAuth(); return; }
+    api.auth.refreshToken(refreshToken)
+      .then(async ({ accessToken, refreshToken: newRT }) => {
+        setAccessToken(accessToken);
+        const me = await api.auth.me();
+        setAuth(me, accessToken, newRT);
+      })
+      .catch(() => clearAuth());
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !user) {

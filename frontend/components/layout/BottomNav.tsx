@@ -2,22 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChatIcon, VisionIcon, SoundIcon, ReelIcon, UserIcon } from '@/components/icons';
+import { ChatIcon, VisionIcon, SoundIcon, HistoryIcon, UserIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
+  { href: '/history', label: 'История', Icon: HistoryIcon },
   { href: '/chat',    label: 'Chat',    Icon: ChatIcon },
   { href: '/vision',  label: 'Vision',  Icon: VisionIcon },
   { href: '/sound',   label: 'Sound',   Icon: SoundIcon },
-  { href: '/reel',    label: 'Reel',    Icon: ReelIcon },
-  { href: '/profile', label: 'Profile', Icon: UserIcon },
+  { href: '/profile', label: 'Профиль', Icon: UserIcon },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 h-[60px] bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 h-[60px] bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden">
       {ITEMS.map(({ href, label, Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
         return (

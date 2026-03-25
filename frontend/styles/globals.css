@@ -38,6 +38,19 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  /* Remove default browser focus rings — custom styles handle focus */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Restore focus ring only for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+textarea, input, button, a {
+  -webkit-appearance: none;
 }
 
 html {

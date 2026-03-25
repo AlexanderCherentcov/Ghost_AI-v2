@@ -39,10 +39,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'ghostline-auth',
+      // Persist user too — shows cached data instantly on refresh
       partialize: (state) => ({
+        user: state.user,
         refreshToken: state.refreshToken,
-        // Don't persist accessToken — re-fetch on hydration
       }),
+      onRehydrateStorage: () => (state) => {
+        // After localStorage rehydration — restore accessToken in memory
+        // and mark loading as false so UI shows immediately
+        if (state) {
+          state.isLoading = false;
+        }
+      },
     }
   )
 );

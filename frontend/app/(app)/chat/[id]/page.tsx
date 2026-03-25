@@ -9,6 +9,7 @@ import { connectWS, onToken, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
+import { useToast } from '@/components/ui/Toast';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,6 +19,7 @@ export default function ChatConversationPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
+  const { show: showToast } = useToast();
   const {
     messages,
     setMessages,
@@ -121,7 +123,7 @@ export default function ChatConversationPage({ params }: Props) {
     } catch (err: any) {
       setStreaming(false);
       if (err.code === 'INSUFFICIENT_TOKENS') {
-        alert('Недостаточно токенов. Пополните баланс в разделе Billing.');
+        showToast('Недостаточно токенов — пополните баланс', 'error');
         router.push('/billing');
       }
     }

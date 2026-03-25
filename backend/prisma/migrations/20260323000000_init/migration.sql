@@ -14,7 +14,7 @@ CREATE TABLE "User" (
     "yandexId" TEXT,
     "googleId" TEXT,
     "avatarUrl" TEXT,
-    "tokenBalance" INTEGER NOT NULL DEFAULT 0,
+    "tokenBalance" INTEGER NOT NULL DEFAULT 50000,
     "plan" "Plan" NOT NULL DEFAULT 'FREE',
     "planExpiresAt" TIMESTAMP(3),
     "purposes" TEXT[] DEFAULT ARRAY[]::TEXT[],

@@ -1,5 +1,6 @@
 'use client';
 
+import { useToast } from '@/components/ui/Toast';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type GenerateJob } from '@/lib/api';
@@ -42,7 +43,8 @@ export default function SoundPage() {
       setJobId(id);
       setJob({ id, status: 'pending', mode: 'sound', prompt, mediaUrl: null, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     } catch (err: any) {
-      alert(err.message);
+      const { show } = useToast();
+      show(err.message, 'error');
     } finally {
       setLoading(false);
     }

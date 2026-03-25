@@ -13,11 +13,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
   const { setChats } = useChatStore();
 
-  // Auto-refresh access token on page load using persisted refresh token
+  // Silently refresh access token in background after hydration
   useEffect(() => {
-    const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
-    if (user) return;
-    if (!refreshToken) { clearAuth(); return; }
+    const { refreshToken, setAuth, clearAuth } = useAuthStore.getState();
+    if (!refreshToken) {
+      clearAuth();
+      return;
+    }
     api.auth.refreshToken(refreshToken)
       .then(async ({ accessToken, refreshToken: newRT }) => {
         setAccessToken(accessToken);
@@ -42,21 +44,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  if (isLoading || !user) return null;
+  if (isLoading) return null;
+  if (!user) return null;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[var(--bg-primary)]">
-      {/* Sidebar — desktop */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
-
-      {/* Main content — offset for sidebar on desktop */}
       <main className="flex-1 lg:ml-[260px] flex flex-col overflow-hidden pb-[60px] lg:pb-0">
         {children}
       </main>
-
-      {/* Bottom nav — mobile */}
       <BottomNav />
     </div>
   );

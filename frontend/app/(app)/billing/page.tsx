@@ -1,5 +1,6 @@
 'use client';
 
+import { useToast } from '@/components/ui/Toast';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth.store';
@@ -33,7 +34,8 @@ export default function BillingPage() {
       const { paymentUrl } = await api.payments.create({ type, key });
       window.location.href = paymentUrl;
     } catch (err: any) {
-      alert(err.message);
+      const { show } = useToast();
+      show(err.message, 'error');
     } finally {
       setLoading(null);
     }

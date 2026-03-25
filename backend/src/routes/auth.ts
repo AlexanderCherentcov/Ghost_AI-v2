@@ -242,6 +242,48 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
   });
 
+  // ── Telegram OAuth Widget callback ───────────────────────────────────────
+  // Called by oauth.telegram.org redirect with ?tgAuthResult=<base64>
+  fastify.get('/auth/telegram/callback', async (request, reply) => {
+    const query = request.query as Record<string, string>;
+    const raw = query.tgAuthResult;
+    if (!raw) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=no_data`);
+
+    let data: Record<string, string>;
+    try {
+      data = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+    } catch {
+      return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_data`);
+    }
+
+    // Verify hash
+    const { hash, ...fields } = data;
+    const checkString = Object.keys(fields).sort().map((k) => `${k}=${fields[k]}`).join('\n');
+    const secretKey = crypto.createHash('sha256').update(process.env.TELEGRAM_BOT_TOKEN ?? '').digest();
+    const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+
+    if (expectedHash !== hash) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_hash`);
+    if (Date.now() / 1000 - parseInt(data.auth_date) > 86400) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=expired`);
+
+    const telegramId = String(data.id);
+    let user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId,
+          name: [data.first_name, data.last_name].filter(Boolean).join(' ') || null,
+          avatarUrl: data.photo_url ?? null,
+        },
+      });
+    }
+
+    const { accessToken, refreshToken } = signTokens(fastify, user.id);
+    const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
+    return reply.redirect(
+      `${process.env.FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
+    );
+  });
+
   // ── Refresh token ─────────────────────────────────────────────────────────
   fastify.post('/auth/refresh', async (request, reply) => {
     const body = request.body as { refreshToken?: string };

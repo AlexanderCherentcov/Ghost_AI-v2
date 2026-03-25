@@ -4,12 +4,16 @@ import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ghostlineai.ru';
+// Bot ID extracted from token prefix (public, safe to expose)
+const TG_BOT_ID = process.env.NEXT_PUBLIC_TG_BOT_ID ?? '8761513040';
+const TG_AUTH_URL = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(SITE_URL)}&return_to=${encodeURIComponent(`${API_URL}/api/auth/telegram/callback`)}`;
 
 function YandexIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="12" fill="#FC3F1D" />
-      <path d="M13.5 7h-1.8L9 17h1.7l1-3.5h1.6L14.3 17H16l-2.5-10zm-1.3 5.3.8-3.2.8 3.2h-1.6z" fill="white" />
+      <text x="12" y="17" textAnchor="middle" fill="white" fontFamily="Arial, sans-serif" fontWeight="bold" fontSize="13">Я</text>
     </svg>
   );
 }
@@ -76,9 +80,7 @@ export default function LoginPage() {
             </a>
 
             <a
-              href={`https://t.me/GhostSuperAI_bot`}
-              target="_blank"
-              rel="noopener"
+              href={TG_AUTH_URL}
               className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
             >
               <TelegramIcon />

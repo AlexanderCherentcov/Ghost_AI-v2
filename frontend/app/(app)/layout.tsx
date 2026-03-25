@@ -13,11 +13,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuthStore();
   const { setChats } = useChatStore();
 
-  // Silently refresh access token in background after hydration
+  // Silently refresh access token in background — only logout on 401, not network errors
   useEffect(() => {
-    const { refreshToken, setAuth, clearAuth } = useAuthStore.getState();
+    const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
     if (!refreshToken) {
-      clearAuth();
+      if (!user) clearAuth();
       return;
     }
     api.auth.refreshToken(refreshToken)
@@ -26,7 +26,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const me = await api.auth.me();
         setAuth(me, accessToken, newRT);
       })
-      .catch(() => clearAuth());
+      .catch((err) => {
+        // Only logout if server explicitly rejected the token (401)
+        // Network errors / CORS / 5xx should NOT log the user out
+        if (err?.status === 401) clearAuth();
+      });
   }, []);
 
   useEffect(() => {
@@ -44,8 +48,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  if (isLoading) return null;
-  if (!user) return null;
+  // Show nothing only while actively loading — cached user renders immediately
+  if (isLoading && !user) return null;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[var(--bg-primary)]">

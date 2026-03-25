@@ -38,19 +38,32 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  /* Remove default browser focus rings — custom styles handle focus */
-  outline: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Restore focus ring only for keyboard navigation */
-*:focus-visible {
-  outline: 2px solid var(--accent-border);
-  outline-offset: 2px;
+/* Remove ALL focus outlines — custom border/glow handles focus state */
+*,
+*:focus,
+*:focus-visible,
+*:focus-within {
+  outline: none !important;
+  outline-offset: 0 !important;
 }
 
-textarea, input, button, a {
+textarea,
+input,
+button,
+select {
   -webkit-appearance: none;
+  appearance: none;
+}
+
+/* iOS Safari specific */
+textarea:focus,
+input:focus {
+  outline: none !important;
+  box-shadow: none;
+  -webkit-box-shadow: none;
 }
 
 html {

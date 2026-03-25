@@ -13,13 +13,16 @@ const queryClient = new QueryClient({
 });
 
 function AuthInit({ children }: { children: React.ReactNode }) {
-  // Wait for Zustand persist to hydrate from localStorage before checking auth
-  const [hydrated, setHydrated] = useState(() => useAuthStore.persist.hasHydrated());
+  // Wait for Zustand persist to hydrate from localStorage (client-only)
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (hydrated) return;
-    // Subscribe to hydration completion
-    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+    // persist is only available on client
+    if (useAuthStore.persist?.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    const unsub = useAuthStore.persist?.onFinishHydration(() => setHydrated(true));
     return unsub;
   }, []);
 

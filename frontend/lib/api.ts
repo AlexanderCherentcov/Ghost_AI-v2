@@ -58,6 +58,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ initData }),
       }),
+    telegramVerify: (data: Record<string, string>) =>
+      request<AuthResponse>('/auth/telegram/verify', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   chats: {

@@ -242,6 +242,36 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
   });
 
+  // ── Telegram OAuth verify (called from frontend after oauth.telegram.org) ─
+  fastify.post('/auth/telegram/verify', async (request, reply) => {
+    const body = request.body as Record<string, string>;
+    const { hash, ...fields } = body;
+
+    if (!hash || !fields.id) return reply.code(400).send({ error: 'Missing data' });
+
+    const checkString = Object.keys(fields).sort().map((k) => `${k}=${fields[k]}`).join('\n');
+    const secretKey = crypto.createHash('sha256').update(process.env.TELEGRAM_BOT_TOKEN ?? '').digest();
+    const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+
+    if (expectedHash !== hash) return reply.code(401).send({ error: 'Invalid hash' });
+    if (Date.now() / 1000 - parseInt(fields.auth_date ?? '0') > 86400) return reply.code(401).send({ error: 'Expired' });
+
+    const telegramId = String(fields.id);
+    let user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId,
+          name: [fields.first_name, fields.last_name].filter(Boolean).join(' ') || null,
+          avatarUrl: fields.photo_url ?? null,
+        },
+      });
+    }
+
+    const tokens = signTokens(fastify, user.id);
+    return { ...tokens, user, isNew: !user.onboardingDone };
+  });
+
   // ── Telegram OAuth Widget callback ───────────────────────────────────────
   // Telegram redirects here with query params: id, first_name, last_name,
   // username, photo_url, auth_date, hash

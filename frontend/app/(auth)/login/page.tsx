@@ -7,7 +7,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ghostlineai.ru';
 // Bot ID extracted from token prefix (public, safe to expose)
 const TG_BOT_ID = process.env.NEXT_PUBLIC_TG_BOT_ID ?? '8761513040';
-const TG_AUTH_URL = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(SITE_URL)}&return_to=${encodeURIComponent(`${API_URL}/api/auth/telegram/callback`)}`;
+const TG_AUTH_URL = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(SITE_URL)}&return_to=${encodeURIComponent(`${SITE_URL}/auth/telegram/callback`)}`;
 
 function YandexIcon() {
   return (

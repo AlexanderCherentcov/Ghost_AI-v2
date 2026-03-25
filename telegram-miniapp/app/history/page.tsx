@@ -39,12 +39,8 @@ function HistoryApp() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleNew() {
-    const chat = await apiRequest<Chat>('/chats', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'chat', title: 'Новый чат' }),
-    });
-    router.push(`/chat?id=${chat.id}`);
+  function handleNew() {
+    router.push('/chat');
   }
 
   async function handleDelete(chatId: string, e: React.MouseEvent) {

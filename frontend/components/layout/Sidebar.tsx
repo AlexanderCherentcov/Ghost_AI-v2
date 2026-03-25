@@ -63,10 +63,8 @@ export function Sidebar() {
 
   const grouped = groupChats(chats);
 
-  async function handleNewChat() {
-    const chat = await api.chats.create({ mode: 'chat' });
-    addChat(chat);
-    router.push(`/chat/${chat.id}`);
+  function handleNewChat() {
+    router.push('/chat');
   }
 
   async function handleDeleteChat(chatId: string, e: React.MouseEvent) {

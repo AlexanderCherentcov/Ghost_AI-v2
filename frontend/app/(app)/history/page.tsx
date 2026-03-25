@@ -9,8 +9,7 @@ import { PlusIcon, EditIcon, TrashIcon, TokenIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { api, type Chat } from '@/lib/api';
-import { formatTokens, truncate } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { formatTokens, truncate, cn } from '@/lib/utils';
 
 function groupChats(chats: Chat[]) {
   const now = Date.now();
@@ -29,7 +28,7 @@ function groupChats(chats: Chat[]) {
 export default function HistoryPage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { chats, addChat, updateChat, removeChat } = useChatStore();
+  const { chats, updateChat, removeChat } = useChatStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
@@ -39,10 +38,8 @@ export default function HistoryPage() {
   const tokenPercent = Math.min((balance / maxTokens) * 100, 100);
   const grouped = groupChats(chats);
 
-  async function handleNewChat() {
-    const chat = await api.chats.create({ mode: 'chat' });
-    addChat(chat);
-    router.push(`/chat/${chat.id}`);
+  function handleNewChat() {
+    router.push('/chat');
   }
 
   async function handleDelete(chatId: string, e: React.MouseEvent) {

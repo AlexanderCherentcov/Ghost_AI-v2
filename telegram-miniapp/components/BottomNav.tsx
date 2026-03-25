@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const ITEMS = [
-  { href: '/chat',    label: 'Chat',    icon: '💬' },
-  { href: '/vision',  label: 'Vision',  icon: '👁' },
-  { href: '/sound',   label: 'Sound',   icon: '🎵' },
-  { href: '/reel',    label: 'Reel',    icon: '🎬' },
-  { href: '/balance', label: 'Баланс',  icon: '💎' },
+  { href: '/history', label: 'Чаты',   icon: '🕑' },
+  { href: '/chat',    label: 'Chat',   icon: '💬' },
+  { href: '/vision',  label: 'Vision', icon: '👁' },
+  { href: '/sound',   label: 'Sound',  icon: '🎵' },
+  { href: '/balance', label: 'Баланс', icon: '💎' },
 ];
 
 export function BottomNav() {

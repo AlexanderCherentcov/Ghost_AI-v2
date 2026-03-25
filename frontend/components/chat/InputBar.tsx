@@ -7,11 +7,13 @@ import { cn } from '@/lib/utils';
 
 interface InputBarProps {
   onSend: (prompt: string, file?: File) => void;
+  onStop?: () => void;
   disabled?: boolean;
+  isStreaming?: boolean;
   placeholder?: string;
 }
 
-export function InputBar({ onSend, disabled = false, placeholder }: InputBarProps) {
+export function InputBar({ onSend, onStop, disabled = false, isStreaming = false, placeholder }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -109,21 +111,34 @@ export function InputBar({ onSend, disabled = false, placeholder }: InputBarProp
             )}
           />
 
-          {/* Send button */}
-          <motion.button
-            onClick={handleSend}
-            disabled={!hasContent || disabled}
-            whileTap={{ scale: 0.92 }}
-            type="button"
-            className={cn(
-              'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all mb-0.5 focus:outline-none',
-              hasContent && !disabled
-                ? 'bg-accent text-white hover:opacity-90'
-                : 'bg-[var(--bg-elevated)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
-            )}
-          >
-            <SendIcon size={16} />
-          </motion.button>
+          {/* Stop / Send button */}
+          {isStreaming ? (
+            <motion.button
+              onClick={onStop}
+              whileTap={{ scale: 0.92 }}
+              type="button"
+              title="Остановить"
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mb-0.5 bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] transition-all"
+            >
+              {/* Stop square icon */}
+              <span className="w-3.5 h-3.5 rounded-sm bg-white block" />
+            </motion.button>
+          ) : (
+            <motion.button
+              onClick={handleSend}
+              disabled={!hasContent || disabled}
+              whileTap={{ scale: 0.92 }}
+              type="button"
+              className={cn(
+                'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all mb-0.5 focus:outline-none',
+                hasContent && !disabled
+                  ? 'bg-accent text-white hover:opacity-90'
+                  : 'bg-[var(--bg-elevated)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
+              )}
+            >
+              <SendIcon size={16} />
+            </motion.button>
+          )}
         </div>
 
         <p className="text-center text-[11px] text-[rgba(255,255,255,0.15)] mt-2">

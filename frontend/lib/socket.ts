@@ -88,3 +88,10 @@ export function onToken(callback: (chunk: WSChunk) => void): () => void {
   listeners.add(callback);
   return () => listeners.delete(callback);
 }
+
+// Abort current stream — commits whatever arrived so far
+export function abortStream() {
+  // Broadcast a synthetic 'done' so promise resolves and streaming stops
+  const abortChunk: WSChunk = { type: 'done', tokensCost: 0, cacheHit: false };
+  listeners.forEach((l) => l(abortChunk));
+}

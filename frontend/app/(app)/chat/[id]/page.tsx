@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
-import { connectWS, onToken, type WSChunk } from '@/lib/socket';
+import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
@@ -149,7 +149,8 @@ export default function ChatConversationPage({ params }: Props) {
 
       <InputBar
         onSend={handleSend}
-        disabled={isStreaming}
+        onStop={() => { abortStream(); setStreaming(false); }}
+        isStreaming={isStreaming}
         placeholder="Продолжайте диалог..."
       />
     </div>

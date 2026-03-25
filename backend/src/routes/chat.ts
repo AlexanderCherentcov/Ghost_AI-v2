@@ -62,7 +62,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     handler: async (request) => {
       const { userId } = request.user;
       const chats = await prisma.chat.findMany({
-        where: { userId },
+        where: { userId, messages: { some: {} } },
         orderBy: { updatedAt: 'desc' },
         take: 100,
         select: {

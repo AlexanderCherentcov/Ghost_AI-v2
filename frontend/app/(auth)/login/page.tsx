@@ -81,6 +81,8 @@ export default function LoginPage() {
 
             <a
               href={TG_AUTH_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
             >
               <TelegramIcon />

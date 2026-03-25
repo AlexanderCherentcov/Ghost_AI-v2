@@ -243,36 +243,45 @@ export default async function authRoutes(fastify: FastifyInstance) {
   });
 
   // ── Telegram OAuth Widget callback ───────────────────────────────────────
-  // Called by oauth.telegram.org redirect with ?tgAuthResult=<base64>
+  // Telegram redirects here with query params: id, first_name, last_name,
+  // username, photo_url, auth_date, hash
   fastify.get('/auth/telegram/callback', async (request, reply) => {
-    const query = request.query as Record<string, string>;
-    const raw = query.tgAuthResult;
-    if (!raw) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=no_data`);
+    const q = request.query as Record<string, string>;
 
-    let data: Record<string, string>;
-    try {
-      data = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
-    } catch {
-      return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_data`);
+    const { hash, ...fields } = q;
+    if (!hash || !fields.id) {
+      return reply.redirect(`${process.env.FRONTEND_URL}/login?error=no_data`);
     }
 
-    // Verify hash
-    const { hash, ...fields } = data;
-    const checkString = Object.keys(fields).sort().map((k) => `${k}=${fields[k]}`).join('\n');
-    const secretKey = crypto.createHash('sha256').update(process.env.TELEGRAM_BOT_TOKEN ?? '').digest();
-    const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+    // Verify HMAC-SHA256
+    const checkString = Object.keys(fields)
+      .sort()
+      .map((k) => `${k}=${fields[k]}`)
+      .join('\n');
+    const secretKey = crypto
+      .createHash('sha256')
+      .update(process.env.TELEGRAM_BOT_TOKEN ?? '')
+      .digest();
+    const expectedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(checkString)
+      .digest('hex');
 
-    if (expectedHash !== hash) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_hash`);
-    if (Date.now() / 1000 - parseInt(data.auth_date) > 86400) return reply.redirect(`${process.env.FRONTEND_URL}/login?error=expired`);
+    if (expectedHash !== hash) {
+      return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_hash`);
+    }
+    if (Date.now() / 1000 - parseInt(fields.auth_date ?? '0') > 86400) {
+      return reply.redirect(`${process.env.FRONTEND_URL}/login?error=expired`);
+    }
 
-    const telegramId = String(data.id);
+    const telegramId = String(fields.id);
     let user = await prisma.user.findUnique({ where: { telegramId } });
     if (!user) {
       user = await prisma.user.create({
         data: {
           telegramId,
-          name: [data.first_name, data.last_name].filter(Boolean).join(' ') || null,
-          avatarUrl: data.photo_url ?? null,
+          name: [fields.first_name, fields.last_name].filter(Boolean).join(' ') || null,
+          avatarUrl: fields.photo_url ?? null,
         },
       });
     }

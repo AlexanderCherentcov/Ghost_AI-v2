@@ -11,6 +11,30 @@ import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
 import { useToast } from '@/components/ui/Toast';
 
+/** Resize an image File to max 800px and return as base64 JPEG data URL */
+async function resizeImageToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 800;
+        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = e.target!.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -44,12 +68,25 @@ export default function ChatConversationPage({ params }: Props) {
       .catch(() => router.replace('/chat'));
   }, [id]);
 
-  // Auto-send initial prompt from new chat creation
+  // Auto-send initial prompt (and optional image) from new chat creation
   useEffect(() => {
     const initialPrompt = sessionStorage.getItem('initialPrompt');
-    if (initialPrompt) {
+    const initialImageUrl = sessionStorage.getItem('initialImageUrl');
+    if (initialPrompt || initialImageUrl) {
       sessionStorage.removeItem('initialPrompt');
-      setTimeout(() => handleSend(initialPrompt), 300);
+      sessionStorage.removeItem('initialImageUrl');
+      // Pass a synthetic File-like object via imageUrl directly in handleSend
+      setTimeout(async () => {
+        if (initialImageUrl) {
+          // Convert base64 back to File so handleSend can process it
+          const res = await fetch(initialImageUrl);
+          const blob = await res.blob();
+          const file = new File([blob], 'image.jpg', { type: 'image/jpeg' });
+          handleSend(initialPrompt ?? '', file);
+        } else {
+          handleSend(initialPrompt ?? '');
+        }
+      }, 300);
     }
   }, [id]);
 
@@ -66,10 +103,20 @@ export default function ChatConversationPage({ params }: Props) {
     return unsub;
   }, []);
 
-  const handleSend = useCallback(async (prompt: string) => {
+  const handleSend = useCallback(async (prompt: string, file?: File) => {
     if (isStreaming || !accessToken) return;
 
-    // Optimistically add user message
+    // If image attached, resize to base64
+    let imageUrl: string | undefined;
+    if (file && file.type.startsWith('image/')) {
+      try {
+        imageUrl = await resizeImageToBase64(file);
+      } catch {
+        imageUrl = undefined;
+      }
+    }
+
+    // Optimistically add user message (show image preview immediately)
     const tempUserMsg = {
       id: `temp-${Date.now()}`,
       role: 'user' as const,
@@ -77,14 +124,13 @@ export default function ChatConversationPage({ params }: Props) {
       mode,
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: imageUrl ?? null,
       createdAt: new Date().toISOString(),
     };
     addMessage(tempUserMsg);
     setStreaming(true);
 
     try {
-      const { connectWS: _, sendMessage } = await import('@/lib/socket');
       const { sendMessage: send } = await import('@/lib/socket');
 
       const history = messages
@@ -98,6 +144,7 @@ export default function ChatConversationPage({ params }: Props) {
         prompt,
         history,
         jwt: accessToken,
+        imageUrl,
       });
 
       // Build assistant message from streamed content

@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { useChatStore } from '@/store/chat.store';
 import { api, setAccessToken } from '@/lib/api';
+import { connectWS } from '@/lib/socket';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -47,6 +48,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
     }
   }, [user]);
+
+  // ── iPhone screen-lock recovery ────────────────────────────────────────────
+  // When phone is locked + unlocked, the WS may have dropped and the access
+  // token may have expired. Reconnect WS and silently re-refresh token.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+
+      // Reconnect WebSocket if closed
+      connectWS();
+
+      // Silently refresh the access token so subsequent API calls don't fail
+      const { refreshToken, setAuth, clearAuth } = useAuthStore.getState();
+      if (!refreshToken) return;
+      api.auth.refreshToken(refreshToken)
+        .then(async ({ accessToken, refreshToken: newRT }) => {
+          setAccessToken(accessToken);
+          const me = await api.auth.me();
+          setAuth(me, accessToken, newRT);
+        })
+        .catch((err) => {
+          if (err?.status === 401) clearAuth();
+        });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   // Show nothing only while actively loading — cached user renders immediately
   if (isLoading && !user) return null;

@@ -40,6 +40,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {isUser ? (
           /* User bubble */
           <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[18px_4px_18px_18px] px-4 py-3 text-sm text-[rgba(255,255,255,0.88)] leading-relaxed">
+            {message.mediaUrl && (
+              <div className="mb-2 rounded-xl overflow-hidden max-w-[260px]">
+                <img
+                  src={message.mediaUrl}
+                  alt="Прикреплённое изображение"
+                  className="w-full h-auto object-cover"
+                  loading="lazy"
+                />
+              </div>
+            )}
             {message.content}
           </div>
         ) : (

@@ -110,6 +110,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       response_type: 'code',
       client_id: process.env.YANDEX_CLIENT_ID ?? '',
       redirect_uri: `${process.env.API_URL}/api/auth/yandex/callback`,
+      force_confirm: 'yes', // Always show account chooser
     });
     return reply.redirect(`https://oauth.yandex.ru/authorize?${params}`);
   });
@@ -182,6 +183,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
       client_id: process.env.GOOGLE_CLIENT_ID ?? '',
       redirect_uri: `${process.env.API_URL}/api/auth/google/callback`,
       scope: 'openid email profile',
+      prompt: 'select_account', // Always show account chooser
+      access_type: 'offline',
     });
     return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
   });

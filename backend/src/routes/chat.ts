@@ -20,11 +20,13 @@ const createChatSchema = z.object({
 const wsMessageSchema = z.object({
   chatId: z.string(),
   mode: z.enum(['chat', 'think']),
-  prompt: z.string().min(1).max(32000),
+  prompt: z.string().min(0).max(32000),
   history: z.array(z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string(),
   })).default([]),
+  // Optional image as base64 data URL (max ~2MB after resize)
+  imageUrl: z.string().max(2097152).optional(),
 });
 
 // ─── Provider stream factory ──────────────────────────────────────────────────
@@ -192,7 +194,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      const { chatId, mode, prompt, history } = parsed;
+      const { chatId, mode, prompt, history, imageUrl } = parsed;
 
       try {
         // Verify chat ownership + load user response style
@@ -206,11 +208,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
         const responseStyle = userProfile?.responseStyle ?? null;
 
-        // Route request
-        const { provider, complexity } = route(prompt, fastify.log);
+        // Effective prompt for AI (fall back to placeholder if only image sent)
+        const effectivePrompt = prompt || 'Опиши что изображено на картинке.';
 
-        // Check cache
-        const cached = await getCached(mode, complexity, prompt);
+        // Route request
+        const { provider, complexity } = route(effectivePrompt, fastify.log);
+
+        // Check cache (only cache text-only messages)
+        const cached = imageUrl ? { hit: false as const } : await getCached(mode, complexity, effectivePrompt);
 
         if (cached.hit) {
           const response = cached.response as { content: string };
@@ -219,9 +224,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const tokensCost = await chargeTokens(userId, mode, complexity);
 
           // Save messages
+          const userContent = prompt || (imageUrl ? '[Изображение]' : '');
           await prisma.$transaction([
             prisma.message.create({
-              data: { chatId, userId, role: 'user', content: prompt, mode, tokensCost: 0 },
+              data: { chatId, userId, role: 'user', content: userContent, mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
             }),
             prisma.message.create({
               data: {
@@ -248,18 +254,22 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
 
         // Build messages array for AI (system prompt first)
+        const userMessageContent = imageUrl
+          ? `${effectivePrompt}\n[Пользователь прикрепил изображение — отвечай на основе его описания]`
+          : effectivePrompt;
         const messages = [
           { role: 'system', content: getSystemPrompt(mode, responseStyle) },
           ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user', content: prompt },
+          { role: 'user', content: userMessageContent },
         ];
 
         // Charge tokens
         const tokensCost = await chargeTokens(userId, mode, complexity);
 
-        // Save user message
+        // Save user message (include image URL if attached)
+        const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
-          data: { chatId, userId, role: 'user', content: prompt, mode, tokensCost: 0 },
+          data: { chatId, userId, role: 'user', content: userContent, mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
         // Stream from provider
@@ -273,8 +283,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           }
         }
 
-        // Cache the response
-        await setCached(mode, complexity, prompt, { content: fullResponse });
+        // Cache the response (skip if image was attached)
+        if (!imageUrl) await setCached(mode, complexity, effectivePrompt, { content: fullResponse });
 
         // Save assistant message
         await prisma.$transaction([
@@ -298,7 +308,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         let newTitle: string | undefined;
         const messageCount = await prisma.message.count({ where: { chatId } });
         if (messageCount <= 2 && chat.title === 'Новый чат') {
-          newTitle = prompt.slice(0, 40) + (prompt.length > 40 ? '...' : '');
+          const titleSource = prompt || '📎 Изображение';
+          newTitle = titleSource.slice(0, 40) + (titleSource.length > 40 ? '...' : '');
           await prisma.chat.update({ where: { id: chatId }, data: { title: newTitle } });
         }
 

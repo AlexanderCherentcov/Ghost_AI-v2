@@ -37,14 +37,27 @@ export async function buildApp() {
 
   // Support comma-separated CORS_ORIGINS env var, e.g.:
   // "https://ghostlineai.ru,https://www.ghostlineai.ru,https://t.me"
-  const corsOrigins: string[] = [
+  const corsOrigins: Set<string> = new Set([
     ...(process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     process.env.FRONTEND_URL ?? 'http://localhost:3000',
     process.env.MINIAPP_URL ?? 'http://localhost:3001',
-  ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  ].filter(Boolean));
+
+  // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted
+  const extraOrigins: string[] = [];
+  for (const o of corsOrigins) {
+    if (o.includes('://www.')) extraOrigins.push(o.replace('://www.', '://'));
+    else extraOrigins.push(o.replace('://', '://www.'));
+  }
+  extraOrigins.forEach((o) => corsOrigins.add(o));
 
   await fastify.register(cors, {
-    origin: corsOrigins,
+    origin: (origin, cb) => {
+      // Allow requests with no origin (mobile apps, bot callbacks)
+      if (!origin) { cb(null, true); return; }
+      if (corsOrigins.has(origin)) { cb(null, true); return; }
+      cb(new Error(`CORS: origin ${origin} not allowed`), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -63,7 +76,7 @@ export async function buildApp() {
   });
 
   await fastify.register(websocket, {
-    options: { maxPayload: 1048576 }, // 1MB
+    options: { maxPayload: 4194304 }, // 4MB — allows images as base64
   });
 
   // ── Decorators ────────────────────────────────────────────────────────────

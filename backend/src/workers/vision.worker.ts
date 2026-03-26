@@ -1,8 +1,7 @@
 import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateImage } from '../services/providers/openai.js';
-import { generateImageSDXL } from '../services/providers/replicate.js';
+import { generateImageFlux } from '../services/providers/openrouter.js';
 import { setMediaCached } from '../services/cache.js';
 
 interface VisionJob {
@@ -16,22 +15,14 @@ export function startVisionWorker() {
   const worker = new Worker<VisionJob>(
     'vision',
     async (job: Job<VisionJob>) => {
-      const { jobId, prompt, size } = job.data;
+      const { jobId, prompt } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      let mediaUrl: string;
-
-      // Try DALL-E 3 first, fallback to SDXL
-      try {
-        mediaUrl = await generateImage(prompt, { size });
-      } catch (err) {
-        console.error('[VisionWorker] DALL-E failed, trying SDXL:', err);
-        mediaUrl = await generateImageSDXL(prompt);
-      }
+      const mediaUrl = await generateImageFlux(prompt);
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -63,6 +54,6 @@ export function startVisionWorker() {
     console.info(`[VisionWorker] Job ${job.id} completed`);
   });
 
-  console.info('[VisionWorker] Started');
+  console.info('[VisionWorker] Started (OpenRouter Flux)');
   return worker;
 }

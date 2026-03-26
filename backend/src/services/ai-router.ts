@@ -1,27 +1,31 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { OR_MODELS } from './providers/openrouter.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Complexity = 'simple' | 'complex';
-export type Provider = 'gemini-flash' | 'gpt4o-mini' | 'claude-sonnet' | 'gpt4o';
+// Maps to OpenRouter model IDs
+export type Provider = 'openrouter-haiku' | 'openrouter-sonnet';
 
 export interface RouterResult {
   provider: Provider;
   complexity: Complexity;
+  model: string;
 }
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
 
-const SIMPLE_KEYWORDS = [
-  'переведи', 'привет', 'что такое', 'сколько', 'когда', 'кто такой',
-  'translate', 'hello', 'what is', 'how many', 'who is', 'hi',
+const CODE_KEYWORDS = [
+  'напиши код', 'написать код', 'код на', 'функция', 'алгоритм', 'скрипт',
+  'write code', 'function', 'algorithm', 'script', 'class ', 'implement',
+  'объясни код', 'оптимизируй', 'рефакторинг', 'debug', 'баг', 'ошибка в коде',
 ];
 
 const COMPLEX_KEYWORDS = [
-  'объясни', 'проанализируй', 'напиши код', 'сравни', 'исследуй',
-  'реши', 'оптимизируй', 'разработай', 'спроектируй', 'алгоритм',
-  'explain', 'analyze', 'write code', 'compare', 'research',
-  'solve', 'optimize', 'develop', 'design', 'algorithm',
+  'объясни', 'проанализируй', 'сравни', 'исследуй',
+  'реши', 'разработай', 'спроектируй',
+  'explain', 'analyze', 'compare', 'research',
+  'solve', 'develop', 'design',
 ];
 
 // ─── Classifier ───────────────────────────────────────────────────────────────
@@ -29,39 +33,40 @@ const COMPLEX_KEYWORDS = [
 export function classifyComplexity(prompt: string): Complexity {
   const lower = prompt.toLowerCase();
 
-  // Approximate token count
+  // Long prompts always go to sonnet
   const tokens = Math.ceil(prompt.split(/\s+/).length * 0.75);
+  if (tokens > 300) return 'complex';
 
-  if (tokens > 500) return 'complex';
+  // Code patterns
   if (/```|def |function |class /.test(prompt)) return 'complex';
+  if (CODE_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
   if (COMPLEX_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
-  if (SIMPLE_KEYWORDS.some((k) => lower.includes(k))) return 'simple';
 
-  // Default to simple (cost savings)
   return 'simple';
 }
 
 // ─── Provider selection ───────────────────────────────────────────────────────
 
-// Round-robin index for cheap providers
-let cheapRoundRobin = 0;
-
-export function selectProvider(complexity: Complexity): Provider {
+export function selectProvider(complexity: Complexity): { provider: Provider; model: string } {
   if (complexity === 'simple') {
-    cheapRoundRobin = (cheapRoundRobin + 1) % 2;
-    return cheapRoundRobin === 0 ? 'gemini-flash' : 'gpt4o-mini';
+    return { provider: 'openrouter-haiku', model: OR_MODELS.haiku };
   }
-  // Complex → Claude Sonnet as primary
-  return 'claude-sonnet';
+  // complex (code, analysis) → Sonnet
+  return { provider: 'openrouter-sonnet', model: OR_MODELS.sonnet };
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
 
-export function route(prompt: string, logger?: FastifyBaseLogger): RouterResult {
-  const complexity = classifyComplexity(prompt);
-  const provider = selectProvider(complexity);
+export function route(
+  prompt: string,
+  hasDocument = false,
+  logger?: FastifyBaseLogger
+): RouterResult {
+  // Documents always use Sonnet
+  const complexity: Complexity = hasDocument ? 'complex' : classifyComplexity(prompt);
+  const { provider, model } = selectProvider(complexity);
 
-  logger?.debug({ complexity, provider, promptLength: prompt.length }, '[AIRouter] Routed request');
+  logger?.debug({ complexity, provider, model, promptLength: prompt.length }, '[AIRouter] Routed request');
 
-  return { provider, complexity };
+  return { provider, complexity, model };
 }

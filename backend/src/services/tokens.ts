@@ -1,12 +1,20 @@
 import { prisma } from '../lib/prisma.js';
 
+// ─── Costs ────────────────────────────────────────────────────────────────────
+// User-facing token costs per request type:
+//   chat message     = 1 token
+//   code request     = 2 tokens
+//   document/file    = 3 tokens
+//   image generation = 10 tokens
+
 export const TOKEN_COSTS = {
-  chat_simple:  1000,  // ~$0.001 our cost
-  chat_complex: 2500,  // ~$0.005 our cost
-  think:        5000,  // reasoning model
-  vision:       5000,  // image generation
-  sound:       10000,  // track generation
-  reel:        50000,  // video generation
+  chat_simple:  1,   // plain text chat → Haiku
+  chat_complex: 2,   // code / reasoning → Sonnet
+  think:        2,   // think mode (reasoning)
+  document:     3,   // file / document analysis → Sonnet
+  vision:      10,   // image generation (Flux)
+  sound:       10,   // music generation (disabled)
+  reel:        50,   // video generation (disabled)
 } as const;
 
 export type TokenMode = keyof typeof TOKEN_COSTS;

@@ -25,11 +25,13 @@ export const PLANS = {
   TEAM:  { price: 3900, tokens: 10_000_000,  label: 'Ghost Team' },
 } as const;
 
+// ─── Token packs (Базовый / Стандарт / Про) ───────────────────────────────────
+// Costs per action:  chat=1  code=2  doc=3  image=10
+
 export const TOKEN_PACKS = {
-  STARTER: { price: 99,   tokens: 100_000,   label: 'Starter' },
-  MEDIUM:  { price: 390,  tokens: 500_000,   label: 'Medium' },
-  LARGE:   { price: 1290, tokens: 2_000_000, label: 'Large' },
-  MEGA:    { price: 4900, tokens: 10_000_000, label: 'Mega' },
+  BASIC:    { price: 299,  tokens: 350,  label: 'Базовый' },
+  STANDARD: { price: 699,  tokens: 1150, label: 'Стандарт' },
+  PRO_PACK: { price: 1490, tokens: 3300, label: 'Про' },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;

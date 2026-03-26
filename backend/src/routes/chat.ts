@@ -6,9 +6,7 @@ import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.j
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { chargeTokens } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
-import { streamGemini } from '../services/providers/gemini.js';
-import { streamOpenAI } from '../services/providers/openai.js';
-import { streamClaude } from '../services/providers/anthropic.js';
+import { streamOpenRouter } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import type { SocketStream } from '@fastify/websocket';
@@ -41,27 +39,10 @@ const wsMessageSchema = z.object({
 // ─── Provider stream factory ──────────────────────────────────────────────────
 
 function getProviderStream(
-  provider: string,
+  model: string,
   messages: Array<{ role: string; content: string }>
 ) {
-  const hasGemini = !!process.env.GOOGLE_AI_API_KEY && process.env.GOOGLE_AI_API_KEY !== 'placeholder';
-  const hasClaude = !!process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'placeholder';
-
-  switch (provider) {
-    case 'gemini-flash':
-      return hasGemini
-        ? streamGemini(messages, 'gemini-1.5-flash')
-        : streamOpenAI(messages, 'gpt-4o-mini');
-    case 'gpt4o-mini':
-      return streamOpenAI(messages, 'gpt-4o-mini');
-    case 'gpt4o':
-      return streamOpenAI(messages, 'gpt-4o');
-    case 'claude-sonnet':
-    default:
-      return hasClaude
-        ? streamClaude(messages)
-        : streamOpenAI(messages, 'gpt-4o');
-  }
+  return streamOpenRouter(messages, model);
 }
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -246,8 +227,12 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request
-        const { provider, complexity } = route(effectivePrompt || fileName || 'анализ файла', fastify.log);
+        // Route request (documents always go to Sonnet)
+        const { provider, complexity, model } = route(
+          effectivePrompt || fileName || 'анализ файла',
+          !!fileContent,
+          fastify.log
+        );
 
         // History context for cache key: последние user-сообщения (без текущего)
         const userHistoryContext = history
@@ -273,7 +258,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const response = cacheHit.response as { content: string };
 
           // Charge tokens even on cache hit (our margin)
-          const tokensCost = await chargeTokens(userId, mode, complexity);
+          const chargeMode = fileContent ? 'document' : mode;
+          const tokensCost = await chargeTokens(userId, chargeMode, complexity);
 
           // Save messages
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
@@ -316,8 +302,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           { role: 'user', content: userMessageContent.trim() },
         ];
 
-        // Charge tokens
-        const tokensCost = await chargeTokens(userId, mode, complexity);
+        // Charge tokens (documents cost 3, code/complex 2, simple chat 1)
+        const chargeMode = fileContent ? 'document' : mode;
+        const tokensCost = await chargeTokens(userId, chargeMode, complexity);
 
         // Save user message (include image URL if attached)
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
@@ -327,7 +314,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Stream from provider
         let fullResponse = '';
-        const stream = getProviderStream(provider, messages);
+        const stream = getProviderStream(model, messages);
 
         for await (const chunk of stream) {
           if (chunk.type === 'token' && chunk.data) {

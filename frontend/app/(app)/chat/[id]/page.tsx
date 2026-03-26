@@ -11,7 +11,6 @@ import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
 import { useToast } from '@/components/ui/Toast';
 import { getFileCategory } from '@/components/chat/InputBar';
-import { api } from '@/lib/api';
 
 /** Resize an image File to max 800px and return as base64 JPEG data URL */
 async function resizeImageToBase64(file: File): Promise<string> {

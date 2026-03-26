@@ -24,6 +24,6 @@ jobs:
             cd /root/ghostline_v2
             git pull origin master
             cd infra
-            docker compose up -d --build backend bot
+            docker compose up -d --build --remove-orphans backend bot
             docker image prune -f
             echo "✅ Deploy done: $(date)"

@@ -1,6 +1,23 @@
 version: '3.9'
 
 services:
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-R3d1sGh0stPr0d2024}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    restart: always
+    networks:
+      - ghost_net
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-R3d1sGh0stPr0d2024}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ../backend
@@ -8,6 +25,9 @@ services:
     image: ghostline-backend:latest
     restart: always
     env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - '127.0.0.1:4000:4000'
     networks:

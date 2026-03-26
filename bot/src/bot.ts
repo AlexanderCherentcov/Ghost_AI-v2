@@ -131,13 +131,13 @@ bot.command('balance', async (ctx) => {
   }
 });
 
-// ─── Text messages: redirect to app ────────────────────────────────────────────
+// ─── Text messages & documents: redirect to app ────────────────────────────────
 
-bot.on('message:text', async (ctx) => {
+bot.on(['message:text', 'message:document', 'message:photo', 'message:video', 'message:audio', 'message:voice'], async (ctx) => {
   const keyboard = new InlineKeyboard().webApp('🤖 Открыть GhostLine', MINIAPP_URL);
 
   await ctx.reply(
-    `👻 Я работаю через веб-приложение.\nОткрой его, чтобы начать чат с ИИ:`,
+    `👻 Для работы с файлами и чата с ИИ открой приложение:`,
     { reply_markup: keyboard }
   );
 });

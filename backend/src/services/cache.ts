@@ -59,8 +59,12 @@ export async function getTextCached(
   historyContext: string[] = []
 ): Promise<{ hit: true; response: object } | { hit: false }> {
   if (isShortPrompt(prompt)) return { hit: false };  // коротыши → мимо
-  const raw = await redis.get(textKey(mode, complexity, prompt, historyContext));
-  return raw ? { hit: true, response: JSON.parse(raw) } : { hit: false };
+  try {
+    const raw = await redis.get(textKey(mode, complexity, prompt, historyContext));
+    return raw ? { hit: true, response: JSON.parse(raw) } : { hit: false };
+  } catch {
+    return { hit: false }; // Redis недоступен → miss (fail-open)
+  }
 }
 
 export async function setTextCached(
@@ -71,12 +75,16 @@ export async function setTextCached(
   historyContext: string[] = []
 ): Promise<void> {
   if (isShortPrompt(prompt)) return;
-  await redis.set(
-    textKey(mode, complexity, prompt, historyContext),
-    JSON.stringify(response),
-    'EX',
-    TTL_TEXT
-  );
+  try {
+    await redis.set(
+      textKey(mode, complexity, prompt, historyContext),
+      JSON.stringify(response),
+      'EX',
+      TTL_TEXT
+    );
+  } catch {
+    // Redis недоступен → пропускаем запись (fail-open)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,8 +104,12 @@ export async function getMediaCached(
   mode: string,
   prompt: string
 ): Promise<{ hit: true; url: string } | { hit: false }> {
-  const url = await redis.get(mediaKey(mode, prompt));
-  return url ? { hit: true, url } : { hit: false };
+  try {
+    const url = await redis.get(mediaKey(mode, prompt));
+    return url ? { hit: true, url } : { hit: false };
+  } catch {
+    return { hit: false }; // Redis недоступен → miss (fail-open)
+  }
 }
 
 export async function setMediaCached(
@@ -105,7 +117,11 @@ export async function setMediaCached(
   prompt: string,
   url: string
 ): Promise<void> {
-  await redis.set(mediaKey(mode, prompt), url, 'EX', TTL_MEDIA);
+  try {
+    await redis.set(mediaKey(mode, prompt), url, 'EX', TTL_MEDIA);
+  } catch {
+    // Redis недоступен → пропускаем (fail-open)
+  }
 }
 
 // ─── Legacy compat ────────────────────────────────────────────────────────────

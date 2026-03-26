@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /privacy
+Allow: /terms
+
+# Don't index app pages (require auth)
+Disallow: /chat
+Disallow: /chat/
+Disallow: /profile
+Disallow: /settings
+Disallow: /billing
+Disallow: /onboarding
+Disallow: /vision
+Disallow: /sound
+Disallow: /reel
+Disallow: /think
+Disallow: /history
+Disallow: /auth/
+
+# Don't index API
+Disallow: /api/
+
+Sitemap: https://ghostlineai.ru/sitemap.xml

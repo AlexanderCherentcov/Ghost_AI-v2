@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="512" height="512">
+  <!-- Background -->
+  <rect width="48" height="48" rx="12" fill="#0A0A12"/>
+  <!-- Ghost body -->
+  <path d="M24 4C15.16 4 8 11.16 8 20V42C8 42 11.2 39.2 14.4 42C17.6 45 17.6 42 20.8 42C24 42 24 45 27.2 42C30.4 39 30.4 42 33.6 42C36.8 39 40 42 40 42V20C40 11.16 32.84 4 24 4Z" fill="#7B5CF0" fill-opacity="0.18" stroke="#7B5CF0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Eyes -->
+  <circle cx="18" cy="21" r="3.5" fill="#7B5CF0"/>
+  <circle cx="30" cy="21" r="3.5" fill="#7B5CF0"/>
+  <!-- Eye shine -->
+  <circle cx="18" cy="21" r="1.75" fill="white" fill-opacity="0.75"/>
+  <circle cx="30" cy="21" r="1.75" fill="white" fill-opacity="0.75"/>
+</svg>

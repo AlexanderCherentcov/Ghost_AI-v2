@@ -267,8 +267,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           ? await getVectorCached(mode, effectivePrompt, userHistoryContext)
           : { hit: false as const };
 
-        if (cached.hit || vecCached.hit) {
-          const response = (cached.hit ? cached.response : vecCached.response) as { content: string };
+        // Merge cache hits — TypeScript-safe narrowing through a single variable
+        const cacheHit = cached.hit ? cached : vecCached;
+        if (cacheHit.hit) {
+          const response = cacheHit.response as { content: string };
 
           // Charge tokens even on cache hit (our margin)
           const tokensCost = await chargeTokens(userId, mode, complexity);

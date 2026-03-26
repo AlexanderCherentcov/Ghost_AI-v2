@@ -246,6 +246,10 @@ export default function ChatConversationPage({ params }: Props) {
       if (err.code === 'INSUFFICIENT_TOKENS') {
         showToast('Недостаточно токенов — пополните баланс', 'error');
         router.push('/billing');
+      } else if (err.code === 'TASK_IN_PROGRESS') {
+        showToast('Подождите — предыдущий запрос ещё выполняется', 'warning');
+      } else if (err.code === 'RATE_LIMITED') {
+        showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
   }, [id, messages, mode, accessToken, isStreaming, user]);

@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { chargeTokens } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
+import { checkGenRateLimit } from '../services/user-limiter.js';
 
 const generateSchema = z.object({
   prompt: z.string().min(1).max(2000),
@@ -19,6 +20,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, size } = generateSchema.parse(request.body);
+
+      // Per-user rate limit
+      if (!await checkGenRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      // Job lock: reject if a vision job is already running for this user
+      const activeJob = await prisma.generateJob.findFirst({
+        where: { userId, mode: 'vision', status: { in: ['pending', 'processing'] } },
+        select: { id: true },
+      });
+      if (activeJob) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
+      }
 
       // Check media cache first (saves real generation credits)
       const mediaCached = await getMediaCached('vision', prompt);
@@ -59,6 +74,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, duration } = generateSchema.parse(request.body);
 
+      // Per-user rate limit
+      if (!await checkGenRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      // Job lock: reject if a sound job is already running for this user
+      const activeJob = await prisma.generateJob.findFirst({
+        where: { userId, mode: 'sound', status: { in: ['pending', 'processing'] } },
+        select: { id: true },
+      });
+      if (activeJob) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
+      }
+
       // Check media cache first
       const mediaCached = await getMediaCached('sound', prompt);
       if (mediaCached.hit) {
@@ -97,6 +126,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, duration } = generateSchema.parse(request.body);
+
+      // Per-user rate limit
+      if (!await checkGenRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      // Job lock: reject if a reel job is already running for this user
+      const activeJob = await prisma.generateJob.findFirst({
+        where: { userId, mode: 'reel', status: { in: ['pending', 'processing'] } },
+        select: { id: true },
+      });
+      if (activeJob) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
+      }
 
       // Check media cache first
       const mediaCached = await getMediaCached('reel', prompt);

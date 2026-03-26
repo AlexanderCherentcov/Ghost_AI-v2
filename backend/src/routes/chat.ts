@@ -5,6 +5,7 @@ import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { chargeTokens } from '../services/tokens.js';
+import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamGemini } from '../services/providers/gemini.js';
 import { streamOpenAI } from '../services/providers/openai.js';
 import { streamClaude } from '../services/providers/anthropic.js';
@@ -201,6 +202,18 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
+      // ── Per-user rate limit ────────────────────────────────────────────────
+      if (!await checkChatRateLimit(userId)) {
+        send({ type: 'error', code: 'RATE_LIMITED', message: 'Слишком много сообщений. Подождите минуту.' });
+        return;
+      }
+
+      // ── In-flight lock (один запрос одновременно на пользователя) ─────────
+      if (!await acquireChatLock(userId)) {
+        send({ type: 'error', code: 'TASK_IN_PROGRESS', message: 'Подождите завершения предыдущего запроса.' });
+        return;
+      }
+
       const { chatId, mode, prompt, history, imageUrl, fileContent, fileName, fileLang } = parsed;
 
       try {
@@ -354,6 +367,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
         send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: err.message });
+      } finally {
+        // Всегда освобождаем лок — даже при ошибке или стриминге кэша
+        await releaseChatLock(userId);
       }
     });
   });

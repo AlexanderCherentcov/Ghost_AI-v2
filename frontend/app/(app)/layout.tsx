@@ -49,6 +49,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  // ── Telegram Mini App: notify ready + expand ──────────────────────────────
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg) return;
+    tg.ready?.();
+    tg.expand?.();
+    // Apply Telegram's color scheme if provided
+    if (tg.colorScheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   // ── iPhone screen-lock recovery ────────────────────────────────────────────
   // When phone is locked + unlocked, the WS may have dropped and the access
   // token may have expired. Reconnect WS and silently re-refresh token.

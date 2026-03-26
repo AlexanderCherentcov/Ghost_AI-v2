@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 const SIZES = ['1024x1024', '1792x1024', '1024x1792'] as const;
 
 export default function VisionPage() {
+  const { show } = useToast();
   const [prompt, setPrompt] = useState('');
   const [size, setSize] = useState<typeof SIZES[number]>('1024x1024');
   const [loading, setLoading] = useState(false);
@@ -43,8 +44,13 @@ export default function VisionPage() {
       setJobId(id);
       setJob({ id, status: 'pending', mode: 'vision', prompt, mediaUrl: null, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     } catch (err: any) {
-      const { show } = useToast();
-      show(err.message, 'error');
+      if (err.code === 'TASK_IN_PROGRESS') {
+        show('Изображение уже генерируется — дождитесь результата', 'warning');
+      } else if (err.code === 'RATE_LIMITED') {
+        show('Слишком много запросов. Подождите минуту.', 'warning');
+      } else {
+        show(err.message ?? 'Ошибка генерации', 'error');
+      }
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
+import { api, setAccessToken } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -35,6 +39,61 @@ function TelegramIcon() {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { setAuth } = useAuthStore();
+  const [tgLoading, setTgLoading] = useState(false);
+  const [tgError, setTgError] = useState(false);
+
+  // ── Telegram Mini App: auto-authenticate with initData ────────────────────
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg?.initData) return; // Not inside Telegram — show normal login
+
+    // Tell Telegram the app is ready and expand to full height
+    tg.ready?.();
+    tg.expand?.();
+
+    setTgLoading(true);
+
+    api.auth.telegramWebApp(tg.initData)
+      .then((res) => {
+        setAccessToken(res.accessToken);
+        setAuth(res.user, res.accessToken, res.refreshToken);
+        router.replace(res.isNew || !res.user.onboardingDone ? '/onboarding/name' : '/chat');
+      })
+      .catch(() => {
+        setTgLoading(false);
+        setTgError(true);
+      });
+  }, []);
+
+  // ── Telegram WebApp loading state ─────────────────────────────────────────
+  if (tgLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
+        <GhostIcon size={48} className="text-accent animate-float" animated />
+        <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
+      </div>
+    );
+  }
+
+  if (tgError) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <GhostIcon size={48} className="text-accent" />
+        <p className="text-white font-medium">Не удалось войти через Telegram</p>
+        <p className="text-sm text-[rgba(255,255,255,0.4)]">Закройте и откройте приложение заново</p>
+        <button
+          onClick={() => { setTgError(false); setTgLoading(false); window.location.reload(); }}
+          className="mt-2 px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium"
+        >
+          Попробовать снова
+        </button>
+      </div>
+    );
+  }
+
+  // ── Regular web login ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[var(--bg-void)] flex items-center justify-center p-6">
       <motion.div

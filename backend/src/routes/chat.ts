@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
-import { getCached, setCached } from '../services/cache.js';
+import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
+import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { chargeTokens } from '../services/tokens.js';
 import { streamGemini } from '../services/providers/gemini.js';
 import { streamOpenAI } from '../services/providers/openai.js';
@@ -231,11 +232,26 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Route request
         const { provider, complexity } = route(effectivePrompt || fileName || 'анализ файла', fastify.log);
 
-        // Check cache (skip if any attachment present)
-        const cached = hasAttachment ? { hit: false as const } : await getCached(mode, complexity, effectivePrompt);
+        // History context for cache key: последние user-сообщения (без текущего)
+        const userHistoryContext = history
+          .filter(m => m.role === 'user')
+          .map(m => m.content);
 
-        if (cached.hit) {
-          const response = cached.response as { content: string };
+        // ── Cache lookup (пропускаем при вложениях и коротких промптах) ────────
+        const cacheDisabled = hasAttachment || isShortPrompt(effectivePrompt);
+
+        // 1) Redis (точный составной ключ)
+        const cached = cacheDisabled
+          ? { hit: false as const }
+          : await getTextCached(mode, complexity, effectivePrompt, userHistoryContext);
+
+        // 2) Vector cache (семантический, если Redis не попал)
+        const vecCached = (!cacheDisabled && !cached.hit)
+          ? await getVectorCached(mode, effectivePrompt, userHistoryContext)
+          : { hit: false as const };
+
+        if (cached.hit || vecCached.hit) {
+          const response = (cached.hit ? cached.response : vecCached.response) as { content: string };
 
           // Charge tokens even on cache hit (our margin)
           const tokensCost = await chargeTokens(userId, mode, complexity);
@@ -302,7 +318,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
 
         // Cache the response (skip if any attachment present)
-        if (!hasAttachment) await setCached(mode, complexity, effectivePrompt, { content: fullResponse });
+        if (!hasAttachment) {
+          await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext);
+          await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext);
+        }
 
         // Save assistant message
         await prisma.$transaction([

@@ -10,6 +10,7 @@ import multipart from '@fastify/multipart';
 import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
 import { authenticate } from './middleware/auth.js';
+import { initVectorCache } from './services/vector-cache.js';
 
 import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
@@ -132,6 +133,9 @@ async function start() {
   // Connect to DB and Redis
   await prisma.$connect();
   await redis.connect();
+
+  // Initialize optional vector cache (requires pgvector + EMBEDDING_API_KEY)
+  await initVectorCache();
 
   // Start BullMQ workers
   startVisionWorker();

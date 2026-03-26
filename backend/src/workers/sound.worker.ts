@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateMusic } from '../services/providers/replicate.js';
+import { setMediaCached } from '../services/cache.js';
 
 interface SoundJob {
   jobId: string;
@@ -27,6 +28,9 @@ export function startSoundWorker() {
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
+
+      // Cache for future identical prompts (30-day TTL)
+      setMediaCached('sound', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };
     },

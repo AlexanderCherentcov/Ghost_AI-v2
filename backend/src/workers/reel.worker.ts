@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateVideo } from '../services/providers/runway.js';
+import { setMediaCached } from '../services/cache.js';
 
 interface ReelJob {
   jobId: string;
@@ -27,6 +28,9 @@ export function startReelWorker() {
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
+
+      // Cache for future identical prompts (30-day TTL)
+      setMediaCached('reel', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };
     },

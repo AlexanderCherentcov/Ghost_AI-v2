@@ -1,37 +1,117 @@
 import { createHash } from 'crypto';
 import { redis } from '../lib/redis.js';
 
-const TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+// ─── TTLs ─────────────────────────────────────────────────────────────────────
+const TTL_TEXT  = 60 * 60 * 24 * 7;  // 7 дней — текст
+const TTL_MEDIA = 60 * 60 * 24 * 30; // 30 дней — медиа (стабильный контент)
 
-// Bump this version when system prompts change — invalidates all old cache entries
-const CACHE_VERSION = process.env.CACHE_VERSION ?? 'v1';
+// Инкремент для инвалидации без FLUSHDB — поменяй в .env
+const VER = process.env.CACHE_VERSION ?? 'v1';
 
-function normalizePrompt(prompt: string): string {
-  return prompt.trim().toLowerCase().replace(/\s+/g, ' ');
+// Запросы короче порога — никогда не кэшируем ("да", "нет", "ты уверен?")
+const SHORT_THRESHOLD = parseInt(process.env.CACHE_SHORT_THRESHOLD ?? '20', 10);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function normalize(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function buildCacheKey(mode: string, tier: string, prompt: string): string {
-  const normalized = normalizePrompt(prompt);
-  const raw = `${CACHE_VERSION}:${mode}:${tier}:${normalized}`;
-  return `ghost:${createHash('sha256').update(raw).digest('hex')}`;
+function sha256(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
 }
 
-export async function getCached(
+// ─── Short-prompt detection ───────────────────────────────────────────────────
+
+/**
+ * Короткие разговорные сообщения (< 20 символов) обходят кэш полностью
+ * и летят в API вместе с историей чата.
+ * Это устраняет «нелепые ответы» когда "да" возвращало ответ про апокалипсис.
+ */
+export function isShortPrompt(prompt: string): boolean {
+  return prompt.trim().length < SHORT_THRESHOLD;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ТЕКСТОВЫЙ КЭШ  (контекстный — составной ключ)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Строим ключ из: последние 2 сообщения пользователя + текущий промпт.
+ * Это делает кэш контекстно-зависимым:
+ *   "да" после "как сварить яйцо?"  ≠  "да" после "хочешь кофе?"
+ */
+function textKey(
   mode: string,
-  tier: string,
-  prompt: string
-): Promise<{ hit: true; response: object } | { hit: false }> {
-  const key = buildCacheKey(mode, tier, prompt);
-  const cached = await redis.get(key);
-  return cached ? { hit: true, response: JSON.parse(cached) } : { hit: false };
-}
-
-export async function setCached(
-  mode: string,
-  tier: string,
+  complexity: string,
   prompt: string,
-  response: object
-): Promise<void> {
-  const key = buildCacheKey(mode, tier, prompt);
-  await redis.set(key, JSON.stringify(response), 'EX', TTL_SECONDS);
+  historyContext: string[]   // только user-сообщения из истории
+): string {
+  const ctx     = historyContext.slice(-2).map(normalize);
+  const combined = [...ctx, normalize(prompt)].join('\n↓\n');
+  return `ghost:t:${sha256(`${VER}:${mode}:${complexity}:${combined}`)}`;
 }
+
+export async function getTextCached(
+  mode: string,
+  complexity: string,
+  prompt: string,
+  historyContext: string[] = []
+): Promise<{ hit: true; response: object } | { hit: false }> {
+  if (isShortPrompt(prompt)) return { hit: false };  // коротыши → мимо
+  const raw = await redis.get(textKey(mode, complexity, prompt, historyContext));
+  return raw ? { hit: true, response: JSON.parse(raw) } : { hit: false };
+}
+
+export async function setTextCached(
+  mode: string,
+  complexity: string,
+  prompt: string,
+  response: object,
+  historyContext: string[] = []
+): Promise<void> {
+  if (isShortPrompt(prompt)) return;
+  await redis.set(
+    textKey(mode, complexity, prompt, historyContext),
+    JSON.stringify(response),
+    'EX',
+    TTL_TEXT
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// МЕДИА КЭШ  (изолированный — только промпт, без истории)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Ключ строго из промпта — без контекста, без сессии, без юзера.
+ * "неоновый призрак" → одинаковый хеш у всех пользователей навсегда.
+ * Экономим реальные кредиты генерации.
+ */
+function mediaKey(mode: string, prompt: string): string {
+  return `ghost:m:${sha256(`${VER}:${mode}:${normalize(prompt)}`)}`;
+}
+
+export async function getMediaCached(
+  mode: string,
+  prompt: string
+): Promise<{ hit: true; url: string } | { hit: false }> {
+  const url = await redis.get(mediaKey(mode, prompt));
+  return url ? { hit: true, url } : { hit: false };
+}
+
+export async function setMediaCached(
+  mode: string,
+  prompt: string,
+  url: string
+): Promise<void> {
+  await redis.set(mediaKey(mode, prompt), url, 'EX', TTL_MEDIA);
+}
+
+// ─── Legacy compat ────────────────────────────────────────────────────────────
+// Обратная совместимость — перенаправляем на текстовый кэш без контекста
+export const getCached = (mode: string, complexity: string, prompt: string) =>
+  getTextCached(mode, complexity, prompt, []);
+
+export const setCached = (mode: string, complexity: string, prompt: string, response: object) =>
+  setTextCached(mode, complexity, prompt, response, []);

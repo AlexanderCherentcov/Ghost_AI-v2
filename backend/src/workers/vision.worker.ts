@@ -3,6 +3,7 @@ import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateImage } from '../services/providers/openai.js';
 import { generateImageSDXL } from '../services/providers/replicate.js';
+import { setMediaCached } from '../services/cache.js';
 
 interface VisionJob {
   jobId: string;
@@ -36,6 +37,9 @@ export function startVisionWorker() {
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
+
+      // Cache for future identical prompts (30-day TTL)
+      setMediaCached('vision', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };
     },

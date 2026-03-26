@@ -28,6 +28,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    extra_hosts:
+      # Routes "postgres" hostname to the Docker host gateway
+      # so Prisma can reach the PostgreSQL service running on the host OS
+      - "postgres:host-gateway"
     ports:
       - '127.0.0.1:4000:4000'
     networks:

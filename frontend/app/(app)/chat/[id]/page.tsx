@@ -10,6 +10,8 @@ import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
 import { useToast } from '@/components/ui/Toast';
+import { getFileCategory } from '@/components/chat/InputBar';
+import { api } from '@/lib/api';
 
 /** Resize an image File to max 800px and return as base64 JPEG data URL */
 async function resizeImageToBase64(file: File): Promise<string> {
@@ -32,6 +34,16 @@ async function resizeImageToBase64(file: File): Promise<string> {
       img.src = e.target!.result as string;
     };
     reader.readAsDataURL(file);
+  });
+}
+
+/** Read a text/code file as UTF-8 string */
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => resolve(e.target!.result as string);
+    reader.readAsText(file, 'utf-8');
   });
 }
 
@@ -68,26 +80,47 @@ export default function ChatConversationPage({ params }: Props) {
       .catch(() => router.replace('/chat'));
   }, [id]);
 
-  // Auto-send initial prompt (and optional image) from new chat creation
+  // Auto-send initial prompt (and optional file) from new chat creation
   useEffect(() => {
-    const initialPrompt = sessionStorage.getItem('initialPrompt');
-    const initialImageUrl = sessionStorage.getItem('initialImageUrl');
-    if (initialPrompt || initialImageUrl) {
-      sessionStorage.removeItem('initialPrompt');
-      sessionStorage.removeItem('initialImageUrl');
-      // Pass a synthetic File-like object via imageUrl directly in handleSend
-      setTimeout(async () => {
-        if (initialImageUrl) {
-          // Convert base64 back to File so handleSend can process it
-          const res = await fetch(initialImageUrl);
-          const blob = await res.blob();
-          const file = new File([blob], 'image.jpg', { type: 'image/jpeg' });
-          handleSend(initialPrompt ?? '', file);
-        } else {
-          handleSend(initialPrompt ?? '');
-        }
-      }, 300);
-    }
+    const initialPrompt      = sessionStorage.getItem('initialPrompt');
+    const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
+    const initialFileContent = sessionStorage.getItem('initialFileContent');
+    const initialFileName    = sessionStorage.getItem('initialFileName');
+    const initialFileLang    = sessionStorage.getItem('initialFileLang');
+    const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
+    const initialFileMime    = sessionStorage.getItem('initialFileMime');
+
+    const hasAny = initialPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
+    if (!hasAny) return;
+
+    // Clear all sessionStorage keys
+    ['initialPrompt','initialImageUrl','initialFileContent',
+     'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
+    ].forEach((k) => sessionStorage.removeItem(k));
+
+    setTimeout(async () => {
+      if (initialImageUrl) {
+        const res = await fetch(initialImageUrl);
+        const blob = await res.blob();
+        const file = new File([blob], initialFileName ?? 'image.jpg', { type: 'image/jpeg' });
+        handleSend(initialPrompt ?? '', file);
+      } else if (initialBinaryUrl && initialFileName) {
+        // Binary file (PDF/DOCX/XLSX): fetch from object URL and re-create File
+        const res = await fetch(initialBinaryUrl);
+        const blob = await res.blob();
+        const file = new File([blob], initialFileName, { type: initialFileMime ?? '' });
+        handleSend(initialPrompt ?? '', file);
+      } else if (initialFileContent && initialFileName) {
+        // Text file already extracted — inject directly bypassing handleSend file logic
+        // We create a synthetic Blob so handleSend reads it as text
+        const blob = new Blob([initialFileContent], { type: 'text/plain' });
+        // Rename with original extension so getFileCategory returns 'text'
+        const file = new File([blob], initialFileName, { type: 'text/plain' });
+        handleSend(initialPrompt ?? '', file);
+      } else {
+        handleSend(initialPrompt ?? '');
+      }
+    }, 300);
   }, [id]);
 
   // Connect WS
@@ -106,25 +139,58 @@ export default function ChatConversationPage({ params }: Props) {
   const handleSend = useCallback(async (prompt: string, file?: File) => {
     if (isStreaming || !accessToken) return;
 
-    // If image attached, resize to base64
+    // ── Process attached file ────────────────────────────────────────────────
     let imageUrl: string | undefined;
-    if (file && file.type.startsWith('image/')) {
-      try {
-        imageUrl = await resizeImageToBase64(file);
-      } catch {
-        imageUrl = undefined;
+    let fileContent: string | undefined;
+    let fileName: string | undefined;
+    let fileLang: string | undefined;
+    let fileDisplayUrl: string | null = null; // for optimistic preview
+
+    if (file) {
+      const category = getFileCategory(file);
+      fileName = file.name;
+
+      if (category === 'image') {
+        try {
+          imageUrl = await resizeImageToBase64(file);
+          fileDisplayUrl = imageUrl;
+        } catch {
+          showToast('Не удалось обработать изображение', 'error');
+        }
+      } else if (category === 'text') {
+        try {
+          const raw = await readFileAsText(file);
+          fileContent = raw.slice(0, 60_000);
+          fileLang = file.name.split('.').pop()?.toLowerCase();
+        } catch {
+          showToast('Не удалось прочитать файл', 'error');
+        }
+      } else {
+        // binary (PDF, DOCX, XLSX …) — extract on backend
+        try {
+          showToast('Извлечение текста из файла...', 'info');
+          const result = await api.upload.extract(file);
+          fileContent = result.text;
+          fileLang = result.lang;
+          if (result.truncated) showToast('Файл обрезан до 60 000 символов', 'warning');
+        } catch (err: any) {
+          showToast(err.message ?? 'Ошибка загрузки файла', 'error');
+          return;
+        }
       }
     }
 
-    // Optimistically add user message (show image preview immediately)
+    // Optimistically add user message
+    const displayContent = prompt || (fileName ? `[Файл: ${fileName}]` : '');
     const tempUserMsg = {
       id: `temp-${Date.now()}`,
       role: 'user' as const,
-      content: prompt,
+      content: displayContent,
       mode,
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: imageUrl ?? null,
+      mediaUrl: fileDisplayUrl,
+      fileName: fileName ?? null,
       createdAt: new Date().toISOString(),
     };
     addMessage(tempUserMsg);
@@ -145,6 +211,9 @@ export default function ChatConversationPage({ params }: Props) {
         history,
         jwt: accessToken,
         imageUrl,
+        fileContent,
+        fileName,
+        fileLang,
       });
 
       // Build assistant message from streamed content

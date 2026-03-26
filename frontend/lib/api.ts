@@ -87,6 +87,27 @@ export const api = {
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
   },
 
+  upload: {
+    /** Upload a file for text extraction. Returns extracted text + metadata. */
+    extract: async (file: File): Promise<{ text: string; fileName: string; lang: string; truncated: boolean }> => {
+      const form = new FormData();
+      form.append('file', file);
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const res = await fetch(`${API_URL}/api/upload/extract`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
+      }
+      return res.json();
+    },
+  },
+
   generate: {
     vision: (data: { prompt: string; size?: string }) =>
       request<{ jobId: string }>('/generate/vision', {
@@ -141,6 +162,7 @@ export interface Message {
   tokensCost: number;
   cacheHit: boolean;
   mediaUrl: string | null;
+  fileName?: string | null; // for optimistic display of attached file name
   createdAt: string;
 }
 

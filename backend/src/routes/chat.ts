@@ -25,8 +25,14 @@ const wsMessageSchema = z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string(),
   })).default([]),
-  // Optional image as base64 data URL (max ~2MB after resize)
-  imageUrl: z.string().max(2097152).optional(),
+  // Image: base64 data URL (max ~3MB after resize)
+  imageUrl: z.string().max(3145728).optional(),
+  // Document: extracted text content
+  fileContent: z.string().max(65536).optional(),
+  // Original file name (shown in chat + used for lang detection)
+  fileName: z.string().max(255).optional(),
+  // Code-fence language (js, python, etc.)
+  fileLang: z.string().max(32).optional(),
 });
 
 // ─── Provider stream factory ──────────────────────────────────────────────────
@@ -194,7 +200,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      const { chatId, mode, prompt, history, imageUrl } = parsed;
+      const { chatId, mode, prompt, history, imageUrl, fileContent, fileName, fileLang } = parsed;
 
       try {
         // Verify chat ownership + load user response style
@@ -208,14 +214,25 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
         const responseStyle = userProfile?.responseStyle ?? null;
 
-        // Effective prompt for AI (fall back to placeholder if only image sent)
-        const effectivePrompt = prompt || 'Опиши что изображено на картинке.';
+        // Effective prompt for AI (fall back to placeholder if only image/file sent)
+        const effectivePrompt = prompt
+          || (imageUrl ? 'Опиши что изображено на картинке.' : '')
+          || (fileContent ? 'Проанализируй содержимое прикреплённого файла.' : '');
+
+        // Build file context block to inject before the user prompt
+        let fileBlock = '';
+        if (fileContent && fileName) {
+          const lang = fileLang ?? 'text';
+          fileBlock = `Пользователь прикрепил файл «${fileName}»:\n\`\`\`${lang}\n${fileContent}\n\`\`\`\n\n`;
+        }
+
+        const hasAttachment = !!(imageUrl || fileContent);
 
         // Route request
-        const { provider, complexity } = route(effectivePrompt, fastify.log);
+        const { provider, complexity } = route(effectivePrompt || fileName || 'анализ файла', fastify.log);
 
-        // Check cache (only cache text-only messages)
-        const cached = imageUrl ? { hit: false as const } : await getCached(mode, complexity, effectivePrompt);
+        // Check cache (skip if any attachment present)
+        const cached = hasAttachment ? { hit: false as const } : await getCached(mode, complexity, effectivePrompt);
 
         if (cached.hit) {
           const response = cached.response as { content: string };
@@ -224,7 +241,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const tokensCost = await chargeTokens(userId, mode, complexity);
 
           // Save messages
-          const userContent = prompt || (imageUrl ? '[Изображение]' : '');
+          const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
           await prisma.$transaction([
             prisma.message.create({
               data: { chatId, userId, role: 'user', content: userContent, mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
@@ -254,13 +271,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
 
         // Build messages array for AI (system prompt first)
-        const userMessageContent = imageUrl
-          ? `${effectivePrompt}\n[Пользователь прикрепил изображение — отвечай на основе его описания]`
-          : effectivePrompt;
+        let userMessageContent = fileBlock + effectivePrompt;
+        if (imageUrl && !fileContent) {
+          userMessageContent += '\n[Пользователь прикрепил изображение]';
+        }
         const messages = [
           { role: 'system', content: getSystemPrompt(mode, responseStyle) },
           ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user', content: userMessageContent },
+          { role: 'user', content: userMessageContent.trim() },
         ];
 
         // Charge tokens
@@ -283,8 +301,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           }
         }
 
-        // Cache the response (skip if image was attached)
-        if (!imageUrl) await setCached(mode, complexity, effectivePrompt, { content: fullResponse });
+        // Cache the response (skip if any attachment present)
+        if (!hasAttachment) await setCached(mode, complexity, effectivePrompt, { content: fullResponse });
 
         // Save assistant message
         await prisma.$transaction([
@@ -308,7 +326,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         let newTitle: string | undefined;
         const messageCount = await prisma.message.count({ where: { chatId } });
         if (messageCount <= 2 && chat.title === 'Новый чат') {
-          const titleSource = prompt || '📎 Изображение';
+          const titleSource = prompt || (fileName ? `📎 ${fileName}` : '📎 Изображение');
           newTitle = titleSource.slice(0, 40) + (titleSource.length > 40 ? '...' : '');
           await prisma.chat.update({ where: { id: chatId }, data: { title: newTitle } });
         }

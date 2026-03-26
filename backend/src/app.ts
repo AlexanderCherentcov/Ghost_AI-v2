@@ -5,6 +5,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 
 import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
@@ -12,6 +13,7 @@ import { authenticate } from './middleware/auth.js';
 
 import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
+import uploadRoutes from './routes/upload.js';
 import paymentRoutes from './routes/payments.js';
 import generateRoutes from './routes/generate.js';
 
@@ -79,12 +81,18 @@ export async function buildApp() {
     options: { maxPayload: 4194304 }, // 4MB — allows images as base64
   });
 
+  // Multipart (file upload for document extraction)
+  await fastify.register(multipart, {
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB max file
+  });
+
   // ── Decorators ────────────────────────────────────────────────────────────
   fastify.decorate('authenticate', authenticate);
 
   // ── Routes ────────────────────────────────────────────────────────────────
   await fastify.register(authRoutes, { prefix: '/api' });
   await fastify.register(chatRoutes, { prefix: '/api' });
+  await fastify.register(uploadRoutes, { prefix: '/api' });
   await fastify.register(paymentRoutes, { prefix: '/api' });
   await fastify.register(generateRoutes, { prefix: '/api' });
 

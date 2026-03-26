@@ -6,6 +6,7 @@ import { useChatStore } from '@/store/chat.store';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
 import { ModeSelector } from '@/components/chat/ModeSelector';
+import { getFileCategory } from '@/components/chat/InputBar';
 
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -40,13 +41,36 @@ export default function ChatPage() {
     addChat(chat);
     // Store prompt in sessionStorage to auto-send
     sessionStorage.setItem('initialPrompt', prompt);
-    // If image attached, resize and store as base64 for the chat page to pick up
-    if (file && file.type.startsWith('image/')) {
-      try {
-        const base64 = await resizeImageToBase64(file);
-        sessionStorage.setItem('initialImageUrl', base64);
-      } catch {}
+
+    if (file) {
+      const category = getFileCategory(file);
+      sessionStorage.setItem('initialFileName', file.name);
+
+      if (category === 'image') {
+        try {
+          const base64 = await resizeImageToBase64(file);
+          sessionStorage.setItem('initialImageUrl', base64);
+        } catch {}
+      } else if (category === 'text') {
+        // Read text client-side
+        try {
+          const text = await new Promise<string>((res, rej) => {
+            const r = new FileReader();
+            r.onerror = rej;
+            r.onload = (e) => res(e.target!.result as string);
+            r.readAsText(file, 'utf-8');
+          });
+          sessionStorage.setItem('initialFileContent', text.slice(0, 60_000));
+          sessionStorage.setItem('initialFileLang', file.name.split('.').pop()?.toLowerCase() ?? 'text');
+        } catch {}
+      } else {
+        // binary: store the file as object URL so the chat page can re-upload it
+        const objectUrl = URL.createObjectURL(file);
+        sessionStorage.setItem('initialBinaryFileUrl', objectUrl);
+        sessionStorage.setItem('initialFileMime', file.type);
+      }
     }
+
     router.push(`/chat/${chat.id}`);
   }
 

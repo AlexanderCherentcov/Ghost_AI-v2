@@ -40,6 +40,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {isUser ? (
           /* User bubble */
           <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[18px_4px_18px_18px] px-4 py-3 text-sm text-[rgba(255,255,255,0.88)] leading-relaxed">
+            {/* Image preview */}
             {message.mediaUrl && (
               <div className="mb-2 rounded-xl overflow-hidden max-w-[260px]">
                 <img
@@ -50,7 +51,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 />
               </div>
             )}
-            {message.content}
+            {/* File attachment chip (for non-image files) */}
+            {!message.mediaUrl && message.fileName && (
+              <FileChip name={message.fileName} />
+            )}
+            {/* Text content */}
+            {message.content && message.content !== `[Файл: ${message.fileName}]` && (
+              <span>{message.content}</span>
+            )}
           </div>
         ) : (
           /* Ghost response — clean text like Gemini */
@@ -87,6 +95,31 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
       </div>
     </motion.div>
+  );
+}
+
+function fileIcon(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return '📄';
+  if (['doc','docx','odt'].includes(ext)) return '📝';
+  if (['xls','xlsx','ods','csv','tsv'].includes(ext)) return '📊';
+  if (['ppt','pptx'].includes(ext)) return '📑';
+  if (['js','jsx','ts','tsx','mjs'].includes(ext)) return '⚡';
+  if (['py','pyw'].includes(ext)) return '🐍';
+  if (['html','htm','xml','svg'].includes(ext)) return '🌐';
+  if (['json','yaml','yml','toml'].includes(ext)) return '⚙️';
+  if (['sql'].includes(ext)) return '🗄️';
+  if (['sh','bash','zsh','ps1'].includes(ext)) return '💻';
+  if (['md','markdown','rst'].includes(ext)) return '📋';
+  return '📎';
+}
+
+function FileChip({ name }: { name: string }) {
+  return (
+    <div className="flex items-center gap-1.5 mb-2 bg-[rgba(255,255,255,0.06)] rounded-lg px-2.5 py-1.5 w-fit max-w-[240px]">
+      <span className="text-sm leading-none">{fileIcon(name)}</span>
+      <span className="text-xs text-[rgba(255,255,255,0.7)] truncate">{name}</span>
+    </div>
   );
 }
 

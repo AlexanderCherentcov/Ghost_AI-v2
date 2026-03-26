@@ -23,7 +23,10 @@ export interface WSMessage {
   prompt: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   jwt: string;
-  imageUrl?: string; // base64 data URL of attached image
+  imageUrl?: string;    // base64 data URL of attached image
+  fileContent?: string; // extracted text from document
+  fileName?: string;    // original file name
+  fileLang?: string;    // code-fence language (js, python, …)
 }
 
 let ws: WebSocket | null = null;

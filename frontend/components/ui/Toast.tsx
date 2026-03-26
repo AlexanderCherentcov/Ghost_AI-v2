@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { create } from 'zustand';
 
-type ToastType = 'error' | 'success' | 'info';
+type ToastType = 'error' | 'success' | 'info' | 'warning';
 
 interface ToastItem {
   id: number;
@@ -36,12 +36,14 @@ const COLORS: Record<ToastType, string> = {
   error:   'border-red-500/30 bg-red-500/10 text-red-300',
   success: 'border-green-500/30 bg-green-500/10 text-green-300',
   info:    'border-[var(--accent-border)] bg-[var(--accent-dim)] text-white',
+  warning: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300',
 };
 
 const ICONS: Record<ToastType, string> = {
   error: '✕',
   success: '✓',
   info: '👻',
+  warning: '⚠',
 };
 
 export function ToastProvider() {

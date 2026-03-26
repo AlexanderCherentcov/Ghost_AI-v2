@@ -21,6 +21,7 @@ import generateRoutes from './routes/generate.js';
 import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
+import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Build app ────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,9 @@ async function start() {
   startVisionWorker();
   startSoundWorker();
   startReelWorker();
+
+  // Start TTL auto-cleanup (runs daily)
+  startCleanupWorker();
 
   // Listen
   const port = parseInt(process.env.PORT ?? '4000');

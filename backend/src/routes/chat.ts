@@ -10,6 +10,7 @@ import { streamGemini } from '../services/providers/gemini.js';
 import { streamOpenAI } from '../services/providers/openai.js';
 import { streamClaude } from '../services/providers/anthropic.js';
 import { getSystemPrompt } from '../lib/prompts.js';
+import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import type { SocketStream } from '@fastify/websocket';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -133,7 +134,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         },
       });
 
-      return { messages };
+      // Decrypt message content (graceful — legacy unencrypted messages returned as-is)
+      const decrypted = messages.map((m) => ({ ...m, content: safeDecrypt(m.content) }));
+
+      return { messages: decrypted };
     },
   });
 
@@ -273,14 +277,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
           await prisma.$transaction([
             prisma.message.create({
-              data: { chatId, userId, role: 'user', content: userContent, mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
+              data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
             }),
             prisma.message.create({
               data: {
                 chatId,
                 userId,
                 role: 'assistant',
-                content: response.content,
+                content: encrypt(response.content),
                 mode,
                 complexity,
                 provider,
@@ -316,7 +320,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Save user message (include image URL if attached)
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
-          data: { chatId, userId, role: 'user', content: userContent, mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
+          data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
         // Stream from provider
@@ -343,7 +347,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
               chatId,
               userId,
               role: 'assistant',
-              content: fullResponse,
+              content: encrypt(fullResponse),
               mode,
               complexity,
               provider,

@@ -20,6 +20,7 @@
  */
 
 import OpenAI from 'openai';
+import { createHash } from 'crypto';
 import { prisma } from '../lib/prisma.js';
 
 const THRESHOLD = parseFloat(process.env.VECTOR_CACHE_THRESHOLD ?? '0.95');
@@ -163,8 +164,8 @@ export async function setVectorCached(
   const vec = await embed(combined);
   if (!vec) return;
 
-  // Стабильный хеш для UNIQUE constraint
-  const hash = Buffer.from(normalize(combined)).toString('base64url').slice(0, 64);
+  // Стабильный SHA-256 хеш для UNIQUE constraint — необратимый, исходный текст не восстановить
+  const hash = createHash('sha256').update(normalize(combined)).digest('hex');
   const vecStr = `[${vec.join(',')}]`;
 
   try {

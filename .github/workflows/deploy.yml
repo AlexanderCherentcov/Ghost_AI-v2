@@ -24,7 +24,7 @@ jobs:
             cd /root/ghostline_v2
             git pull origin master
             cd infra
-            docker compose up -d redis
+            docker compose up -d postgres redis
             docker compose up -d --build --remove-orphans backend bot
             docker image prune -f
             echo "✅ Deploy done: $(date)"

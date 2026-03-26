@@ -1,6 +1,24 @@
 version: '3.9'
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ghost
+      POSTGRES_DB: ghostline_v2
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ghost_net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ghost -d ghostline_v2']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     command: >
@@ -26,12 +44,10 @@ services:
     restart: always
     env_file: .env
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
-    extra_hosts:
-      # Routes "postgres" hostname to the Docker host gateway
-      # so Prisma can reach the PostgreSQL service running on the host OS
-      - "postgres:host-gateway"
     ports:
       - '127.0.0.1:4000:4000'
     networks:
@@ -62,3 +78,11 @@ networks:
   ghost_net:
     external: true
     name: infra_ghost_net
+
+volumes:
+  postgres_data:
+    external: true
+    name: infra_postgres_data
+  redis_data:
+    external: true
+    name: infra_redis_data

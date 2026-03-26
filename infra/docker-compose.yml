@@ -1,29 +1,28 @@
-version: '3.9'
-
 services:
+  # ── Database ──────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_USER: ghost
-      POSTGRES_DB: ghostline_v2
-      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      POSTGRES_USER: ${POSTGRES_USER:-ghost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ghostline_v2}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - ghost_net
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ghost -d ghostline_v2']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ghost} -d ${POSTGRES_DB:-ghostline_v2}']
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Cache / Queue ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     command: >
       redis-server
-      --requirepass ${REDIS_PASSWORD:-R3d1sGh0stPr0d2024}
+      --requirepass ${REDIS_PASSWORD:-changeme}
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --save ""
@@ -31,11 +30,12 @@ services:
     networks:
       - ghost_net
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-R3d1sGh0stPr0d2024}', 'ping']
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-changeme}', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # ── Backend API ───────────────────────────────────────────────────────────────
   backend:
     build:
       context: ../backend
@@ -49,7 +49,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - '127.0.0.1:4000:4000'
+      - '127.0.0.1:4000:4000'   # только localhost — наружу через nginx
     networks:
       - ghost_net
     healthcheck:
@@ -59,6 +59,7 @@ services:
       retries: 3
       start_period: 30s
 
+  # ── Telegram Bot ──────────────────────────────────────────────────────────────
   bot:
     build:
       context: ../bot
@@ -74,15 +75,75 @@ services:
     networks:
       - ghost_net
 
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.ghostlineai.ru}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://api.ghostlineai.ru}
+    image: ghostline-frontend:latest
+    restart: always
+    env_file: .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ghost_net
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ── Nginx (reverse proxy + SSL) ───────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/ghostline.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - ghost_net
+
+  # ── Certbot (авто-обновление SSL) ────────────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    # Проверяет и обновляет сертификаты раз в 12 часов
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h & wait $${!};
+      done"
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
   ghost_net:
     external: true
     name: infra_ghost_net
 
+# ─── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
     external: true
     name: infra_postgres_data
-  redis_data:
+  certbot_webroot:
     external: true
-    name: infra_redis_data
+    name: infra_certbot_webroot
+  letsencrypt:
+    external: true
+    name: infra_letsencrypt

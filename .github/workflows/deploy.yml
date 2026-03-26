@@ -1,4 +1,4 @@
-name: Deploy Backend
+name: Deploy
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/**'
       - 'bot/**'
+      - 'frontend/**'
       - 'infra/**'
       - '.github/workflows/deploy.yml'
 
@@ -24,7 +25,20 @@ jobs:
             cd /root/ghostline_v2
             git pull origin master
             cd infra
+
+            # 1. Инфраструктура (postgres + redis) — без пересборки
             docker compose up -d --remove-orphans postgres redis
+
+            # 2. Backend + Bot — пересобираем при изменениях
             docker compose up -d --build --remove-orphans backend bot
+
+            # 3. Frontend — пересобираем при изменениях
+            docker compose up -d --build --remove-orphans frontend
+
+            # 4. Nginx + Certbot — без пересборки (используют образы)
+            docker compose up -d --remove-orphans nginx certbot
+
+            # 5. Очищаем старые образы
             docker image prune -f
+
             echo "✅ Deploy done: $(date)"

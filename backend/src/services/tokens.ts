@@ -117,7 +117,7 @@ export async function setPlanBalances(
         userId,
         amount: balances.chat + balances.images + balances.docs + balances.code,
         type: txType,
-        meta: { balances, ...meta },
+        meta: { balances: balances as Record<string, number>, ...(meta as Record<string, unknown> ?? {}) },
       },
     }),
   ]);

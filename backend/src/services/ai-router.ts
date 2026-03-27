@@ -77,7 +77,7 @@ export function route(
   else if (category === 'docs' || hasDocument) balanceType = 'docs';
   else                                          balanceType = 'chat';
 
-  const usesonnet  = plan === 'ULTRA' || complexity === 'complex';
+  const usesonnet  = complexity === 'complex';
   const provider: Provider = usesonnet ? 'openrouter-sonnet' : 'openrouter-haiku';
   const model = usesonnet ? OR_MODELS.sonnet : OR_MODELS.haiku;
   const maxTokens = plan === 'FREE' ? 400 : undefined;

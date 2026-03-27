@@ -85,6 +85,10 @@ export const api = {
         body: JSON.stringify(data),
       }),
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
+    status: (yokassaId: string) =>
+      request<{ status: string; type: string; plan: string | null; addonType: string | null; addonAmount: number | null }>(
+        `/payments/status/${yokassaId}`
+      ),
   },
 
   upload: {

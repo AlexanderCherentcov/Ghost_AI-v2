@@ -44,6 +44,21 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // ── Payment status ────────────────────────────────────────────────────────
+  fastify.get('/payments/status/:yokassaId', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { userId } = request.user;
+      const { yokassaId } = request.params as { yokassaId: string };
+      const payment = await prisma.payment.findFirst({
+        where: { yokassaId, userId },
+        select: { status: true, type: true, plan: true, addonType: true, addonAmount: true },
+      });
+      if (!payment) return reply.code(404).send({ error: 'Not found' });
+      return payment;
+    },
+  });
+
   // ── Payment history ───────────────────────────────────────────────────────
   fastify.get('/payments', {
     preHandler: [fastify.authenticate],

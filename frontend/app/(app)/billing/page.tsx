@@ -44,34 +44,34 @@ const ADDON_GROUPS = [
     title: 'Картинки',
     icon: '🖼️',
     packs: [
-      { key: 'ADDON_IMAGES_10',  label: '10 картинок',  price: 99 },
-      { key: 'ADDON_IMAGES_30',  label: '30 картинок',  price: 249 },
-      { key: 'ADDON_IMAGES_100', label: '100 картинок', price: 699 },
+      { key: 'IMAGES_10',  label: '10 картинок',  price: 149 },
+      { key: 'IMAGES_30',  label: '30 картинок',  price: 349 },
+      { key: 'IMAGES_100', label: '100 картинок', price: 990 },
     ],
   },
   {
     title: 'Сообщения',
     icon: '💬',
     packs: [
-      { key: 'ADDON_CHAT_500',   label: '500 сообщений',    price: 99 },
-      { key: 'ADDON_CHAT_2000',  label: '2 000 сообщений',  price: 299 },
-      { key: 'ADDON_CHAT_10000', label: '10 000 сообщений', price: 999 },
+      { key: 'CHAT_500',   label: '500 сообщений',    price: 99 },
+      { key: 'CHAT_2000',  label: '2 000 сообщений',  price: 299 },
+      { key: 'CHAT_10000', label: '10 000 сообщений', price: 999 },
     ],
   },
   {
     title: 'Документы',
     icon: '📄',
     packs: [
-      { key: 'ADDON_DOCS_10', label: '10 документов', price: 149 },
-      { key: 'ADDON_DOCS_50', label: '50 документов', price: 499 },
+      { key: 'DOCS_10', label: '10 документов', price: 99 },
+      { key: 'DOCS_50', label: '50 документов', price: 349 },
     ],
   },
   {
     title: 'Код',
     icon: '💻',
     packs: [
-      { key: 'ADDON_CODE_200',  label: '200 запросов',   price: 199 },
-      { key: 'ADDON_CODE_1000', label: '1 000 запросов', price: 799 },
+      { key: 'CODE_200',  label: '200 запросов',   price: 149 },
+      { key: 'CODE_1000', label: '1 000 запросов', price: 499 },
     ],
   },
 ];

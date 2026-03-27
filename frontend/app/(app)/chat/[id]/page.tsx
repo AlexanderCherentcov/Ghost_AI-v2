@@ -11,6 +11,7 @@ import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
 import { ChatQuickActions, type QuickMode } from '@/components/chat/ChatQuickActions';
 import { useToast } from '@/components/ui/Toast';
+import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
 
 // Keywords that trigger image generation routing
@@ -75,6 +76,7 @@ export default function ChatConversationPage({ params }: Props) {
   } = useChatStore();
 
   const [quickMode, setQuickMode] = useState<QuickMode>(null);
+  const [limitType, setLimitType] = useState<LimitType>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [imageSuggestion, setImageSuggestion] = useState<string | null>(null);
 
@@ -326,9 +328,13 @@ export default function ChatConversationPage({ params }: Props) {
       }
     } catch (err: any) {
       setStreaming(false);
-      if (err.code === 'INSUFFICIENT_TOKENS') {
-        showToast('Недостаточно токенов — пополните баланс', 'error');
-        router.push('/billing');
+      if (['LIMIT_CHAT', 'LIMIT_IMAGES', 'LIMIT_DOCS', 'LIMIT_CODE'].includes(err.code)) {
+        const typeMap: Record<string, LimitType> = {
+          LIMIT_CHAT: 'chat', LIMIT_IMAGES: 'images', LIMIT_DOCS: 'docs', LIMIT_CODE: 'code'
+        };
+        setLimitType(typeMap[err.code]);
+      } else if (err.code === 'INSUFFICIENT_TOKENS') {
+        setLimitType('chat');
       } else if (err.code === 'PLAN_RESTRICTED') {
         showToast('Эта функция доступна только на платных тарифах', 'error');
         router.push('/billing');
@@ -344,6 +350,7 @@ export default function ChatConversationPage({ params }: Props) {
 
   return (
     <div className="flex flex-col h-full">
+      <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
       <ChatWindow onSuggestion={handleSend} />
 
       {/* Image suggestion banner (auto-detected intent) */}

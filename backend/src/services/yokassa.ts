@@ -1,7 +1,8 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
-import { grantTokens } from './tokens.js';
+import { setPlanBalances, grantAddon } from './tokens.js';
+import type { PlanBalances } from './tokens.js';
 
 const YOKASSA_BASE = 'https://api.yookassa.ru/v3';
 
@@ -9,7 +10,6 @@ function yokassaHeaders(idempotencyKey: string) {
   const credentials = Buffer.from(
     `${process.env.YOKASSA_SHOP_ID}:${process.env.YOKASSA_SECRET_KEY}`
   ).toString('base64');
-
   return {
     Authorization: `Basic ${credentials}`,
     'Content-Type': 'application/json',
@@ -17,50 +17,69 @@ function yokassaHeaders(idempotencyKey: string) {
   };
 }
 
-// ─── Plans ────────────────────────────────────────────────────────────────────
+// ─── Subscription plans ────────────────────────────────────────────────────────
 
 export const PLANS = {
-  PRO:   { price: 499,  tokens: 500_000,     label: 'Ghost Pro' },
-  ULTRA: { price: 1490, tokens: 2_000_000,   label: 'Ghost Ultra' },
-  TEAM:  { price: 3900, tokens: 10_000_000,  label: 'Ghost Team' },
+  BASIC:    { price: 299,  label: 'Базовый',  balances: { chat: 200,  images: 10,  docs: 15,  code: 50  } },
+  STANDARD: { price: 699,  label: 'Стандарт', balances: { chat: 700,  images: 30,  docs: 50,  code: 200 } },
+  PRO:      { price: 1490, label: 'Про',       balances: { chat: 2000, images: 80,  docs: 100, code: 500 } },
+  ULTRA:    { price: 2990, label: 'Ультра',   balances: { chat: 8000, images: 200, docs: 150, code: 1500 } },
 } as const;
 
-// ─── Token packs (Базовый / Стандарт / Про) ───────────────────────────────────
-// Costs per action:  chat=1  code=2  doc=3  image=10
+// ─── Addon packs ──────────────────────────────────────────────────────────────
 
-export const TOKEN_PACKS = {
-  BASIC:    { price: 299,  tokens: 350,  label: 'Базовый' },
-  STANDARD: { price: 699,  tokens: 1150, label: 'Стандарт' },
-  PRO_PACK: { price: 1490, tokens: 3300, label: 'Про' },
+export const ADDON_PACKS = {
+  // Images
+  IMAGES_10:    { price: 149,  label: '10 картинок',        type: 'images' as const, amount: 10   },
+  IMAGES_30:    { price: 349,  label: '30 картинок',        type: 'images' as const, amount: 30   },
+  IMAGES_100:   { price: 990,  label: '100 картинок',       type: 'images' as const, amount: 100  },
+  // Chat
+  CHAT_500:     { price: 99,   label: '500 сообщений',      type: 'chat'   as const, amount: 500  },
+  CHAT_2000:    { price: 299,  label: '2000 сообщений',     type: 'chat'   as const, amount: 2000 },
+  CHAT_10000:   { price: 999,  label: '10 000 сообщений',   type: 'chat'   as const, amount: 10000},
+  // Docs
+  DOCS_10:      { price: 99,   label: '10 документов',      type: 'docs'   as const, amount: 10   },
+  DOCS_50:      { price: 349,  label: '50 документов',      type: 'docs'   as const, amount: 50   },
+  // Code
+  CODE_200:     { price: 149,  label: '200 запросов кода',  type: 'code'   as const, amount: 200  },
+  CODE_1000:    { price: 499,  label: '1000 запросов кода', type: 'code'   as const, amount: 1000 },
 } as const;
 
-export type PlanKey = keyof typeof PLANS;
-export type PackKey = keyof typeof TOKEN_PACKS;
+export type PlanKey  = keyof typeof PLANS;
+export type AddonKey = keyof typeof ADDON_PACKS;
 
 // ─── Create payment ───────────────────────────────────────────────────────────
 
 export async function createPayment(
   userId: string,
-  type: 'TOKEN_PACK' | 'SUBSCRIPTION',
-  key: PlanKey | PackKey,
+  type: 'SUBSCRIPTION' | 'ADDON',
+  key: PlanKey | AddonKey,
   returnUrl: string
 ) {
   const idempotencyKey = crypto.randomUUID();
+  let price: number;
+  let description: string;
+  let addonType: string | undefined;
+  let addonAmount: number | undefined;
+  let plan: PlanKey | undefined;
 
-  const info =
-    type === 'SUBSCRIPTION'
-      ? PLANS[key as PlanKey]
-      : TOKEN_PACKS[key as PackKey];
-
-  const description =
-    type === 'SUBSCRIPTION'
-      ? `Подписка ${info.label} — GhostLine`
-      : `Пополнение токенов ${info.label} — GhostLine`;
+  if (type === 'SUBSCRIPTION') {
+    const info = PLANS[key as PlanKey];
+    price = info.price;
+    description = `Подписка ${info.label} — GhostLine`;
+    plan = key as PlanKey;
+  } else {
+    const info = ADDON_PACKS[key as AddonKey];
+    price = info.price;
+    description = `Аддон ${info.label} — GhostLine`;
+    addonType   = info.type;
+    addonAmount = info.amount;
+  }
 
   const { data } = await axios.post(
     `${YOKASSA_BASE}/payments`,
     {
-      amount: { value: info.price.toFixed(2), currency: 'RUB' },
+      amount: { value: price.toFixed(2), currency: 'RUB' },
       confirmation: { type: 'redirect', return_url: returnUrl },
       capture: true,
       description,
@@ -69,21 +88,21 @@ export async function createPayment(
     { headers: yokassaHeaders(idempotencyKey) }
   );
 
-  // Save payment record
   await prisma.payment.create({
     data: {
       userId,
       yokassaId: data.id,
-      amount: info.price,
+      amount: price,
       status: 'PENDING',
       type,
-      tokensGranted: info.tokens,
-      plan: type === 'SUBSCRIPTION' ? (key as any) : undefined,
+      plan: plan as any,
+      addonType,
+      addonAmount,
     },
   });
 
   return {
-    paymentId: data.id as string,
+    paymentId:  data.id as string,
     paymentUrl: data.confirmation.confirmation_url as string,
   };
 }
@@ -98,34 +117,26 @@ export async function processWebhook(body: unknown): Promise<void> {
 
   if (event.type !== 'payment.succeeded') return;
 
-  const payment = await prisma.payment.findUnique({
-    where: { yokassaId: event.object.id },
-  });
-
+  const payment = await prisma.payment.findUnique({ where: { yokassaId: event.object.id } });
   if (!payment || payment.status === 'SUCCEEDED') return;
 
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: 'SUCCEEDED' },
-  });
+  await prisma.payment.update({ where: { id: payment.id }, data: { status: 'SUCCEEDED' } });
 
-  if (payment.tokensGranted) {
-    await grantTokens(
-      payment.userId,
-      payment.tokensGranted,
-      payment.type === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'PURCHASE',
-      { paymentId: payment.id }
-    );
-  }
-
-  // Update plan if subscription
   if (payment.type === 'SUBSCRIPTION' && payment.plan) {
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + 1);
-
-    await prisma.user.update({
-      where: { id: payment.userId },
-      data: { plan: payment.plan, planExpiresAt: expiresAt },
-    });
+    const planInfo = PLANS[payment.plan as PlanKey];
+    if (planInfo) {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      await prisma.user.update({
+        where: { id: payment.userId },
+        data: { plan: payment.plan, planExpiresAt: expiresAt },
+      });
+      await setPlanBalances(payment.userId, planInfo.balances, 'SUBSCRIPTION', { paymentId: payment.id });
+    }
+  } else if (payment.type === 'ADDON' && payment.addonType && payment.addonAmount) {
+    await grantAddon(payment.userId, payment.addonType as any, payment.addonAmount, { paymentId: payment.id });
   }
 }
+
+// ─── Legacy: TOKEN_PACKS for old routes/plans.ts ─────────────────────────────
+export const TOKEN_PACKS = ADDON_PACKS;

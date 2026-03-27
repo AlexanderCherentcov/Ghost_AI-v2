@@ -79,7 +79,7 @@ export const api = {
 
   payments: {
     plans: () => request<PlansResponse>('/plans'),
-    create: (data: { type: 'TOKEN_PACK' | 'SUBSCRIPTION'; key: string }) =>
+    create: (data: { type: 'SUBSCRIPTION' | 'ADDON'; key: string }) =>
       request<{ paymentId: string; paymentUrl: string }>('/payments/create', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -137,8 +137,17 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  tokenBalance: number;
-  plan: 'FREE' | 'PRO' | 'ULTRA' | 'TEAM';
+  // Per-type main balances (plan allocation)
+  balanceChat:   number;
+  balanceImages: number;
+  balanceDocs:   number;
+  balanceCode:   number;
+  // Addons (never expire)
+  addonChat:     number;
+  addonImages:   number;
+  addonDocs:     number;
+  addonCode:     number;
+  plan: 'FREE' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;
   purposes: string[];
   responseStyle: string;
@@ -207,7 +216,18 @@ export interface PaymentsResponse {
   page: number;
 }
 
+export interface PlanInfo {
+  price: number;
+  label: string;
+  balances: { chat: number; images: number; docs: number; code: number };
+}
+export interface AddonInfo {
+  price: number;
+  label: string;
+  type: 'chat' | 'images' | 'docs' | 'code';
+  amount: number;
+}
 export interface PlansResponse {
-  plans: Record<string, { price: number; tokens: number; label: string }>;
-  packs: Record<string, { price: number; tokens: number; label: string }>;
+  plans:  Record<string, PlanInfo>;
+  addons: Record<string, AddonInfo>;
 }

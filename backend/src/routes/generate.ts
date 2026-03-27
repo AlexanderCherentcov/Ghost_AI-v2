@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { chargeTokens } from '../services/tokens.js';
+import { deductBalance } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit } from '../services/user-limiter.js';
@@ -44,14 +44,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first (saves real generation credits)
       const mediaCached = await getMediaCached('vision', prompt);
       if (mediaCached.hit) {
-        await chargeTokens(userId, 'vision');
+        await deductBalance(userId, 'images');
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'vision', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await chargeTokens(userId, 'vision');
+      await deductBalance(userId, 'images');
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'vision', prompt },
@@ -103,14 +103,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first
       const mediaCached = await getMediaCached('sound', prompt);
       if (mediaCached.hit) {
-        await chargeTokens(userId, 'sound');
+        await deductBalance(userId, 'images');
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await chargeTokens(userId, 'sound');
+      await deductBalance(userId, 'images');
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'sound', prompt },
@@ -162,14 +162,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first
       const mediaCached = await getMediaCached('reel', prompt);
       if (mediaCached.hit) {
-        await chargeTokens(userId, 'reel');
+        await deductBalance(userId, 'images');
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'reel', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await chargeTokens(userId, 'reel');
+      await deductBalance(userId, 'images');
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'reel', prompt },

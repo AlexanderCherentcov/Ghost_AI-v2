@@ -53,9 +53,9 @@ export function Sidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const balance = user?.tokenBalance ?? 0;
-  // Progress bar: full at 3300 (Про пакет), scales down linearly
-  const tokenPercent = Math.min((balance / 3300) * 100, 100);
+  const chatBalance = (user?.balanceChat ?? 0) + (user?.addonChat ?? 0);
+  const maxChat = user?.plan === 'ULTRA' ? 8000 : user?.plan === 'PRO' ? 2000 : user?.plan === 'STANDARD' ? 700 : user?.plan === 'BASIC' ? 200 : 50;
+  const tokenPercent = Math.min((chatBalance / maxChat) * 100, 100);
 
   const grouped = groupChats(chats);
 
@@ -246,7 +246,7 @@ export function Sidebar() {
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
                 <TokenIcon size={12} className="text-accent" />
-                <span>{balance} токенов</span>
+                <span>{chatBalance} сообщений</span>
               </div>
               <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">
                 + Купить

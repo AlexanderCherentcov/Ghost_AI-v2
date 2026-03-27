@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createPayment, processWebhook, PLANS, TOKEN_PACKS } from '../services/yokassa.js';
+import { createPayment, processWebhook, PLANS, ADDON_PACKS } from '../services/yokassa.js';
 import { prisma } from '../lib/prisma.js';
 
 const createPaymentSchema = z.object({
-  type: z.enum(['TOKEN_PACK', 'SUBSCRIPTION']),
+  type: z.enum(['SUBSCRIPTION', 'ADDON']),
   key: z.string(),
   returnUrl: z.string().url().optional(),
 });
@@ -17,19 +17,16 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { type, key, returnUrl } = createPaymentSchema.parse(request.body);
 
-      // Validate key
-      const validKeys =
-        type === 'SUBSCRIPTION'
-          ? Object.keys(PLANS)
-          : Object.keys(TOKEN_PACKS);
+      const validKeys = type === 'SUBSCRIPTION'
+        ? Object.keys(PLANS)
+        : Object.keys(ADDON_PACKS);
 
       if (!validKeys.includes(key)) {
         return reply.code(400).send({ error: 'Invalid plan/pack key' });
       }
 
-      const frontendUrl = process.env.FRONTEND_URL ?? 'https://ghostline.ai';
-      const effectiveReturnUrl =
-        returnUrl ?? `${frontendUrl}/billing/success`;
+      const frontendUrl = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
+      const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
       const result = await createPayment(userId, type, key as any, effectiveReturnUrl);
       return result;
@@ -53,9 +50,8 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     handler: async (request) => {
       const { userId } = request.user;
       const query = request.query as { page?: string };
-      const page = parseInt(query.page ?? '1');
+      const page  = parseInt(query.page ?? '1');
       const limit = 20;
-
       const [payments, total] = await prisma.$transaction([
         prisma.payment.findMany({
           where: { userId },
@@ -65,14 +61,13 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         }),
         prisma.payment.count({ where: { userId } }),
       ]);
-
       return { payments, total, page, limit };
     },
   });
 
   // ── Plans info (public) ───────────────────────────────────────────────────
   fastify.get('/plans', async () => ({
-    plans: PLANS,
-    packs: TOKEN_PACKS,
+    plans:  PLANS,
+    addons: ADDON_PACKS,
   }));
 }

@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
-import { chargeTokens } from '../services/tokens.js';
+import { deductBalance, sanitizeInput } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
 import { OR_MODELS } from '../services/providers/openrouter.js';
@@ -197,7 +197,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      const { chatId, mode, prompt, history, imageUrl, fileContent, fileName, fileLang } = parsed;
+      const { chatId, mode, history, imageUrl, fileContent, fileName, fileLang } = parsed;
+      const prompt = sanitizeInput(parsed.prompt);
 
       try {
         // Verify chat ownership + load user response style + plan
@@ -234,15 +235,13 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request:
-        // - image attachment  → always Sonnet multimodal
-        // - document/file     → always Sonnet
-        // - otherwise         → keyword-based classification
-        const { provider, complexity, model } = route(
+        // Route request: pass plan so ULTRA gets Sonnet always; FREE gets maxTokens cap
+        const { provider, complexity, model, balanceType, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
           fastify.log,
-          !!imageUrl
+          !!imageUrl,
+          userProfile?.plan
         );
 
         // History context for cache key: последние user-сообщения (без текущего)
@@ -269,8 +268,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const response = cacheHit.response as { content: string };
 
           // Charge tokens even on cache hit (our margin)
-          const chargeMode = (imageUrl || fileContent) ? 'document' : mode;
-          const tokensCost = await chargeTokens(userId, chargeMode, complexity);
+          await deductBalance(userId, balanceType);
+          const tokensCost = 1;
 
           // Save messages
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
@@ -324,9 +323,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const messages: ChatMessage[] = [systemMsg, ...historyMsgs, userMsg];
 
-        // Charge tokens: image = 3 (like document), document = 3, code/complex = 2, simple = 1
-        const chargeMode = (imageUrl || fileContent) ? 'document' : mode;
-        const tokensCost = await chargeTokens(userId, chargeMode, complexity);
+        // Deduct 1 unit from the appropriate per-type balance
+        await deductBalance(userId, balanceType);
+        const tokensCost = 1;
 
         // Save user message (include image URL if attached)
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
@@ -334,9 +333,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
-        // Stream from provider
+        // Stream from provider (maxTokens is set for FREE plan)
         let fullResponse = '';
-        const stream = getProviderStream(model, messages);
+        const stream = streamOpenRouter(messages, model, maxTokens);
 
         for await (const chunk of stream) {
           if (chunk.type === 'token' && chunk.data) {

@@ -39,7 +39,8 @@ export interface ChatMessage {
 
 export async function* streamOpenRouter(
   messages: ChatMessage[],
-  model: string
+  model: string,
+  maxTokens?: number
 ): AsyncGenerator<{ type: 'token'; data: string }> {
   const client = getClient();
 
@@ -47,6 +48,7 @@ export async function* streamOpenRouter(
     model,
     messages: messages as OpenAI.ChatCompletionMessageParam[],
     stream: true,
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
   });
 
   for await (const chunk of stream) {

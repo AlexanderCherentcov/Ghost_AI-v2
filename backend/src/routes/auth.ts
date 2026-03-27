@@ -6,16 +6,16 @@ import { grantTokens } from '../services/tokens.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
-const TRIAL_TOKENS = 50;
-const TRIAL_DAYS   = 7;
+const TRIAL_CHAT = 50;   // 50 free chat messages for new users
+const TRIAL_DAYS = 7;
 
 async function setupTrialForNewUser(userId: string): Promise<void> {
   const expiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   await prisma.user.update({
     where: { id: userId },
-    data: { trialExpiresAt: expiresAt },
+    data: { trialExpiresAt: expiresAt, balanceChat: TRIAL_CHAT },
   });
-  await grantTokens(userId, TRIAL_TOKENS, 'BONUS', { trial: true, expiresAt: expiresAt.toISOString() });
+  await grantTokens(userId, TRIAL_CHAT, 'BONUS', { trial: true, expiresAt: expiresAt.toISOString() });
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           name: true,
           email: true,
           avatarUrl: true,
-          tokenBalance: true,
+          balanceChat: true, balanceImages: true, balanceDocs: true, balanceCode: true, addonChat: true, addonImages: true, addonDocs: true, addonCode: true,
           plan: true,
           planExpiresAt: true,
           purposes: true,
@@ -438,7 +438,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           id: true,
           name: true,
           email: true,
-          tokenBalance: true,
+          balanceChat: true, balanceImages: true, balanceDocs: true, balanceCode: true, addonChat: true, addonImages: true, addonDocs: true, addonCode: true,
           plan: true,
           onboardingDone: true,
           purposes: true,

@@ -12,6 +12,8 @@ datasource db {
 
 enum Plan {
   FREE
+  BASIC
+  STANDARD
   PRO
   ULTRA
   TEAM
@@ -35,6 +37,7 @@ enum PaymentStatus {
 enum PaymentType {
   TOKEN_PACK
   SUBSCRIPTION
+  ADDON
 }
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
@@ -48,7 +51,19 @@ model User {
   yandexId      String?   @unique
   googleId      String?   @unique
   avatarUrl     String?
-  tokenBalance   Int       @default(50)
+
+  // Per-type balances (main plan allocation — can expire with plan)
+  balanceChat    Int       @default(0)
+  balanceImages  Int       @default(0)
+  balanceDocs    Int       @default(0)
+  balanceCode    Int       @default(0)
+
+  // Addons (never expire — cumulative)
+  addonChat      Int       @default(0)
+  addonImages    Int       @default(0)
+  addonDocs      Int       @default(0)
+  addonCode      Int       @default(0)
+
   trialExpiresAt DateTime?              // null = не триал или триал сгорел
   plan           Plan      @default(FREE)
   planExpiresAt  DateTime?
@@ -94,7 +109,7 @@ model Message {
   content    String   @db.Text
   mode       String   // 'chat' | 'vision' | 'sound' | 'reel' | 'think'
   complexity String?  // 'simple' | 'complex'
-  provider   String?  // internal: 'gemini-flash' | 'claude-sonnet' | ...
+  provider   String?  // internal: 'openrouter-haiku' | 'openrouter-sonnet' | ...
   cacheHit   Boolean  @default(false)
   tokensCost Int      @default(0)
   mediaUrl   String?  // for Vision/Sound/Reel
@@ -110,7 +125,7 @@ model TokenTransaction {
   user      User     @relation(fields: [userId], references: [id])
   amount    Int      // negative = spend, positive = receive
   type      TxType
-  meta      Json?    // { mode, complexity, paymentId, ... }
+  meta      Json?    // { balanceType, mode, paymentId, ... }
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -124,8 +139,10 @@ model Payment {
   amount        Float         // in rubles
   status        PaymentStatus @default(PENDING)
   type          PaymentType
-  tokensGranted Int?
   plan          Plan?
+  // For addons: which type and how many
+  addonType     String?       // 'chat' | 'images' | 'docs' | 'code'
+  addonAmount   Int?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

@@ -54,7 +54,8 @@ export default function BillingPage() {
     }
   }
 
-  const balance = user?.tokenBalance ?? 0;
+  const balance = (user?.balanceChat ?? 0) + (user?.balanceImages ?? 0) + (user?.balanceDocs ?? 0) + (user?.balanceCode ?? 0)
+    + (user?.addonChat ?? 0) + (user?.addonImages ?? 0) + (user?.addonDocs ?? 0) + (user?.addonCode ?? 0);
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">

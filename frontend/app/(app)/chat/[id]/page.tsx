@@ -183,7 +183,7 @@ export default function ChatConversationPage({ params }: Props) {
           ));
           if (user) {
             const { setUser } = useAuthStore.getState();
-            setUser({ ...user, tokenBalance: user.tokenBalance - 10 });
+            setUser({ ...user, balanceImages: Math.max(0, user.balanceImages - 10) });
           }
         } else if (job.status === 'failed') {
           const { setMessages } = useChatStore.getState();
@@ -324,7 +324,7 @@ export default function ChatConversationPage({ params }: Props) {
 
       if (user) {
         const { setUser } = useAuthStore.getState();
-        setUser({ ...user, tokenBalance: user.tokenBalance - tokensCost });
+        setUser({ ...user, balanceChat: Math.max(0, user.balanceChat - tokensCost) });
       }
     } catch (err: any) {
       setStreaming(false);

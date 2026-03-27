@@ -3,13 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export type LimitType = 'chat' | 'images' | 'docs' | 'code' | null;
+export type LimitType = 'messages' | 'images' | null;
 
 const LIMIT_LABELS: Record<NonNullable<LimitType>, { title: string; desc: string; addonKey: string; addonLabel: string }> = {
-  chat:   { title: 'Лимит сообщений исчерпан',     desc: 'Вы использовали все чат-сообщения.',           addonKey: 'CHAT_500',   addonLabel: '+ 500 сообщений за ₽99' },
-  images: { title: 'Лимит изображений исчерпан',    desc: 'Вы использовали все запросы на генерацию.',   addonKey: 'IMAGES_10',  addonLabel: '+ 10 картинок за ₽149' },
-  docs:   { title: 'Лимит документов исчерпан',     desc: 'Вы использовали все запросы на анализ файлов.', addonKey: 'DOCS_10',   addonLabel: '+ 10 документов за ₽99' },
-  code:   { title: 'Лимит кода исчерпан',           desc: 'Вы использовали все запросы на генерацию кода.', addonKey: 'CODE_200', addonLabel: '+ 200 запросов за ₽149' },
+  messages: { title: 'Лимит сообщений исчерпан', desc: 'Вы использовали все сообщения.',       addonKey: 'MESSAGES_STD_200', addonLabel: '+ 200 сообщений за ₽199' },
+  images:   { title: 'Лимит картинок исчерпан',  desc: 'Вы использовали все генерации.',        addonKey: 'IMAGES_10',        addonLabel: '+ 10 картинок за ₽299'  },
 };
 
 interface Props {
@@ -22,13 +20,7 @@ export function LimitPopup({ type, onClose }: Props) {
 
   function handleAddon() {
     if (!type) return;
-    const key = LIMIT_LABELS[type].addonKey;
-    router.push(`/billing?addon=${key}`);
-    onClose();
-  }
-
-  function handleUpgrade() {
-    router.push('/billing');
+    router.push(`/billing?addon=${LIMIT_LABELS[type].addonKey}`);
     onClose();
   }
 
@@ -39,7 +31,6 @@ export function LimitPopup({ type, onClose }: Props) {
     <AnimatePresence>
       {type && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -47,7 +38,6 @@ export function LimitPopup({ type, onClose }: Props) {
             className="fixed inset-0 bg-black/60 z-50"
             onClick={onClose}
           />
-          {/* Modal */}
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -58,7 +48,6 @@ export function LimitPopup({ type, onClose }: Props) {
             <div className="text-2xl mb-3">⚡</div>
             <h3 className="text-white font-medium text-base mb-1">{info.title}</h3>
             <p className="text-[rgba(255,255,255,0.45)] text-sm mb-5">{info.desc}</p>
-
             <div className="flex flex-col gap-2">
               <button
                 onClick={handleAddon}
@@ -67,15 +56,12 @@ export function LimitPopup({ type, onClose }: Props) {
                 {info.addonLabel}
               </button>
               <button
-                onClick={handleUpgrade}
+                onClick={() => { router.push('/billing'); onClose(); }}
                 className="w-full py-2.5 px-4 rounded-xl border border-[var(--border)] text-[rgba(255,255,255,0.6)] text-sm hover:text-white hover:border-[rgba(255,255,255,0.3)] transition-all"
               >
                 Сменить тариф
               </button>
-              <button
-                onClick={onClose}
-                className="text-xs text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.5)] transition-colors mt-1"
-              >
+              <button onClick={onClose} className="text-xs text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.5)] transition-colors mt-1">
                 Закрыть
               </button>
             </div>

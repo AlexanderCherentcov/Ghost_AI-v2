@@ -74,6 +74,14 @@ const PLANS = [
     features: ['3 000 сообщений', '80 картинок', '50 документов'],
     badge: null,
   },
+  {
+    name: 'Ультра',
+    price: 2990,
+    tokens: '8 000',
+    period: null,
+    features: ['Без лимитов на чат', '200 картинок', '100 документов', 'Claude Sonnet везде'],
+    badge: 'Максимум',
+  },
 ];
 
 const THESIS = [
@@ -257,7 +265,7 @@ export default function LandingPage() {
             <p className="text-[rgba(255,255,255,0.4)]">Начните бесплатно. Прокачайтесь когда нужно.</p>
           </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {PLANS.map(({ name, price, tokens, period, features, badge }, i) => (
               <motion.div
                 key={name}

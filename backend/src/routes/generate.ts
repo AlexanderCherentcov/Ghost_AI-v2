@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { deductByModel } from '../services/tokens.js';
+import { deductByModel, refreshFreeQuota } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit } from '../services/user-limiter.js';
@@ -21,11 +21,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, size } = generateSchema.parse(request.body);
 
-      // FREE plan: no image generation
+      // FREE plan: refresh monthly image quota (3/month)
       const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (userPlan?.plan === 'FREE') {
-        return reply.code(403).send({ error: 'Обновите тариф для генерации изображений.', code: 'PLAN_RESTRICTED' });
-      }
+      await refreshFreeQuota(userId, userPlan?.plan ?? 'FREE');
 
       // Per-user rate limit
       if (!await checkGenRateLimit(userId)) {

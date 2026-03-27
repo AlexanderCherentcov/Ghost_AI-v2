@@ -60,7 +60,9 @@ model User {
   addonMessages  Int       @default(0)
   addonImages    Int       @default(0)
 
-  trialExpiresAt DateTime?              // null = не триал или триал сгорел
+  trialExpiresAt       DateTime?
+  freeDailyMsgsReset   DateTime?  // FREE: дата последнего сброса дневных сообщений
+  freeMonthlyImgsReset DateTime?  // FREE: дата последнего сброса месячных картинок
   plan           Plan      @default(FREE)
   planExpiresAt  DateTime?
 

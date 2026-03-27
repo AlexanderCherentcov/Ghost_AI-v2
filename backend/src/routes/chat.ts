@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
-import { deductByModel, checkBalance, sanitizeInput } from '../services/tokens.js';
+import { deductByModel, checkBalance, sanitizeInput, refreshFreeQuota } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
 import { OR_MODELS } from '../services/providers/openrouter.js';
@@ -245,6 +245,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         );
 
         const hasImage = !!imageUrl;
+        // FREE plan: refresh daily/monthly quota before checking balance
+        await refreshFreeQuota(userId, userProfile?.plan ?? 'FREE');
         // Fast fail: check balance before doing any work
         await checkBalance(userId, hasImage ? 'images' : 'messages');
 

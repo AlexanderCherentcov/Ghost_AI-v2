@@ -17,6 +17,39 @@ export const LIMIT_CODE: Record<BalanceType, string> = {
   images:   'LIMIT_IMAGES',
 };
 
+// ─── FREE plan quota refresh (5 msgs/day, 3 images/month) ────────────────────
+
+export async function refreshFreeQuota(userId: string, plan: string): Promise<void> {
+  if (plan !== 'FREE') return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { freeDailyMsgsReset: true, freeMonthlyImgsReset: true },
+  });
+  if (!user) return;
+
+  const now = new Date();
+  const updates: Record<string, unknown> = {};
+
+  // Daily messages: reset if last reset was before today (UTC midnight)
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (!user.freeDailyMsgsReset || user.freeDailyMsgsReset < todayUTC) {
+    updates.balanceMessages = 5;
+    updates.freeDailyMsgsReset = now;
+  }
+
+  // Monthly images: reset if last reset was before this month (UTC)
+  const thisMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  if (!user.freeMonthlyImgsReset || user.freeMonthlyImgsReset < thisMonthUTC) {
+    updates.balanceImages = 3;
+    updates.freeMonthlyImgsReset = now;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data: updates });
+  }
+}
+
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
 export function sanitizeInput(text: string): string {

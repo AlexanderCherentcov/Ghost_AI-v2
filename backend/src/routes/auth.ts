@@ -6,16 +6,19 @@ import { grantTokens } from '../services/tokens.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
-const TRIAL_CHAT = 50;   // 50 free chat messages for new users
-const TRIAL_DAYS = 7;
-
+// FREE plan: 5 messages/day + 3 images/month — set initial quota on registration
 async function setupTrialForNewUser(userId: string): Promise<void> {
-  const expiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
   await prisma.user.update({
     where: { id: userId },
-    data: { trialExpiresAt: expiresAt, balanceMessages: TRIAL_CHAT },
+    data: {
+      balanceMessages: 5,
+      balanceImages: 3,
+      freeDailyMsgsReset: now,
+      freeMonthlyImgsReset: now,
+    },
   });
-  await grantTokens(userId, TRIAL_CHAT, 'BONUS', { trial: true, expiresAt: expiresAt.toISOString() });
+  await grantTokens(userId, 5, 'BONUS', { freeDaily: true });
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────

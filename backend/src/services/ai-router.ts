@@ -65,11 +65,19 @@ export function route(
   hasDocument = false,
   logger?: FastifyBaseLogger,
   hasImage = false,
-  plan?: string
+  plan?: string,
+  preferredModel?: 'haiku' | 'deepseek'
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
 
-  const useDeepSeek = complexity === 'complex';
+  // Documents always use DeepSeek; otherwise respect preferredModel, then auto-route
+  const useDeepSeek = hasDocument
+    ? true
+    : preferredModel === 'deepseek'
+      ? true
+      : preferredModel === 'haiku'
+        ? false
+        : complexity === 'complex';
   const provider: Provider = useDeepSeek ? 'openrouter-deepseek' : 'openrouter-haiku';
   const model = useDeepSeek ? OR_MODELS.deepseek : OR_MODELS.haiku;
   const fallbackModel = useDeepSeek ? OR_MODELS.gpt4oMini : undefined;

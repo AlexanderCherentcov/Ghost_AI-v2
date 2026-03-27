@@ -3,30 +3,101 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+function IconHistory({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v5h5" />
+      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+function IconChat({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      {active && <path d="M8 10h8M8 14h5" strokeWidth="1.5" />}
+      {!active && <path d="M8 10h8M8 14h5" strokeWidth="1.2" />}
+    </svg>
+  );
+}
+
+function IconPlans({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="3" />
+      <path d="M2 10h20" />
+      <path d="M6 15h3" />
+      <path d="M14 15h4" />
+      {active && <path d="M6 7.5h4" strokeWidth="1.5" />}
+    </svg>
+  );
+}
+
+function IconAccount({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-3.87 3.58-7 8-7s8 3.13 8 7" />
+    </svg>
+  );
+}
+
 const ITEMS = [
-  { href: '/history', label: 'Чаты',   icon: '🕑' },
-  { href: '/chat',    label: 'Chat',   icon: '💬' },
-  { href: '/vision',  label: 'Vision', icon: '👁' },
-  { href: '/sound',   label: 'Sound',  icon: '🎵' },
-  { href: '/balance', label: 'Баланс', icon: '💎' },
+  { href: '/history', label: 'История', Icon: IconHistory },
+  { href: '/chat',    label: 'Чат',     Icon: IconChat },
+  { href: '/balance', label: 'Тарифы',  Icon: IconPlans },
+  { href: '/account', label: 'Аккаунт', Icon: IconAccount },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex bg-[#0E0E1A] border-t border-[rgba(255,255,255,0.06)]">
-      {ITEMS.map(({ href, label, icon }) => {
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 flex"
+      style={{
+        background: 'rgba(10,10,18,0.96)',
+        backdropFilter: 'blur(16px)',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {ITEMS.map(({ href, label, Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}
             href={href}
-            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all"
-            style={{ color: active ? '#7B5CF0' : 'rgba(255,255,255,0.3)' }}
+            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-all relative"
+            style={{ color: active ? '#7B5CF0' : 'rgba(255,255,255,0.28)' }}
           >
-            <span className="text-lg leading-none">{icon}</span>
-            <span className="text-[10px]">{label}</span>
+            {active && (
+              <span
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full"
+                style={{ background: '#7B5CF0' }}
+              />
+            )}
+            <span
+              className="flex items-center justify-center rounded-xl transition-all"
+              style={{
+                padding: active ? '5px 10px' : '5px 8px',
+                background: active ? 'rgba(123,92,240,0.12)' : 'transparent',
+              }}
+            >
+              <Icon active={active} />
+            </span>
+            <span
+              className="text-[10px] font-medium tracking-wide"
+              style={{ opacity: active ? 1 : 0.7 }}
+            >
+              {label}
+            </span>
           </Link>
         );
       })}

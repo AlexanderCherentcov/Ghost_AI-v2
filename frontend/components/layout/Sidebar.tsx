@@ -6,23 +6,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import {
-  ChatIcon, VisionIcon, SoundIcon, ReelIcon, ThinkIcon,
   PlusIcon, TokenIcon, SettingsIcon, TrashIcon, EditIcon,
 } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { useUIStore } from '@/store/ui.store';
 import { api, type Chat } from '@/lib/api';
-import { formatTokens, truncate } from '@/lib/utils';
+import { truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-
-const MODES = [
-  { id: 'chat',   label: 'Чат',        href: '/chat',   Icon: ChatIcon },
-  { id: 'vision', label: 'Изображения', href: '/vision', Icon: VisionIcon },
-  { id: 'sound',  label: 'Музыка',     href: '/sound',  Icon: SoundIcon },
-  { id: 'reel',   label: 'Видео',      href: '/reel',   Icon: ReelIcon },
-  { id: 'think',  label: 'Думать',     href: '/think',  Icon: ThinkIcon },
-] as const;
 
 function groupChats(chats: Chat[]) {
   const now = Date.now();
@@ -188,35 +179,6 @@ export function Sidebar() {
           <PlusIcon size={16} className="flex-shrink-0" />
           {sidebarOpen && <span>Новый чат</span>}
         </button>
-      </div>
-
-      {/* Modes */}
-      <div className="px-3 mb-4">
-        {sidebarOpen && (
-          <p className="text-[11px] uppercase tracking-wider text-[rgba(255,255,255,0.2)] px-0 mb-2">
-            Режимы
-          </p>
-        )}
-        {MODES.map(({ id, label, href, Icon }) => {
-          const isActive = pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={id}
-              href={href}
-              title={!sidebarOpen ? label : undefined}
-              className={cn(
-                'flex items-center rounded-xl text-sm transition-all mb-0.5',
-                sidebarOpen ? 'gap-3 px-3 py-2' : 'justify-center p-2.5',
-                isActive
-                  ? 'bg-[var(--bg-elevated)] text-white' + (sidebarOpen ? ' border-l-2 border-accent pl-[10px]' : '')
-                  : 'text-[rgba(255,255,255,0.45)] hover:bg-[var(--bg-elevated)] hover:text-[rgba(255,255,255,0.7)]'
-              )}
-            >
-              <Icon size={16} className={cn('flex-shrink-0', isActive ? 'text-accent' : '')} />
-              {sidebarOpen && label}
-            </Link>
-          );
-        })}
       </div>
 
       {/* Divider */}

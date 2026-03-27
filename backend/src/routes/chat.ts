@@ -27,6 +27,7 @@ const wsMessageSchema = z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string(),
   })).default([]),
+  preferredModel: z.enum(['haiku', 'deepseek']).optional(),
   // Image: base64 data URL (max ~3MB after resize)
   imageUrl: z.string().max(3145728).optional(),
   // Document: extracted text content
@@ -197,7 +198,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      const { chatId, mode, history, imageUrl, fileContent, fileName, fileLang } = parsed;
+      const { chatId, mode, history, imageUrl, fileContent, fileName, fileLang, preferredModel } = parsed;
       const prompt = sanitizeInput(parsed.prompt);
 
       try {
@@ -241,7 +242,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           !!fileContent,
           fastify.log,
           !!imageUrl,
-          userProfile?.plan
+          userProfile?.plan,
+          preferredModel
         );
 
         const hasImage = !!imageUrl;

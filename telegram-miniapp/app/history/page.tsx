@@ -43,12 +43,6 @@ function HistoryApp() {
     router.push('/chat');
   }
 
-  async function handleDelete(chatId: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
-    setChats((prev) => prev.filter((c) => c.id !== chatId));
-  }
-
   async function handleRename(chatId: string) {
     if (!editTitle.trim()) return;
     await apiRequest(`/chats/${chatId}`, {
@@ -110,13 +104,6 @@ function HistoryApp() {
                   style={{ color: 'rgba(255,255,255,0.3)' }}
                 >
                   ✏️
-                </button>
-                <button
-                  onClick={(e) => handleDelete(chat.id, e)}
-                  className="p-1.5"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
-                >
-                  🗑
                 </button>
               </div>
             )}

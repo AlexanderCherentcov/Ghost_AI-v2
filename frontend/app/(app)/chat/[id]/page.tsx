@@ -72,7 +72,7 @@ export default function ChatConversationPage({ params }: Props) {
   const {
     messages, setMessages, addMessage, appendStreamToken,
     commitStream, setStreaming, isStreaming, mode, setMode,
-    setActiveChat, chats,
+    setActiveChat, chats, preferredModel, setPreferredModel,
   } = useChatStore();
 
   const [quickMode, setQuickMode] = useState<QuickMode>(null);
@@ -302,6 +302,7 @@ export default function ChatConversationPage({ params }: Props) {
         fileContent,
         fileName,
         fileLang,
+        preferredModel,
       });
 
       const { streamContent } = useChatStore.getState();
@@ -328,13 +329,10 @@ export default function ChatConversationPage({ params }: Props) {
       }
     } catch (err: any) {
       setStreaming(false);
-      if (['LIMIT_CHAT', 'LIMIT_IMAGES', 'LIMIT_DOCS', 'LIMIT_CODE'].includes(err.code)) {
-        const typeMap: Record<string, LimitType> = {
-          LIMIT_CHAT: 'chat', LIMIT_IMAGES: 'images', LIMIT_DOCS: 'docs', LIMIT_CODE: 'code'
-        };
-        setLimitType(typeMap[err.code]);
-      } else if (err.code === 'INSUFFICIENT_TOKENS') {
-        setLimitType('chat');
+      if (err.code === 'LIMIT_MESSAGES') {
+        setLimitType('messages');
+      } else if (err.code === 'LIMIT_IMAGES') {
+        setLimitType('images');
       } else if (err.code === 'PLAN_RESTRICTED') {
         showToast('Эта функция доступна только на платных тарифах', 'error');
         router.push('/billing');
@@ -393,6 +391,35 @@ export default function ChatConversationPage({ params }: Props) {
         activeMode={quickMode}
         isPaidPlan={user?.plan !== 'FREE'}
       />
+
+      {/* Model selector */}
+      <div className="flex items-center gap-1.5 px-4 pb-2 max-w-[720px] mx-auto w-full">
+        <span className="text-[11px] text-[rgba(255,255,255,0.3)] mr-1">Модель:</span>
+        {([
+          { key: 'haiku' as const,    label: '⚡ Быстрая' },
+          { key: 'deepseek' as const, label: '🧠 Про' },
+        ]).map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setPreferredModel(preferredModel === key ? undefined : key)}
+            className={`px-3 py-1 rounded-full text-[11px] border transition-all ${
+              preferredModel === key
+                ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                : 'border-[var(--border)] text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.6)]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {preferredModel && (
+          <button
+            onClick={() => setPreferredModel(undefined)}
+            className="ml-1 text-[10px] text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.5)] transition-colors"
+          >
+            Авто
+          </button>
+        )}
+      </div>
 
       <InputBar
         onSend={handleSend}

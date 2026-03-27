@@ -8,6 +8,7 @@ interface ChatState {
   isStreaming: boolean;
   streamContent: string;
   mode: 'chat' | 'vision' | 'sound' | 'reel' | 'think';
+  preferredModel: 'haiku' | 'deepseek' | undefined;
 
   setChats: (chats: Chat[]) => void;
   addChat: (chat: Chat) => void;
@@ -23,6 +24,7 @@ interface ChatState {
   clearStream: () => void;
 
   setMode: (mode: ChatState['mode']) => void;
+  setPreferredModel: (model: 'haiku' | 'deepseek' | undefined) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -32,6 +34,7 @@ export const useChatStore = create<ChatState>((set) => ({
   isStreaming: false,
   streamContent: '',
   mode: 'chat',
+  preferredModel: undefined,
 
   setChats: (chats) => set({ chats }),
 
@@ -71,4 +74,5 @@ export const useChatStore = create<ChatState>((set) => ({
   clearStream: () => set({ streamContent: '', isStreaming: false }),
 
   setMode: (mode) => set({ mode }),
+  setPreferredModel: (preferredModel) => set({ preferredModel }),
 }));

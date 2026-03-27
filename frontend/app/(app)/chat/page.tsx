@@ -55,7 +55,7 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const router = useRouter();
-  const { addChat, mode, setMode } = useChatStore();
+  const { addChat, mode, setMode, preferredModel, setPreferredModel } = useChatStore();
   const { user } = useAuthStore();
   const [quickMode, setQuickMode] = useState<QuickMode>(null);
 
@@ -135,29 +135,45 @@ export default function ChatPage() {
             ))}
           </div>
 
-          {/* Mode pills */}
-          <div className="flex items-center justify-center gap-2 mb-2">
-            {[
-              { label: 'Chat', Icon: ChatIcon, m: 'chat', locked: false },
-              { label: 'Think', Icon: ThinkIcon, m: 'think', locked: !isPaidPlan },
-            ].map(({ label, Icon, m, locked }) => (
-              <button
-                key={m}
-                onClick={() => !locked && setMode(m as any)}
-                title={locked ? 'Только для платных тарифов' : undefined}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all ${
-                  locked
-                    ? 'border-[var(--border)] text-[rgba(255,255,255,0.2)] cursor-default'
-                    : mode === m
-                      ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                      : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
-                }`}
-              >
-                <Icon size={12} />
-                {label}
-                {locked && <span className="text-[9px] bg-[rgba(255,200,50,0.15)] text-[rgba(255,200,50,0.8)] px-1 py-0.5 rounded-full ml-0.5">PRO</span>}
-              </button>
-            ))}
+          {/* Mode + model pills */}
+          <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
+            {/* Think mode toggle */}
+            <button
+              onClick={() => setMode(mode === 'think' ? 'chat' : 'think')}
+              title={!isPaidPlan ? 'Только для платных тарифов' : undefined}
+              disabled={!isPaidPlan}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all ${
+                !isPaidPlan
+                  ? 'border-[var(--border)] text-[rgba(255,255,255,0.2)] cursor-default'
+                  : mode === 'think'
+                    ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                    : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+              }`}
+            >
+              <ThinkIcon size={12} />
+              Думать
+              {!isPaidPlan && <span className="text-[9px] bg-[rgba(255,200,50,0.15)] text-[rgba(255,200,50,0.8)] px-1 py-0.5 rounded-full ml-0.5">PRO</span>}
+            </button>
+
+            {/* Model selector */}
+            <div className="flex items-center gap-0.5 rounded-full border border-[var(--border)] p-0.5">
+              {([
+                { key: 'haiku',   label: '⚡ Быстрая' },
+                { key: 'deepseek', label: '🧠 Про' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setPreferredModel(preferredModel === key ? undefined : key)}
+                  className={`px-3 py-1 rounded-full text-xs transition-all ${
+                    preferredModel === key
+                      ? 'bg-[var(--bg-elevated)] text-white'
+                      : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </motion.div>
       </div>

@@ -27,6 +27,7 @@ export interface WSMessage {
   fileContent?: string; // extracted text from document
   fileName?: string;    // original file name
   fileLang?: string;    // code-fence language (js, python, …)
+  preferredModel?: 'haiku' | 'deepseek';
 }
 
 let ws: WebSocket | null = null;

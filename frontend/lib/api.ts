@@ -79,7 +79,7 @@ export const api = {
 
   payments: {
     plans: () => request<PlansResponse>('/plans'),
-    create: (data: { type: 'SUBSCRIPTION' | 'ADDON'; key: string }) =>
+    create: (data: { type: 'SUBSCRIPTION' | 'ADDON' | 'TOKEN_PACK'; key: string }) =>
       request<{ paymentId: string; paymentUrl: string }>('/payments/create', {
         method: 'POST',
         body: JSON.stringify(data),

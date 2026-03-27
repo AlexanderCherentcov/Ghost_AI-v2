@@ -85,8 +85,8 @@ function ChatApp() {
       if (chunk.type === 'error') {
         setStreaming(false);
         setStreamContent('');
-        if (chunk.code === 'INSUFFICIENT_TOKENS') {
-          tg?.showAlert('Недостаточно токенов! Пополните баланс.', () => {
+        if (chunk.code === 'LIMIT_MESSAGES' || chunk.code === 'LIMIT_IMAGES') {
+          tg?.showAlert('Лимит исчерпан! Пополните баланс.', () => {
             router.push('/balance');
           });
           tg?.HapticFeedback.notificationOccurred('error');

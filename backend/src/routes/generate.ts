@@ -21,6 +21,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, size } = generateSchema.parse(request.body);
 
+      // FREE plan: no image generation
+      const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      if (userPlan?.plan === 'FREE') {
+        return reply.code(403).send({ error: 'Обновите тариф для генерации изображений.', code: 'PLAN_RESTRICTED' });
+      }
+
       // Per-user rate limit
       if (!await checkGenRateLimit(userId)) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
@@ -74,6 +80,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, duration } = generateSchema.parse(request.body);
 
+      // FREE plan: no sound generation
+      const userPlanS = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      if (userPlanS?.plan === 'FREE') {
+        return reply.code(403).send({ error: 'Обновите тариф для генерации музыки.', code: 'PLAN_RESTRICTED' });
+      }
+
       // Per-user rate limit
       if (!await checkGenRateLimit(userId)) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
@@ -126,6 +138,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, duration } = generateSchema.parse(request.body);
+
+      // FREE plan: no reel generation
+      const userPlanR = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      if (userPlanR?.plan === 'FREE') {
+        return reply.code(403).send({ error: 'Обновите тариф для генерации видео.', code: 'PLAN_RESTRICTED' });
+      }
 
       // Per-user rate limit
       if (!await checkGenRateLimit(userId)) {

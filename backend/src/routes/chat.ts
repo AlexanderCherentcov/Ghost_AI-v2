@@ -200,16 +200,25 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       const { chatId, mode, prompt, history, imageUrl, fileContent, fileName, fileLang } = parsed;
 
       try {
-        // Verify chat ownership + load user response style
+        // Verify chat ownership + load user response style + plan
         const [chat, userProfile] = await Promise.all([
           prisma.chat.findFirst({ where: { id: chatId, userId } }),
-          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true } }),
         ]);
         if (!chat) {
           send({ type: 'error', code: 'CHAT_NOT_FOUND' });
           return;
         }
         const responseStyle = userProfile?.responseStyle ?? null;
+
+        // FREE plan: only basic chat (no think, no image/file attachments)
+        if (userProfile?.plan === 'FREE') {
+          const hasAttachment = !!(imageUrl || fileContent);
+          if (mode !== 'chat' || hasAttachment) {
+            send({ type: 'error', code: 'PLAN_RESTRICTED', message: 'Обновите тариф для использования этой функции.' });
+            return;
+          }
+        }
 
         // Effective prompt for AI (fall back to placeholder if only image/file sent)
         const effectivePrompt = prompt

@@ -329,6 +329,9 @@ export default function ChatConversationPage({ params }: Props) {
       if (err.code === 'INSUFFICIENT_TOKENS') {
         showToast('Недостаточно токенов — пополните баланс', 'error');
         router.push('/billing');
+      } else if (err.code === 'PLAN_RESTRICTED') {
+        showToast('Эта функция доступна только на платных тарифах', 'error');
+        router.push('/billing');
       } else if (err.code === 'TASK_IN_PROGRESS') {
         showToast('Подождите — предыдущий запрос ещё выполняется', 'warning');
       } else if (err.code === 'RATE_LIMITED') {
@@ -381,6 +384,7 @@ export default function ChatConversationPage({ params }: Props) {
       <ChatQuickActions
         onSelect={setQuickMode}
         activeMode={quickMode}
+        isPaidPlan={user?.plan !== 'FREE'}
       />
 
       <InputBar

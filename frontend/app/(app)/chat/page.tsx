@@ -60,6 +60,7 @@ export default function ChatPage() {
   const [quickMode, setQuickMode] = useState<QuickMode>(null);
 
   const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
+  const isPaidPlan = user?.plan !== 'FREE';
 
   async function handleSend(prompt: string, file?: File) {
     // If image-create quickMode or auto-detected image request → go to vision
@@ -137,20 +138,24 @@ export default function ChatPage() {
           {/* Mode pills */}
           <div className="flex items-center justify-center gap-2 mb-2">
             {[
-              { label: 'Chat', Icon: ChatIcon, m: 'chat' },
-              { label: 'Think', Icon: ThinkIcon, m: 'think' },
-            ].map(({ label, Icon, m }) => (
+              { label: 'Chat', Icon: ChatIcon, m: 'chat', locked: false },
+              { label: 'Think', Icon: ThinkIcon, m: 'think', locked: !isPaidPlan },
+            ].map(({ label, Icon, m, locked }) => (
               <button
                 key={m}
-                onClick={() => setMode(m as any)}
+                onClick={() => !locked && setMode(m as any)}
+                title={locked ? 'Только для платных тарифов' : undefined}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all ${
-                  mode === m
-                    ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                    : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+                  locked
+                    ? 'border-[var(--border)] text-[rgba(255,255,255,0.2)] cursor-default'
+                    : mode === m
+                      ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                      : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
                 }`}
               >
                 <Icon size={12} />
                 {label}
+                {locked && <span className="text-[9px] bg-[rgba(255,200,50,0.15)] text-[rgba(255,200,50,0.8)] px-1 py-0.5 rounded-full ml-0.5">PRO</span>}
               </button>
             ))}
           </div>
@@ -158,7 +163,7 @@ export default function ChatPage() {
       </div>
 
       {/* Quick actions + input at bottom */}
-      <ChatQuickActions onSelect={setQuickMode} activeMode={quickMode} />
+      <ChatQuickActions onSelect={setQuickMode} activeMode={quickMode} isPaidPlan={isPaidPlan} />
       <InputBar
         onSend={handleSend}
         placeholder={

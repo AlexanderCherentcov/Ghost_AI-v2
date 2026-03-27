@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VisionIcon, SoundIcon, ReelIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -10,14 +11,24 @@ export type QuickMode = 'image-create' | 'image-edit' | null;
 interface Props {
   onSelect: (mode: QuickMode) => void;
   activeMode: QuickMode;
+  isPaidPlan?: boolean;
 }
 
-export function ChatQuickActions({ onSelect, activeMode }: Props) {
+export function ChatQuickActions({ onSelect, activeMode, isPaidPlan = true }: Props) {
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
+  const router = useRouter();
 
   function handleImageAction(mode: QuickMode) {
     onSelect(mode);
     setImageMenuOpen(false);
+  }
+
+  function handleImageButtonClick() {
+    if (!isPaidPlan) {
+      router.push('/billing');
+      return;
+    }
+    setImageMenuOpen((v) => !v);
   }
 
   return (
@@ -26,23 +37,30 @@ export function ChatQuickActions({ onSelect, activeMode }: Props) {
       {/* Создать картинку */}
       <div className="relative">
         <button
-          onClick={() => setImageMenuOpen((v) => !v)}
+          onClick={handleImageButtonClick}
+          title={!isPaidPlan ? 'Только для платных тарифов' : undefined}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all',
-            activeMode?.startsWith('image')
-              ? 'border-[#5C8CF0] bg-[rgba(92,140,240,0.12)] text-[#5C8CF0]'
-              : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.7)]'
+            !isPaidPlan
+              ? 'border-[var(--border)] text-[rgba(255,255,255,0.25)] cursor-pointer'
+              : activeMode?.startsWith('image')
+                ? 'border-[#5C8CF0] bg-[rgba(92,140,240,0.12)] text-[#5C8CF0]'
+                : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.7)]'
           )}
         >
           <VisionIcon size={13} />
           Изображения
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={cn('transition-transform', imageMenuOpen && 'rotate-180')}>
-            <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          {!isPaidPlan ? (
+            <span className="text-[10px] bg-[rgba(255,200,50,0.15)] text-[rgba(255,200,50,0.8)] px-1.5 py-0.5 rounded-full ml-0.5">PRO</span>
+          ) : (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={cn('transition-transform', imageMenuOpen && 'rotate-180')}>
+              <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
         </button>
 
         <AnimatePresence>
-          {imageMenuOpen && (
+          {imageMenuOpen && isPaidPlan && (
             <motion.div
               initial={{ opacity: 0, y: -6, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}

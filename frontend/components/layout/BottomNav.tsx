@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 
 const ITEMS = [
   { href: '/history', label: 'История', Icon: HistoryIcon },
-  { href: '/chat',    label: 'Chat',    Icon: ChatIcon },
-  { href: '/vision',  label: 'Vision',  Icon: VisionIcon },
-  { href: '/sound',   label: 'Sound',   Icon: SoundIcon },
+  { href: '/chat',    label: 'Чат',         Icon: ChatIcon },
+  { href: '/vision',  label: 'Изображения', Icon: VisionIcon },
+  { href: '/sound',   label: 'Музыка',      Icon: SoundIcon },
   { href: '/profile', label: 'Профиль', Icon: UserIcon },
 ];
 

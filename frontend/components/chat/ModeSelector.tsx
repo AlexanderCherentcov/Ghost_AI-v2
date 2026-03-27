@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils';
 type Mode = 'chat' | 'vision' | 'sound' | 'reel' | 'think';
 
 const MODES: { id: Mode; label: string; Icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { id: 'chat',   label: 'Chat',   Icon: ChatIcon },
-  { id: 'vision', label: 'Vision', Icon: VisionIcon },
-  { id: 'sound',  label: 'Sound',  Icon: SoundIcon },
-  { id: 'reel',   label: 'Reel',   Icon: ReelIcon },
-  { id: 'think',  label: 'Think',  Icon: ThinkIcon },
+  { id: 'chat',   label: 'Чат',         Icon: ChatIcon },
+  { id: 'vision', label: 'Изображения', Icon: VisionIcon },
+  { id: 'sound',  label: 'Музыка',      Icon: SoundIcon },
+  { id: 'reel',   label: 'Видео',       Icon: ReelIcon },
+  { id: 'think',  label: 'Думать',      Icon: ThinkIcon },
 ];
 
 interface ModeSelectorProps {

@@ -17,11 +17,11 @@ import { formatTokens, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 const MODES = [
-  { id: 'chat',   label: 'Chat',   href: '/chat',   Icon: ChatIcon },
-  { id: 'vision', label: 'Vision', href: '/vision', Icon: VisionIcon },
-  { id: 'sound',  label: 'Sound',  href: '/sound',  Icon: SoundIcon },
-  { id: 'reel',   label: 'Reel',   href: '/reel',   Icon: ReelIcon },
-  { id: 'think',  label: 'Think',  href: '/think',  Icon: ThinkIcon },
+  { id: 'chat',   label: 'Чат',        href: '/chat',   Icon: ChatIcon },
+  { id: 'vision', label: 'Изображения', href: '/vision', Icon: VisionIcon },
+  { id: 'sound',  label: 'Музыка',     href: '/sound',  Icon: SoundIcon },
+  { id: 'reel',   label: 'Видео',      href: '/reel',   Icon: ReelIcon },
+  { id: 'think',  label: 'Думать',     href: '/think',  Icon: ThinkIcon },
 ] as const;
 
 function groupChats(chats: Chat[]) {

@@ -132,7 +132,7 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
             <TokenIcon size={12} className="text-accent" />
-            <span>{formatTokens(balance)} / {formatTokens(maxTokens)}</span>
+            <span>{formatTokens(balance)} токенов</span>
           </div>
           <Link href="/billing" className="text-[11px] text-accent">+ Купить</Link>
         </div>

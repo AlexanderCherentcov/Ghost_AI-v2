@@ -209,17 +209,16 @@ export default function ChatConversationPage({ params }: Props) {
   const handleSend = useCallback(async (prompt: string, file?: File) => {
     if ((isStreaming || generatingImage) || !accessToken) return;
 
-    // Auto-route: if quickMode is image-create or prompt looks like an image request
-    if (quickMode === 'image-create' || (quickMode === null && prompt && isImageRequest(prompt))) {
-      if (quickMode === 'image-create' || window.confirm) {
-        if (quickMode === 'image-create') {
-          setQuickMode(null);
-          return handleGenerateImage(prompt);
-        }
-        // Auto-detected: show suggestion banner instead of forcing redirect
-        setImageSuggestion(prompt);
-        return;
-      }
+    // Auto-route: image-create mode → generate inline
+    if (quickMode === 'image-create') {
+      setQuickMode(null);
+      return handleGenerateImage(prompt);
+    }
+
+    // Auto-detect image intent in plain chat → show suggestion banner
+    if (quickMode === null && prompt && isImageRequest(prompt)) {
+      setImageSuggestion(prompt);
+      return;
     }
 
     // image-edit: attach file to prompt for vision API

@@ -2,8 +2,8 @@ import { createHash } from 'crypto';
 import { redis } from '../lib/redis.js';
 
 // ─── TTLs ─────────────────────────────────────────────────────────────────────
-const TTL_TEXT  = 60 * 60 * 24 * 7;  // 7 дней — текст
-const TTL_MEDIA = 60 * 60 * 24 * 30; // 30 дней — медиа (стабильный контент)
+const TTL_TEXT  = 60 * 60 * 24;      // 24 часа — текстовые ответы
+const TTL_MEDIA = 60 * 60 * 24 * 7;  // 7 дней — URL сгенерированных картинок
 
 // Инкремент для инвалидации без FLUSHDB — поменяй в .env
 const VER = process.env.CACHE_VERSION ?? 'v1';

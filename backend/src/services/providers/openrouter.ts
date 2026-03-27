@@ -21,10 +21,24 @@ function getClient() {
   });
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type MessageContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
+    >;
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: MessageContent;
+}
+
 // ─── Text streaming ────────────────────────────────────────────────────────────
 
 export async function* streamOpenRouter(
-  messages: Array<{ role: string; content: string }>,
+  messages: ChatMessage[],
   model: string
 ): AsyncGenerator<{ type: 'token'; data: string }> {
   const client = getClient();

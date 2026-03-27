@@ -6,7 +6,8 @@ import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.j
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { chargeTokens } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
-import { streamOpenRouter } from '../services/providers/openrouter.js';
+import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
+import { OR_MODELS } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import type { SocketStream } from '@fastify/websocket';
@@ -38,10 +39,7 @@ const wsMessageSchema = z.object({
 
 // ─── Provider stream factory ──────────────────────────────────────────────────
 
-function getProviderStream(
-  model: string,
-  messages: Array<{ role: string; content: string }>
-) {
+function getProviderStream(model: string, messages: ChatMessage[]) {
   return streamOpenRouter(messages, model);
 }
 
@@ -227,11 +225,15 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request (documents always go to Sonnet)
+        // Route request:
+        // - image attachment  → always Sonnet multimodal
+        // - document/file     → always Sonnet
+        // - otherwise         → keyword-based classification
         const { provider, complexity, model } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
-          fastify.log
+          fastify.log,
+          !!imageUrl
         );
 
         // History context for cache key: последние user-сообщения (без текущего)
@@ -258,7 +260,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const response = cacheHit.response as { content: string };
 
           // Charge tokens even on cache hit (our margin)
-          const chargeMode = fileContent ? 'document' : mode;
+          const chargeMode = (imageUrl || fileContent) ? 'document' : mode;
           const tokensCost = await chargeTokens(userId, chargeMode, complexity);
 
           // Save messages
@@ -291,19 +293,30 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Build messages array for AI (system prompt first)
-        let userMessageContent = fileBlock + effectivePrompt;
-        if (imageUrl && !fileContent) {
-          userMessageContent += '\n[Пользователь прикрепил изображение]';
-        }
-        const messages = [
-          { role: 'system', content: getSystemPrompt(mode, responseStyle) },
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user', content: userMessageContent.trim() },
-        ];
+        // Build messages array for AI
+        // When imageUrl present: build multimodal content array (Sonnet vision)
+        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle) };
+        const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-        // Charge tokens (documents cost 3, code/complex 2, simple chat 1)
-        const chargeMode = fileContent ? 'document' : mode;
+        let userMsg: ChatMessage;
+        if (imageUrl && !fileContent) {
+          // Multimodal: text + image
+          const textPart = effectivePrompt.trim() || 'Опиши что изображено на картинке.';
+          userMsg = {
+            role: 'user',
+            content: [
+              { type: 'text', text: textPart },
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
+            ],
+          };
+        } else {
+          userMsg = { role: 'user', content: (fileBlock + effectivePrompt).trim() };
+        }
+
+        const messages: ChatMessage[] = [systemMsg, ...historyMsgs, userMsg];
+
+        // Charge tokens: image = 3 (like document), document = 3, code/complex = 2, simple = 1
+        const chargeMode = (imageUrl || fileContent) ? 'document' : mode;
         const tokensCost = await chargeTokens(userId, chargeMode, complexity);
 
         // Save user message (include image URL if attached)

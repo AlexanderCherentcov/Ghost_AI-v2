@@ -4,7 +4,6 @@ import { OR_MODELS } from './providers/openrouter.js';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Complexity = 'simple' | 'complex';
-// Maps to OpenRouter model IDs
 export type Provider = 'openrouter-haiku' | 'openrouter-sonnet';
 
 export interface RouterResult {
@@ -13,33 +12,66 @@ export interface RouterResult {
   model: string;
 }
 
-// ─── Keywords ─────────────────────────────────────────────────────────────────
+// ─── Keyword lists by category ────────────────────────────────────────────────
 
+// Код и программирование → Sonnet
 const CODE_KEYWORDS = [
+  // RU
   'напиши код', 'написать код', 'код на', 'функция', 'алгоритм', 'скрипт',
-  'write code', 'function', 'algorithm', 'script', 'class ', 'implement',
-  'объясни код', 'оптимизируй', 'рефакторинг', 'debug', 'баг', 'ошибка в коде',
+  'исправь ошибку', 'почему не работает', 'объясни код', 'оптимизируй',
+  'рефакторинг', 'баг', 'ошибка в коде', 'напиши функцию', 'напиши класс',
+  'напиши скрипт', 'сделай api', 'напиши запрос', 'sql запрос',
+  // EN
+  'write code', 'write function', 'write class', 'write script',
+  'fix bug', 'fix error', 'debug', 'debugging', 'refactor', 'review code',
+  'function ', 'algorithm', 'implement', 'class ', 'sql query',
 ];
 
+// Сложный анализ → Sonnet
 const COMPLEX_KEYWORDS = [
-  'объясни', 'проанализируй', 'сравни', 'исследуй',
-  'реши', 'разработай', 'спроектируй',
-  'explain', 'analyze', 'compare', 'research',
-  'solve', 'develop', 'design',
+  // RU
+  'проанализируй', 'сравни', 'исследуй', 'реши задачу', 'разработай',
+  'спроектируй', 'составь план', 'напиши статью', 'напиши эссе',
+  'переведи', 'резюмируй', 'суммаризируй', 'что думаешь о',
+  'расскажи подробнее', 'помоги разобраться', 'найди ошибку',
+  // EN
+  'analyze', 'compare', 'research', 'solve', 'develop', 'design',
+  'write an essay', 'write an article', 'translate', 'summarize',
+  'explain in detail', 'help me understand',
+];
+
+// Документы → Sonnet (дополнительные ключевые слова)
+const DOCUMENT_KEYWORDS = [
+  // RU
+  'проанализируй документ', 'прочитай файл', 'что в pdf', 'что в этом файле',
+  'разбери документ', 'объясни документ', 'что написано в',
+  // EN
+  'analyze document', 'read file', 'explain this document', 'summarize document',
+  'what does this file', 'what is in the pdf',
 ];
 
 // ─── Classifier ───────────────────────────────────────────────────────────────
 
-export function classifyComplexity(prompt: string): Complexity {
+export function classifyComplexity(
+  prompt: string,
+  hasImage = false,
+  hasDocument = false
+): Complexity {
+  // Attachment → always Sonnet (multimodal / doc analysis)
+  if (hasImage || hasDocument) return 'complex';
+
   const lower = prompt.toLowerCase();
 
-  // Long prompts always go to sonnet
-  const tokens = Math.ceil(prompt.split(/\s+/).length * 0.75);
-  if (tokens > 300) return 'complex';
+  // Long prompts → Sonnet
+  const wordCount = prompt.split(/\s+/).length;
+  if (wordCount > 200) return 'complex';
 
-  // Code patterns
-  if (/```|def |function |class /.test(prompt)) return 'complex';
+  // Code block markers
+  if (/```|^\s*(def |function |class |SELECT |INSERT |UPDATE |DELETE )/m.test(prompt)) return 'complex';
+
+  // Category keyword matches
   if (CODE_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
+  if (DOCUMENT_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
   if (COMPLEX_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
 
   return 'simple';
@@ -48,11 +80,9 @@ export function classifyComplexity(prompt: string): Complexity {
 // ─── Provider selection ───────────────────────────────────────────────────────
 
 export function selectProvider(complexity: Complexity): { provider: Provider; model: string } {
-  if (complexity === 'simple') {
-    return { provider: 'openrouter-haiku', model: OR_MODELS.haiku };
-  }
-  // complex (code, analysis) → Sonnet
-  return { provider: 'openrouter-sonnet', model: OR_MODELS.sonnet };
+  return complexity === 'simple'
+    ? { provider: 'openrouter-haiku', model: OR_MODELS.haiku }
+    : { provider: 'openrouter-sonnet', model: OR_MODELS.sonnet };
 }
 
 // ─── Main router ──────────────────────────────────────────────────────────────
@@ -60,13 +90,16 @@ export function selectProvider(complexity: Complexity): { provider: Provider; mo
 export function route(
   prompt: string,
   hasDocument = false,
-  logger?: FastifyBaseLogger
+  logger?: FastifyBaseLogger,
+  hasImage = false
 ): RouterResult {
-  // Documents always use Sonnet
-  const complexity: Complexity = hasDocument ? 'complex' : classifyComplexity(prompt);
+  const complexity = classifyComplexity(prompt, hasImage, hasDocument);
   const { provider, model } = selectProvider(complexity);
 
-  logger?.debug({ complexity, provider, model, promptLength: prompt.length }, '[AIRouter] Routed request');
+  logger?.debug(
+    { complexity, provider, model, promptLength: prompt.length, hasImage, hasDocument },
+    '[AIRouter] Routed request'
+  );
 
   return { provider, complexity, model };
 }

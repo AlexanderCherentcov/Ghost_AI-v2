@@ -1,7 +1,9 @@
 import { Queue, QueueOptions } from 'bullmq';
 
+// DB 1 — BullMQ queues (isolated from cache, noeviction protects jobs)
 const connection = {
   url: process.env.REDIS_URL ?? 'redis://localhost:6379',
+  db: 1,
 };
 
 const defaultQueueOptions: QueueOptions = {

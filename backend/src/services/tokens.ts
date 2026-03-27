@@ -1,27 +1,20 @@
 import { prisma } from '../lib/prisma.js';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+export type BalanceType = 'messages' | 'images';
 
-export type BalanceType = 'chat' | 'images' | 'docs' | 'code';
-
-const MAIN_FIELD: Record<BalanceType, string> = {
-  chat:   'balanceChat',
-  images: 'balanceImages',
-  docs:   'balanceDocs',
-  code:   'balanceCode',
-};
-const ADDON_FIELD: Record<BalanceType, string> = {
-  chat:   'addonChat',
-  images: 'addonImages',
-  docs:   'addonDocs',
-  code:   'addonCode',
+// Cost per model (in balance units)
+export const MODEL_COSTS: Record<string, { type: BalanceType; cost: number }> = {
+  'anthropic/claude-haiku-4-5':      { type: 'messages', cost: 1 },
+  'deepseek/deepseek-v3.2':          { type: 'messages', cost: 2 },
+  'openai/gpt-4o-mini':              { type: 'messages', cost: 2 },
+  'black-forest-labs/flux-1.1-pro':  { type: 'images',   cost: 1 },
+  'black-forest-labs/flux.2-pro':    { type: 'images',   cost: 1 },
+  'black-forest-labs/flux-fill-pro': { type: 'images',   cost: 1 },
 };
 
 export const LIMIT_CODE: Record<BalanceType, string> = {
-  chat:   'LIMIT_CHAT',
-  images: 'LIMIT_IMAGES',
-  docs:   'LIMIT_DOCS',
-  code:   'LIMIT_CODE',
+  messages: 'LIMIT_MESSAGES',
+  images:   'LIMIT_IMAGES',
 };
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
@@ -40,22 +33,32 @@ export function sanitizeInput(text: string): string {
 export async function checkBalance(userId: string, type: BalanceType): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { balanceChat: true, balanceImages: true, balanceDocs: true, balanceCode: true,
-              addonChat: true, addonImages: true, addonDocs: true, addonCode: true },
+    select: { balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true },
   });
   if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
-  const main  = (user as any)[MAIN_FIELD[type]]  as number;
-  const addon = (user as any)[ADDON_FIELD[type]] as number;
+  const main  = type === 'messages' ? user.balanceMessages : user.balanceImages;
+  const addon = type === 'messages' ? user.addonMessages   : user.addonImages;
   if (main + addon <= 0) {
     throw Object.assign(new Error(LIMIT_CODE[type]), { code: LIMIT_CODE[type] });
   }
 }
 
-// ─── Deduct 1 unit — main first, then addon ───────────────────────────────────
+// ─── Deduct by model (after streaming, cost depends on actual model used) ─────
 
-export async function deductBalance(userId: string, type: BalanceType): Promise<void> {
-  const mainField  = MAIN_FIELD[type];
-  const addonField = ADDON_FIELD[type];
+export async function deductByModel(userId: string, model: string): Promise<number> {
+  const entry = MODEL_COSTS[model];
+  if (!entry) {
+    // Unknown model: default to 1 message
+    return deductBalance(userId, 'messages', 1);
+  }
+  return deductBalance(userId, entry.type, entry.cost);
+}
+
+// ─── Deduct N units — main first, then addon ──────────────────────────────────
+
+export async function deductBalance(userId: string, type: BalanceType, amount = 1): Promise<number> {
+  const mainField  = type === 'messages' ? 'balanceMessages' : 'balanceImages';
+  const addonField = type === 'messages' ? 'addonMessages'   : 'addonImages';
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -65,18 +68,26 @@ export async function deductBalance(userId: string, type: BalanceType): Promise<
 
   const main  = (user as any)[mainField]  as number;
   const addon = (user as any)[addonField] as number;
-  if (main + addon <= 0) {
+  if (main + addon < amount) {
     throw Object.assign(new Error(LIMIT_CODE[type]), { code: LIMIT_CODE[type] });
   }
 
-  const field = main > 0 ? mainField : addonField;
+  // Deduct from main first, overflow to addon
+  const fromMain  = Math.min(main, amount);
+  const fromAddon = amount - fromMain;
+
+  const updates: any = {};
+  if (fromMain  > 0) updates[mainField]  = { decrement: fromMain };
+  if (fromAddon > 0) updates[addonField] = { decrement: fromAddon };
+
   await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { [field]: { decrement: 1 } } }),
+    prisma.user.update({ where: { id: userId }, data: updates }),
     prisma.tokenTransaction.create({
-      data: { userId, amount: -1, type: 'USAGE',
-              meta: { balanceType: type, source: main > 0 ? 'main' : 'addon' } },
+      data: { userId, amount: -amount, type: 'USAGE',
+              meta: { balanceType: type, cost: amount, model: 'unknown' } },
     }),
   ]);
+  return amount;
 }
 
 // ─── Grant addon balance ──────────────────────────────────────────────────────
@@ -87,7 +98,7 @@ export async function grantAddon(
   amount: number,
   meta?: object
 ): Promise<void> {
-  const field = ADDON_FIELD[type];
+  const field = type === 'messages' ? 'addonMessages' : 'addonImages';
   await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { [field]: { increment: amount } } }),
     prisma.tokenTransaction.create({
@@ -98,7 +109,7 @@ export async function grantAddon(
 
 // ─── Set plan balances (replaces main balance on subscription) ────────────────
 
-export interface PlanBalances { chat: number; images: number; docs: number; code: number; }
+export interface PlanBalances { messages: number; images: number; }
 
 export async function setPlanBalances(
   userId: string,
@@ -109,13 +120,12 @@ export async function setPlanBalances(
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
-      data: { balanceChat: balances.chat, balanceImages: balances.images,
-              balanceDocs: balances.docs, balanceCode: balances.code },
+      data: { balanceMessages: balances.messages, balanceImages: balances.images },
     }),
     prisma.tokenTransaction.create({
       data: {
         userId,
-        amount: balances.chat + balances.images + balances.docs + balances.code,
+        amount: balances.messages + balances.images,
         type: txType,
         meta: { balances: balances as unknown as Record<string, number>, ...(meta as Record<string, unknown> ?? {}) },
       },
@@ -132,20 +142,7 @@ export async function grantTokens(
   meta?: object
 ): Promise<void> {
   await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { balanceChat: { increment: amount } } }),
+    prisma.user.update({ where: { id: userId }, data: { balanceMessages: { increment: amount } } }),
     prisma.tokenTransaction.create({ data: { userId, amount, type, meta: { legacy: true, ...meta } } }),
   ]);
-}
-
-// Keep old TOKEN_COSTS export for any remaining references
-export const TOKEN_COSTS = { chat_simple: 1, chat_complex: 2, think: 2, document: 3, vision: 10, sound: 10, reel: 50 } as const;
-export type TokenMode = keyof typeof TOKEN_COSTS;
-export function getTokenCost(mode: string, complexity?: string): number {
-  if (mode === 'chat') return TOKEN_COSTS[`chat_${complexity ?? 'simple'}` as TokenMode] ?? 1;
-  return TOKEN_COSTS[mode as TokenMode] ?? 1;
-}
-export async function chargeTokens(userId: string, mode: string, complexity?: string, meta?: object): Promise<number> {
-  const type: BalanceType = mode === 'vision' ? 'images' : mode === 'think' ? 'chat' : 'chat';
-  await deductBalance(userId, type);
-  return 1;
 }

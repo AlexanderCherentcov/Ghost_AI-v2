@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
-import { deductBalance, sanitizeInput } from '../services/tokens.js';
+import { deductByModel, checkBalance, sanitizeInput } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
 import { OR_MODELS } from '../services/providers/openrouter.js';
@@ -39,8 +39,8 @@ const wsMessageSchema = z.object({
 
 // ─── Provider stream factory ──────────────────────────────────────────────────
 
-function getProviderStream(model: string, messages: ChatMessage[]) {
-  return streamOpenRouter(messages, model);
+function getProviderStream(model: string, messages: ChatMessage[], maxTokens?: number, fallbackModel?: string) {
+  return streamOpenRouter(messages, model, maxTokens, fallbackModel);
 }
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -235,14 +235,18 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request: pass plan so ULTRA gets Sonnet always; FREE gets maxTokens cap
-        const { provider, complexity, model, balanceType, maxTokens } = route(
+        // Route request: FREE gets maxTokens cap
+        const { provider, complexity, model, fallbackModel, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
           fastify.log,
           !!imageUrl,
           userProfile?.plan
         );
+
+        const hasImage = !!imageUrl;
+        // Fast fail: check balance before doing any work
+        await checkBalance(userId, hasImage ? 'images' : 'messages');
 
         // History context for cache key: последние user-сообщения (без текущего)
         const userHistoryContext = history
@@ -268,8 +272,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           const response = cacheHit.response as { content: string };
 
           // Charge tokens even on cache hit (our margin)
-          await deductBalance(userId, balanceType);
-          const tokensCost = 1;
+          const tokensCost = await deductByModel(userId, model);
 
           // Save messages
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
@@ -323,10 +326,6 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const messages: ChatMessage[] = [systemMsg, ...historyMsgs, userMsg];
 
-        // Deduct 1 unit from the appropriate per-type balance
-        await deductBalance(userId, balanceType);
-        const tokensCost = 1;
-
         // Save user message (include image URL if attached)
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
@@ -335,14 +334,20 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Stream from provider (maxTokens is set for FREE plan)
         let fullResponse = '';
-        const stream = streamOpenRouter(messages, model, maxTokens);
+        let usedModel = model;
+        const stream = streamOpenRouter(messages, model, maxTokens, fallbackModel);
 
         for await (const chunk of stream) {
           if (chunk.type === 'token' && chunk.data) {
             fullResponse += chunk.data;
             send({ type: 'token', data: chunk.data });
+          } else if (chunk.type === 'used_model') {
+            usedModel = chunk.model;
           }
         }
+
+        // Deduct based on actual model used
+        const tokensCost = await deductByModel(userId, usedModel);
 
         // Cache the response (skip if any attachment present)
         if (!hasAttachment) {

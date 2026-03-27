@@ -324,7 +324,7 @@ export default function ChatConversationPage({ params }: Props) {
 
       if (user) {
         const { setUser } = useAuthStore.getState();
-        setUser({ ...user, balanceChat: Math.max(0, user.balanceChat - tokensCost) });
+        setUser({ ...user, balanceMessages: Math.max(0, user.balanceMessages - tokensCost) });
       }
     } catch (err: any) {
       setStreaming(false);

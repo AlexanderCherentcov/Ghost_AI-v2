@@ -1,15 +1,14 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { OR_MODELS } from './providers/openrouter.js';
-import type { BalanceType } from './tokens.js';
 
 export type Complexity = 'simple' | 'complex';
-export type Provider = 'openrouter-haiku' | 'openrouter-sonnet';
+export type Provider = 'openrouter-haiku' | 'openrouter-deepseek';
 
 export interface RouterResult {
   provider: Provider;
   complexity: Complexity;
   model: string;
-  balanceType: BalanceType;
+  fallbackModel?: string;
   maxTokens?: number;
 }
 
@@ -68,26 +67,20 @@ export function route(
   hasImage = false,
   plan?: string
 ): RouterResult {
-  const category   = classifyCategory(prompt, hasImage, hasDocument);
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
 
-  let balanceType: BalanceType;
-  if (hasImage && !hasDocument) balanceType = 'images';
-  else if (category === 'code')                balanceType = 'code';
-  else if (category === 'docs' || hasDocument) balanceType = 'docs';
-  else                                          balanceType = 'chat';
-
-  const usesonnet  = complexity === 'complex';
-  const provider: Provider = usesonnet ? 'openrouter-sonnet' : 'openrouter-haiku';
-  const model = usesonnet ? OR_MODELS.sonnet : OR_MODELS.haiku;
+  const useDeepSeek = complexity === 'complex';
+  const provider: Provider = useDeepSeek ? 'openrouter-deepseek' : 'openrouter-haiku';
+  const model = useDeepSeek ? OR_MODELS.deepseek : OR_MODELS.haiku;
+  const fallbackModel = useDeepSeek ? OR_MODELS.gpt4oMini : undefined;
   const maxTokens = plan === 'FREE' ? 400 : undefined;
 
-  logger?.debug({ category, complexity, balanceType, provider, model, plan }, '[AIRouter] Routed');
-  return { provider, complexity: usesonnet ? 'complex' : complexity, model, balanceType, maxTokens };
+  logger?.debug({ complexity, provider, model, fallbackModel, plan }, '[AIRouter] Routed');
+  return { provider, complexity: useDeepSeek ? 'complex' : complexity, model, fallbackModel, maxTokens };
 }
 
 export function selectProvider(complexity: Complexity): { provider: Provider; model: string } {
   return complexity === 'simple'
     ? { provider: 'openrouter-haiku', model: OR_MODELS.haiku }
-    : { provider: 'openrouter-sonnet', model: OR_MODELS.sonnet };
+    : { provider: 'openrouter-deepseek', model: OR_MODELS.deepseek };
 }

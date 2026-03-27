@@ -57,11 +57,11 @@ export async function runCleanup(): Promise<void> {
       const expiredUsers = await prisma.user.findMany({
         where: {
           trialExpiresAt: { lt: new Date() },
-          balanceChat: { gt: 0 },
+          balanceMessages: { gt: 0 },
         },
         select: {
           id: true,
-          balanceChat: true,
+          balanceMessages: true,
           transactions: {
             where: { type: { in: ['PURCHASE', 'SUBSCRIPTION'] } },
             take: 1,
@@ -76,12 +76,12 @@ export async function runCleanup(): Promise<void> {
         await prisma.$transaction([
           prisma.user.update({
             where: { id: u.id },
-            data: { balanceChat: 0, trialExpiresAt: null },
+            data: { balanceMessages: 0, trialExpiresAt: null },
           }),
           prisma.tokenTransaction.create({
             data: {
               userId: u.id,
-              amount: -u.balanceChat,
+              amount: -u.balanceMessages,
               type: 'USAGE',
               meta: { reason: 'trial_expired' },
             },

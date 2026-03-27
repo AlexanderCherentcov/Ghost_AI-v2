@@ -142,15 +142,11 @@ export interface User {
   avatarUrl: string | null;
   birthDate: string | null;
   // Per-type main balances (plan allocation)
-  balanceChat:   number;
-  balanceImages: number;
-  balanceDocs:   number;
-  balanceCode:   number;
+  balanceMessages: number;
+  balanceImages:   number;
   // Addons (never expire)
-  addonChat:     number;
-  addonImages:   number;
-  addonDocs:     number;
-  addonCode:     number;
+  addonMessages:   number;
+  addonImages:     number;
   plan: 'FREE' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;
   purposes: string[];
@@ -223,12 +219,12 @@ export interface PaymentsResponse {
 export interface PlanInfo {
   price: number;
   label: string;
-  balances: { chat: number; images: number; docs: number; code: number };
+  balances: { messages: number; images: number };
 }
 export interface AddonInfo {
   price: number;
   label: string;
-  type: 'chat' | 'images' | 'docs' | 'code';
+  type: 'messages' | 'images';
   amount: number;
 }
 export interface PlansResponse {

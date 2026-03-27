@@ -86,7 +86,7 @@ export default function ProfilePage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[var(--bg-elevated)] rounded-xl p-3">
               <p className="text-xs text-[rgba(255,255,255,0.3)] mb-1">Баланс</p>
-              <p className="text-lg font-medium text-accent">{formatTokens((user?.balanceChat ?? 0) + (user?.balanceImages ?? 0) + (user?.balanceDocs ?? 0) + (user?.balanceCode ?? 0))}</p>
+              <p className="text-lg font-medium text-accent">{formatTokens((user?.balanceMessages ?? 0) + (user?.addonMessages ?? 0) + (user?.balanceImages ?? 0) + (user?.addonImages ?? 0))}</p>
             </div>
             <div className="bg-[var(--bg-elevated)] rounded-xl p-3">
               <p className="text-xs text-[rgba(255,255,255,0.3)] mb-1">Истекает</p>

@@ -32,8 +32,7 @@ export default function HistoryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const balance = (user?.balanceChat ?? 0) + (user?.balanceImages ?? 0) + (user?.balanceDocs ?? 0) + (user?.balanceCode ?? 0)
-    + (user?.addonChat ?? 0) + (user?.addonImages ?? 0) + (user?.addonDocs ?? 0) + (user?.addonCode ?? 0);
+  const balance = (user?.balanceMessages ?? 0) + (user?.addonMessages ?? 0) + (user?.balanceImages ?? 0) + (user?.addonImages ?? 0);
   const tokenPercent = Math.min((balance / 8000) * 100, 100);
   const grouped = groupChats(chats);
 

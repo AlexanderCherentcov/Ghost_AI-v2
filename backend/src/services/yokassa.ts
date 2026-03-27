@@ -20,29 +20,27 @@ function yokassaHeaders(idempotencyKey: string) {
 // ─── Subscription plans ────────────────────────────────────────────────────────
 
 export const PLANS = {
-  BASIC:    { price: 299,  label: 'Базовый',  balances: { chat: 200,  images: 10,  docs: 15,  code: 50  } },
-  STANDARD: { price: 699,  label: 'Стандарт', balances: { chat: 700,  images: 30,  docs: 50,  code: 200 } },
-  PRO:      { price: 1490, label: 'Про',       balances: { chat: 2000, images: 80,  docs: 100, code: 500 } },
-  ULTRA:    { price: 2990, label: 'Ультра',   balances: { chat: 8000, images: 200, docs: 150, code: 1500 } },
+  BASIC:    { price: 499,  label: 'Базовый',  balances: { messages: 500,   images: 10  } },
+  STANDARD: { price: 999,  label: 'Стандарт', balances: { messages: 1500,  images: 20  } },
+  PRO:      { price: 2190, label: 'Про',       balances: { messages: 4000,  images: 50  } },
+  ULTRA:    { price: 4490, label: 'Ультра',    balances: { messages: 10000, images: 120 } },
 } as const;
 
 // ─── Addon packs ──────────────────────────────────────────────────────────────
 
 export const ADDON_PACKS = {
+  // Standard messages (Haiku, costs 1 per message)
+  MESSAGES_STD_200:  { price: 199,  label: '200 стандартных сообщений',  type: 'messages' as const, amount: 200  },
+  MESSAGES_STD_500:  { price: 399,  label: '500 стандартных сообщений',  type: 'messages' as const, amount: 500  },
+  MESSAGES_STD_1500: { price: 999,  label: '1500 стандартных сообщений', type: 'messages' as const, amount: 1500 },
+  // Extended messages (DeepSeek, costs 2 per message)
+  MESSAGES_EXT_300:  { price: 199,  label: '300 расширенных сообщений',  type: 'messages' as const, amount: 300  },
+  MESSAGES_EXT_800:  { price: 399,  label: '800 расширенных сообщений',  type: 'messages' as const, amount: 800  },
+  MESSAGES_EXT_2000: { price: 799,  label: '2000 расширенных сообщений', type: 'messages' as const, amount: 2000 },
   // Images
-  IMAGES_10:    { price: 149,  label: '10 картинок',        type: 'images' as const, amount: 10   },
-  IMAGES_30:    { price: 349,  label: '30 картинок',        type: 'images' as const, amount: 30   },
-  IMAGES_100:   { price: 990,  label: '100 картинок',       type: 'images' as const, amount: 100  },
-  // Chat
-  CHAT_500:     { price: 99,   label: '500 сообщений',      type: 'chat'   as const, amount: 500  },
-  CHAT_2000:    { price: 299,  label: '2000 сообщений',     type: 'chat'   as const, amount: 2000 },
-  CHAT_10000:   { price: 999,  label: '10 000 сообщений',   type: 'chat'   as const, amount: 10000},
-  // Docs
-  DOCS_10:      { price: 99,   label: '10 документов',      type: 'docs'   as const, amount: 10   },
-  DOCS_50:      { price: 349,  label: '50 документов',      type: 'docs'   as const, amount: 50   },
-  // Code
-  CODE_200:     { price: 149,  label: '200 запросов кода',  type: 'code'   as const, amount: 200  },
-  CODE_1000:    { price: 499,  label: '1000 запросов кода', type: 'code'   as const, amount: 1000 },
+  IMAGES_10:  { price: 299,  label: '10 картинок',  type: 'images' as const, amount: 10  },
+  IMAGES_30:  { price: 699,  label: '30 картинок',  type: 'images' as const, amount: 30  },
+  IMAGES_100: { price: 1990, label: '100 картинок', type: 'images' as const, amount: 100 },
 } as const;
 
 export type PlanKey  = keyof typeof PLANS;
@@ -131,7 +129,7 @@ export async function processWebhook(body: unknown): Promise<void> {
         where: { id: payment.userId },
         data: { plan: payment.plan, planExpiresAt: expiresAt },
       });
-      await setPlanBalances(payment.userId, planInfo.balances, 'SUBSCRIPTION', { paymentId: payment.id });
+      await setPlanBalances(payment.userId, planInfo.balances as { messages: number; images: number }, 'SUBSCRIPTION', { paymentId: payment.id });
     }
   } else if (payment.type === 'ADDON' && payment.addonType && payment.addonAmount) {
     await grantAddon(payment.userId, payment.addonType as any, payment.addonAmount, { paymentId: payment.id });

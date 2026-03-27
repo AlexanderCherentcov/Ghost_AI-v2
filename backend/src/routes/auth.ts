@@ -13,7 +13,7 @@ async function setupTrialForNewUser(userId: string): Promise<void> {
   const expiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   await prisma.user.update({
     where: { id: userId },
-    data: { trialExpiresAt: expiresAt, balanceChat: TRIAL_CHAT },
+    data: { trialExpiresAt: expiresAt, balanceMessages: TRIAL_CHAT },
   });
   await grantTokens(userId, TRIAL_CHAT, 'BONUS', { trial: true, expiresAt: expiresAt.toISOString() });
 }
@@ -404,7 +404,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           name: true,
           email: true,
           avatarUrl: true,
-          balanceChat: true, balanceImages: true, balanceDocs: true, balanceCode: true, addonChat: true, addonImages: true, addonDocs: true, addonCode: true,
+          balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true,
           plan: true,
           planExpiresAt: true,
           purposes: true,
@@ -438,7 +438,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           id: true,
           name: true,
           email: true,
-          balanceChat: true, balanceImages: true, balanceDocs: true, balanceCode: true, addonChat: true, addonImages: true, addonDocs: true, addonCode: true,
+          balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true,
           plan: true,
           onboardingDone: true,
           purposes: true,

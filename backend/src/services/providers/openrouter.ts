@@ -4,10 +4,11 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 // Models available via OpenRouter
 export const OR_MODELS = {
-  haiku:    'anthropic/claude-haiku-4-5',
-  sonnet:   'anthropic/claude-sonnet-4-6',
-  flux:     'black-forest-labs/flux-1.1-pro',
-  fluxFill: 'black-forest-labs/flux-fill-pro',
+  haiku:      'anthropic/claude-haiku-4-5',
+  deepseek:   'deepseek/deepseek-v3.2',
+  gpt4oMini:  'openai/gpt-4o-mini',
+  flux:       'black-forest-labs/flux-1.1-pro',
+  fluxFill:   'black-forest-labs/flux-fill-pro',
 } as const;
 
 function getClient() {
@@ -40,23 +41,33 @@ export interface ChatMessage {
 export async function* streamOpenRouter(
   messages: ChatMessage[],
   model: string,
-  maxTokens?: number
-): AsyncGenerator<{ type: 'token'; data: string }> {
+  maxTokens?: number,
+  fallbackModel?: string
+): AsyncGenerator<{ type: 'token'; data: string } | { type: 'used_model'; model: string }> {
   const client = getClient();
 
-  const stream = await client.chat.completions.create({
-    model,
-    messages: messages as OpenAI.ChatCompletionMessageParam[],
-    stream: true,
-    ...(maxTokens ? { max_tokens: maxTokens } : {}),
-  });
-
-  for await (const chunk of stream) {
-    const text = chunk.choices[0]?.delta?.content;
-    if (text) {
-      yield { type: 'token', data: text };
+  async function* tryStream(m: string) {
+    const stream = await client.chat.completions.create({
+      model: m,
+      messages: messages as OpenAI.ChatCompletionMessageParam[],
+      stream: true,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
+    });
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content;
+      if (text) yield { type: 'token' as const, data: text };
     }
   }
+
+  let usedModel = model;
+  try {
+    yield* tryStream(model);
+  } catch (err) {
+    if (!fallbackModel) throw err;
+    usedModel = fallbackModel;
+    yield* tryStream(fallbackModel);
+  }
+  yield { type: 'used_model' as const, model: usedModel };
 }
 
 // ─── Image generation (Flux via chat completions) ─────────────────────────────

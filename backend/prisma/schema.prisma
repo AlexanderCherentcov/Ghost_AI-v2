@@ -53,16 +53,12 @@ model User {
   avatarUrl     String?
 
   // Per-type balances (main plan allocation — can expire with plan)
-  balanceChat    Int       @default(0)
+  balanceMessages Int      @default(0)
   balanceImages  Int       @default(0)
-  balanceDocs    Int       @default(0)
-  balanceCode    Int       @default(0)
 
   // Addons (never expire — cumulative)
-  addonChat      Int       @default(0)
+  addonMessages  Int       @default(0)
   addonImages    Int       @default(0)
-  addonDocs      Int       @default(0)
-  addonCode      Int       @default(0)
 
   trialExpiresAt DateTime?              // null = не триал или триал сгорел
   plan           Plan      @default(FREE)
@@ -141,7 +137,7 @@ model Payment {
   type          PaymentType
   plan          Plan?
   // For addons: which type and how many
-  addonType     String?       // 'chat' | 'images' | 'docs' | 'code'
+  addonType     String?       // 'messages' | 'images'
   addonAmount   Int?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

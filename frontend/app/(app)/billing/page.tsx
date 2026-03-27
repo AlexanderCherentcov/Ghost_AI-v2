@@ -39,10 +39,46 @@ const SUBSCRIPTIONS = [
   },
 ];
 
-const ADDON_GROUPS = [
+function IconImage() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <path d="m21 15-5-5L5 21"/>
+    </svg>
+  );
+}
+function IconChat() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  );
+}
+function IconDoc() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="8" y1="13" x2="16" y2="13"/>
+      <line x1="8" y1="17" x2="13" y2="17"/>
+    </svg>
+  );
+}
+function IconCode() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6"/>
+      <polyline points="8 6 2 12 8 18"/>
+    </svg>
+  );
+}
+
+const ADDON_GROUPS: { title: string; Icon: () => JSX.Element; color: string; packs: { key: string; label: string; price: number }[] }[] = [
   {
     title: 'Картинки',
-    icon: '🖼️',
+    Icon: IconImage,
+    color: 'text-violet-400',
     packs: [
       { key: 'IMAGES_10',  label: '10 картинок',  price: 149 },
       { key: 'IMAGES_30',  label: '30 картинок',  price: 349 },
@@ -51,7 +87,8 @@ const ADDON_GROUPS = [
   },
   {
     title: 'Сообщения',
-    icon: '💬',
+    Icon: IconChat,
+    color: 'text-sky-400',
     packs: [
       { key: 'CHAT_500',   label: '500 сообщений',    price: 99 },
       { key: 'CHAT_2000',  label: '2 000 сообщений',  price: 299 },
@@ -60,7 +97,8 @@ const ADDON_GROUPS = [
   },
   {
     title: 'Документы',
-    icon: '📄',
+    Icon: IconDoc,
+    color: 'text-emerald-400',
     packs: [
       { key: 'DOCS_10', label: '10 документов', price: 99 },
       { key: 'DOCS_50', label: '50 документов', price: 349 },
@@ -68,7 +106,8 @@ const ADDON_GROUPS = [
   },
   {
     title: 'Код',
-    icon: '💻',
+    Icon: IconCode,
+    color: 'text-orange-400',
     packs: [
       { key: 'CODE_200',  label: '200 запросов',   price: 149 },
       { key: 'CODE_1000', label: '1 000 запросов', price: 499 },
@@ -161,9 +200,12 @@ export default function BillingPage() {
         <div>
           <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider mb-4">Аддон-паки <span className="normal-case text-[rgba(255,255,255,0.3)]">— не сгорают, копятся</span></h2>
           <div className="space-y-4">
-            {ADDON_GROUPS.map(({ title, icon, packs }) => (
+            {ADDON_GROUPS.map(({ title, Icon, color, packs }) => (
               <div key={title} className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-4">
-                <p className="text-sm font-medium text-white mb-3">{icon} {title}</p>
+                <div className={`flex items-center gap-2 mb-3 ${color}`}>
+                  <Icon />
+                  <span className="text-sm font-medium text-white">{title}</span>
+                </div>
                 <div className="flex flex-wrap gap-3">
                   {packs.map(({ key, label, price }) => (
                     <button

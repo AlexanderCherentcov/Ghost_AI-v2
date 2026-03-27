@@ -43,21 +43,26 @@ export async function* streamOpenRouter(
   }
 }
 
-// ─── Image generation (Flux) ──────────────────────────────────────────────────
+// ─── Image generation (Flux via chat completions) ─────────────────────────────
+// OpenRouter routes Flux models through chat completions endpoint.
+// The model returns an image URL in choices[0].message.content.
 
 export async function generateImageFlux(
   prompt: string,
   model: string = OR_MODELS.flux
 ): Promise<string> {
-  const response = await fetch(`${OPENROUTER_BASE}/images/generations`, {
+  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.FRONTEND_URL ?? 'https://ghostline.ai',
+      'HTTP-Referer': process.env.FRONTEND_URL ?? 'https://ghostlineai.ru',
       'X-Title': 'GhostLine AI',
     },
-    body: JSON.stringify({ model, prompt, n: 1 }),
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
 
   if (!response.ok) {
@@ -66,12 +71,36 @@ export async function generateImageFlux(
   }
 
   const data = (await response.json()) as {
-    data: Array<{ url?: string; b64_json?: string }>;
+    choices?: Array<{
+      message?: {
+        content?: string | Array<{ type: string; image_url?: { url: string }; url?: string }>;
+      };
+    }>;
+    data?: Array<{ url?: string; b64_json?: string }>;
   };
 
-  const img = data.data?.[0];
-  if (img?.url) return img.url;
-  if (img?.b64_json) return `data:image/png;base64,${img.b64_json}`;
+  // Format 1: data[].url (OpenAI images style, some OR models use this)
+  const imgData = data.data?.[0];
+  if (imgData?.url) return imgData.url;
+  if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
-  throw new Error('No image data in OpenRouter response');
+  // Format 2: choices[].message.content as string URL
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('http') || trimmed.startsWith('data:')) return trimmed;
+    // Sometimes OR wraps URL in markdown: ![](url)
+    const mdMatch = trimmed.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
+    if (mdMatch) return mdMatch[1];
+  }
+
+  // Format 3: choices[].message.content as array with image_url parts
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      if (part.type === 'image_url' && part.image_url?.url) return part.image_url.url;
+      if (part.type === 'image' && (part as any).url) return (part as any).url;
+    }
+  }
+
+  throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 300)}`);
 }

@@ -1,16 +1,30 @@
 'use client';
 
-import { useEffect, useCallback, use } from 'react';
+import { useEffect, useCallback, use, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
-import { ModeSelector } from '@/components/chat/ModeSelector';
+import { ChatQuickActions, type QuickMode } from '@/components/chat/ChatQuickActions';
 import { useToast } from '@/components/ui/Toast';
 import { getFileCategory } from '@/components/chat/InputBar';
+
+// Keywords that trigger image generation routing
+const IMAGE_KEYWORDS = [
+  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
+  'сгенерируй', 'сгенерировать', 'generate image', 'draw', 'создай изображение',
+  'создать изображение', 'нарисуй мне', 'хочу картинку', 'сделай картинку',
+  'покажи картинку', 'изображение в стиле',
+];
+
+function isImageRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
+}
 
 /** Resize an image File to max 800px and return as base64 JPEG data URL */
 async function resizeImageToBase64(file: File): Promise<string> {
@@ -36,7 +50,6 @@ async function resizeImageToBase64(file: File): Promise<string> {
   });
 }
 
-/** Read a text/code file as UTF-8 string */
 async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -56,30 +69,25 @@ export default function ChatConversationPage({ params }: Props) {
   const { user, accessToken } = useAuthStore();
   const { show: showToast } = useToast();
   const {
-    messages,
-    setMessages,
-    addMessage,
-    appendStreamToken,
-    commitStream,
-    setStreaming,
-    isStreaming,
-    mode,
-    setMode,
-    setActiveChat,
-    chats,
+    messages, setMessages, addMessage, appendStreamToken,
+    commitStream, setStreaming, isStreaming, mode, setMode,
+    setActiveChat, chats,
   } = useChatStore();
+
+  const [quickMode, setQuickMode] = useState<QuickMode>(null);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [imageSuggestion, setImageSuggestion] = useState<string | null>(null);
 
   // Load messages
   useEffect(() => {
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);
-
     api.chats.messages(id)
       .then(({ messages }) => setMessages(messages))
       .catch(() => router.replace('/chat'));
   }, [id]);
 
-  // Auto-send initial prompt (and optional file) from new chat creation
+  // Auto-send initial prompt
   useEffect(() => {
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
@@ -92,7 +100,6 @@ export default function ChatConversationPage({ params }: Props) {
     const hasAny = initialPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    // Clear all sessionStorage keys
     ['initialPrompt','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
@@ -104,16 +111,12 @@ export default function ChatConversationPage({ params }: Props) {
         const file = new File([blob], initialFileName ?? 'image.jpg', { type: 'image/jpeg' });
         handleSend(initialPrompt ?? '', file);
       } else if (initialBinaryUrl && initialFileName) {
-        // Binary file (PDF/DOCX/XLSX): fetch from object URL and re-create File
         const res = await fetch(initialBinaryUrl);
         const blob = await res.blob();
         const file = new File([blob], initialFileName, { type: initialFileMime ?? '' });
         handleSend(initialPrompt ?? '', file);
       } else if (initialFileContent && initialFileName) {
-        // Text file already extracted — inject directly bypassing handleSend file logic
-        // We create a synthetic Blob so handleSend reads it as text
         const blob = new Blob([initialFileContent], { type: 'text/plain' });
-        // Rename with original extension so getFileCategory returns 'text'
         const file = new File([blob], initialFileName, { type: 'text/plain' });
         handleSend(initialPrompt ?? '', file);
       } else {
@@ -125,25 +128,112 @@ export default function ChatConversationPage({ params }: Props) {
   // Connect WS
   useEffect(() => {
     connectWS();
-
     const unsub = onToken((chunk: WSChunk) => {
-      if (chunk.type === 'token' && chunk.data) {
-        appendStreamToken(chunk.data);
-      }
+      if (chunk.type === 'token' && chunk.data) appendStreamToken(chunk.data);
     });
-
     return unsub;
   }, []);
 
+  // ── Inline image generation ─────────────────────────────────────────────────
+  const handleGenerateImage = useCallback(async (prompt: string) => {
+    if (!accessToken) return;
+    setGeneratingImage(true);
+    setImageSuggestion(null);
+
+    // Add user message
+    addMessage({
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      mode: 'vision',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Placeholder "generating" message
+    const placeholderId = `gen-${Date.now()}`;
+    addMessage({
+      id: placeholderId,
+      role: 'assistant',
+      content: '⏳ Генерирую изображение...',
+      mode: 'vision',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    try {
+      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024' });
+
+      // Poll for result
+      const poll = async (): Promise<void> => {
+        const job = await api.generate.status(jobId);
+        if (job.status === 'done' && job.mediaUrl) {
+          const { setMessages } = useChatStore.getState();
+          const current = useChatStore.getState().messages;
+          setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 }
+              : m
+          ));
+          if (user) {
+            const { setUser } = useAuthStore.getState();
+            setUser({ ...user, tokenBalance: user.tokenBalance - 10 });
+          }
+        } else if (job.status === 'failed') {
+          const { setMessages } = useChatStore.getState();
+          const current = useChatStore.getState().messages;
+          setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать изображение'}` }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 2000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      showToast(err.message ?? 'Ошибка генерации изображения', 'error');
+    } finally {
+      setGeneratingImage(false);
+    }
+  }, [accessToken, user]);
+
+  // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File) => {
-    if (isStreaming || !accessToken) return;
+    if ((isStreaming || generatingImage) || !accessToken) return;
+
+    // Auto-route: if quickMode is image-create or prompt looks like an image request
+    if (quickMode === 'image-create' || (quickMode === null && prompt && isImageRequest(prompt))) {
+      if (quickMode === 'image-create' || window.confirm) {
+        if (quickMode === 'image-create') {
+          setQuickMode(null);
+          return handleGenerateImage(prompt);
+        }
+        // Auto-detected: show suggestion banner instead of forcing redirect
+        setImageSuggestion(prompt);
+        return;
+      }
+    }
+
+    // image-edit: attach file to prompt for vision API
+    if (quickMode === 'image-edit' && !file) {
+      showToast('Прикрепите фото для редактирования', 'warning');
+      return;
+    }
 
     // ── Process attached file ────────────────────────────────────────────────
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
     let fileLang: string | undefined;
-    let fileDisplayUrl: string | null = null; // for optimistic preview
+    let fileDisplayUrl: string | null = null;
 
     if (file) {
       const category = getFileCategory(file);
@@ -165,7 +255,6 @@ export default function ChatConversationPage({ params }: Props) {
           showToast('Не удалось прочитать файл', 'error');
         }
       } else {
-        // binary (PDF, DOCX, XLSX …) — extract on backend
         try {
           showToast('Извлечение текста из файла...', 'info');
           const result = await api.upload.extract(file);
@@ -179,7 +268,6 @@ export default function ChatConversationPage({ params }: Props) {
       }
     }
 
-    // Optimistically add user message
     const displayContent = prompt || (fileName ? `[Файл: ${fileName}]` : '');
     const tempUserMsg = {
       id: `temp-${Date.now()}`,
@@ -215,7 +303,6 @@ export default function ChatConversationPage({ params }: Props) {
         fileLang,
       });
 
-      // Build assistant message from streamed content
       const { streamContent } = useChatStore.getState();
       const assistantMsg = {
         id: `msg-${Date.now()}`,
@@ -227,16 +314,13 @@ export default function ChatConversationPage({ params }: Props) {
         mediaUrl: null,
         createdAt: new Date().toISOString(),
       };
-
       commitStream(assistantMsg);
 
-      // Update chat title if backend generated one from first message
       if (newTitle) {
         const { updateChat } = useChatStore.getState();
         updateChat(id, { title: newTitle });
       }
 
-      // Update user token balance
       if (user) {
         const { setUser } = useAuthStore.getState();
         setUser({ ...user, tokenBalance: user.tokenBalance - tokensCost });
@@ -252,31 +336,63 @@ export default function ChatConversationPage({ params }: Props) {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, user]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user, quickMode]);
+
+  const busy = isStreaming || generatingImage;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Mode selector */}
-      <div className="flex justify-center pt-4 px-4">
-        <ModeSelector
-          value={mode as 'chat' | 'vision' | 'sound' | 'reel' | 'think'}
-          onChange={(m) => {
-            if (m !== 'chat' && m !== 'think') {
-              router.push(`/${m}`);
-            } else {
-              setMode(m);
-            }
-          }}
-        />
-      </div>
-
       <ChatWindow onSuggestion={handleSend} />
+
+      {/* Image suggestion banner (auto-detected intent) */}
+      <AnimatePresence>
+        {imageSuggestion && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mx-4 mb-2 max-w-[720px] mx-auto w-full"
+          >
+            <div className="bg-[rgba(92,140,240,0.08)] border border-[rgba(92,140,240,0.25)] rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-lg">🖼️</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-[rgba(255,255,255,0.6)]">Похоже, вы хотите создать изображение</p>
+                <p className="text-xs text-[rgba(255,255,255,0.3)] truncate">«{imageSuggestion}»</p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={() => { const p = imageSuggestion; setImageSuggestion(null); handleGenerateImage(p); }}
+                  className="text-xs px-3 py-1.5 bg-[#5C8CF0] text-white rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Создать
+                </button>
+                <button
+                  onClick={() => { const p = imageSuggestion; setImageSuggestion(null); handleSend(p); }}
+                  className="text-xs px-3 py-1.5 border border-[var(--border)] text-[rgba(255,255,255,0.5)] rounded-lg hover:text-white transition-colors"
+                >
+                  Чат
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Quick actions bar */}
+      <ChatQuickActions
+        onSelect={setQuickMode}
+        activeMode={quickMode}
+      />
 
       <InputBar
         onSend={handleSend}
         onStop={() => { abortStream(); setStreaming(false); }}
-        isStreaming={isStreaming}
-        placeholder="Продолжайте диалог..."
+        isStreaming={busy}
+        placeholder={
+          quickMode === 'image-create' ? '✨ Опишите картинку которую хотите создать...' :
+          quickMode === 'image-edit'   ? '🎨 Прикрепите фото и опишите изменения...' :
+          'Продолжайте диалог...'
+        }
       />
     </div>
   );

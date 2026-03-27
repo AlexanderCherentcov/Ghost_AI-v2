@@ -42,10 +42,38 @@ const FEATURES = [
 ];
 
 const PLANS = [
-  { name: 'Ghost Free',  price: 0,    tokens: '50K',   features: ['Chat'], badge: null },
-  { name: 'Ghost Pro',   price: 499,  tokens: '500K',  features: ['Все режимы'], badge: 'Популярный' },
-  { name: 'Ghost Ultra', price: 1490, tokens: '2M',    features: ['Все + API'], badge: null },
-  { name: 'Ghost Team',  price: 3900, tokens: '10M',   features: ['До 10 юзеров'], badge: null },
+  {
+    name: 'Пробный',
+    price: 0,
+    tokens: '50',
+    period: '7 дней',
+    features: ['50 сообщений', 'Все режимы', 'Без карты'],
+    badge: null,
+  },
+  {
+    name: 'Базовый',
+    price: 299,
+    tokens: '350',
+    period: null,
+    features: ['300 сообщений', '10 картинок', '5 документов'],
+    badge: null,
+  },
+  {
+    name: 'Стандарт',
+    price: 699,
+    tokens: '1 150',
+    period: null,
+    features: ['1 000 сообщений', '30 картинок', '20 документов'],
+    badge: 'Популярный',
+  },
+  {
+    name: 'Про',
+    price: 1490,
+    tokens: '3 300',
+    period: null,
+    features: ['3 000 сообщений', '80 картинок', '50 документов'],
+    badge: null,
+  },
 ];
 
 const THESIS = [
@@ -131,7 +159,7 @@ export default function LandingPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.4 }}
           >
-            Не нужна карта · 50 000 токенов в подарок
+            Не нужна карта · 50 токенов бесплатно на 7 дней
           </motion.p>
         </motion.div>
 
@@ -230,7 +258,7 @@ export default function LandingPage() {
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map(({ name, price, tokens, features, badge }, i) => (
+            {PLANS.map(({ name, price, tokens, period, features, badge }, i) => (
               <motion.div
                 key={name}
                 className={`card relative ${badge ? 'border-accent shadow-accent' : ''}`}
@@ -249,7 +277,7 @@ export default function LandingPage() {
                   <span className="text-2xl font-medium">
                     {price === 0 ? 'Бесплатно' : `${price} ₽`}
                   </span>
-                  {price > 0 && <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>}
+                  {period && <span className="text-sm text-[rgba(255,255,255,0.3)] ml-1">· {period}</span>}
                 </div>
                 <div className="text-sm text-accent mb-3">{tokens} токенов</div>
                 <ul className="space-y-1 mb-6">
@@ -263,7 +291,7 @@ export default function LandingPage() {
                   href="/login"
                   className={`w-full btn text-sm h-10 ${badge ? 'btn-primary' : 'btn-ghost'}`}
                 >
-                  {price === 0 ? 'Начать' : 'Выбрать'}
+                  {price === 0 ? 'Начать бесплатно' : 'Выбрать'}
                 </Link>
               </motion.div>
             ))}
@@ -286,7 +314,7 @@ export default function LandingPage() {
             Начать бесплатно
           </Link>
           <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">
-            Не нужна карта · 50 000 токенов в подарок
+            Не нужна карта · 50 токенов бесплатно на 7 дней
           </p>
         </motion.div>
       </section>

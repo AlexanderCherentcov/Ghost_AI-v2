@@ -11,6 +11,7 @@ import {
 } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
+import { useUIStore } from '@/store/ui.store';
 import { api, type Chat } from '@/lib/api';
 import { formatTokens, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,7 @@ export function Sidebar() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { chats, activeChat, addChat, updateChat, removeChat } = useChatStore();
+  const { sidebarOpen, toggleSidebar } = useUIStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
@@ -144,47 +146,82 @@ export function Sidebar() {
   }
 
   return (
-    <aside
-      className="flex flex-col w-[260px] h-screen bg-[var(--bg-surface)] border-r border-[var(--border)] flex-shrink-0"
+    <motion.aside
+      animate={{ width: sidebarOpen ? 260 : 60 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className="flex flex-col h-screen bg-[var(--bg-surface)] border-r border-[var(--border)] flex-shrink-0 overflow-hidden"
       style={{ position: 'fixed', top: 0, left: 0, zIndex: 40 }}
     >
-      {/* Logo */}
+      {/* Logo + toggle */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <GhostIcon size={28} className="text-accent" />
-        <span className="text-base font-medium tracking-tight text-white">GhostLine</span>
+        <GhostIcon size={28} className="text-accent flex-shrink-0" />
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: 'auto' }}
+              exit={{ opacity: 0, width: 0 }}
+              className="text-base font-medium tracking-tight text-white overflow-hidden whitespace-nowrap"
+            >
+              GhostLine
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <button
+          onClick={toggleSidebar}
+          className={cn(
+            'ml-auto text-[rgba(255,255,255,0.3)] hover:text-white transition-colors flex-shrink-0',
+            !sidebarOpen && 'mx-auto ml-0'
+          )}
+          title={sidebarOpen ? 'Свернуть' : 'Развернуть'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            {sidebarOpen
+              ? <path d="M10 4L6 8L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              : <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            }
+          </svg>
+        </button>
       </div>
 
       {/* New Chat */}
       <div className="px-3 mb-4">
         <button
           onClick={handleNewChat}
-          className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[rgba(255,255,255,0.55)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+          className={cn(
+            'w-full flex items-center rounded-xl border border-[var(--border)] text-sm text-[rgba(255,255,255,0.55)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all',
+            sidebarOpen ? 'gap-2 px-4 py-2.5 justify-start' : 'justify-center p-2.5'
+          )}
         >
-          <PlusIcon size={16} />
-          <span>Новый чат</span>
+          <PlusIcon size={16} className="flex-shrink-0" />
+          {sidebarOpen && <span>Новый чат</span>}
         </button>
       </div>
 
       {/* Modes */}
       <div className="px-3 mb-4">
-        <p className="text-[11px] uppercase tracking-wider text-[rgba(255,255,255,0.2)] px-0 mb-2">
-          Режимы
-        </p>
+        {sidebarOpen && (
+          <p className="text-[11px] uppercase tracking-wider text-[rgba(255,255,255,0.2)] px-0 mb-2">
+            Режимы
+          </p>
+        )}
         {MODES.map(({ id, label, href, Icon }) => {
           const isActive = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={id}
               href={href}
+              title={!sidebarOpen ? label : undefined}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all mb-0.5',
+                'flex items-center rounded-xl text-sm transition-all mb-0.5',
+                sidebarOpen ? 'gap-3 px-3 py-2' : 'justify-center p-2.5',
                 isActive
-                  ? 'bg-[var(--bg-elevated)] border-l-2 border-accent text-white pl-[10px]'
+                  ? 'bg-[var(--bg-elevated)] text-white' + (sidebarOpen ? ' border-l-2 border-accent pl-[10px]' : '')
                   : 'text-[rgba(255,255,255,0.45)] hover:bg-[var(--bg-elevated)] hover:text-[rgba(255,255,255,0.7)]'
               )}
             >
-              <Icon size={16} className={isActive ? 'text-accent' : ''} />
-              {label}
+              <Icon size={16} className={cn('flex-shrink-0', isActive ? 'text-accent' : '')} />
+              {sidebarOpen && label}
             </Link>
           );
         })}
@@ -193,71 +230,69 @@ export function Sidebar() {
       {/* Divider */}
       <div className="mx-3 border-t border-[var(--border)] mb-4" />
 
-      {/* Chat history */}
-      <div className="flex-1 overflow-y-auto px-3 min-h-0">
-        <ChatSection label="Сегодня"    items={grouped.today} />
-        <ChatSection label="Вчера"      items={grouped.yesterday} />
-        <ChatSection label="Эта неделя" items={grouped.week} />
-        <ChatSection label="Ранее"      items={grouped.older} />
-        {!chats.length && (
-          <p className="text-xs text-[rgba(255,255,255,0.2)] text-center mt-4">
-            История пустая
-          </p>
-        )}
-      </div>
+      {/* Chat history — hidden when collapsed */}
+      {sidebarOpen && (
+        <div className="flex-1 overflow-y-auto px-3 min-h-0">
+          <ChatSection label="Сегодня"    items={grouped.today} />
+          <ChatSection label="Вчера"      items={grouped.yesterday} />
+          <ChatSection label="Эта неделя" items={grouped.week} />
+          <ChatSection label="Ранее"      items={grouped.older} />
+          {!chats.length && (
+            <p className="text-xs text-[rgba(255,255,255,0.2)] text-center mt-4">
+              История пустая
+            </p>
+          )}
+        </div>
+      )}
+      {!sidebarOpen && <div className="flex-1" />}
 
       {/* Bottom */}
       <div className="p-3 border-t border-[var(--border)]">
-        {/* Token bar */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
-              <TokenIcon size={12} className="text-accent" />
-              <span>{formatTokens(balance)} / {formatTokens(maxTokens)}</span>
+        {/* Token bar — only when expanded */}
+        {sidebarOpen && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
+                <TokenIcon size={12} className="text-accent" />
+                <span>{formatTokens(balance)} / {formatTokens(maxTokens)}</span>
+              </div>
+              <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">
+                + Купить
+              </Link>
             </div>
-            <Link
-              href="/billing"
-              className="text-[11px] text-accent hover:opacity-80 transition-opacity"
-            >
-              + Купить
-            </Link>
+            <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-accent rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${tokenPercent}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+            </div>
           </div>
-          <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-accent rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${tokenPercent}%` }}
-              transition={{ duration: 0.6, ease: 'easeOut' }}
-            />
-          </div>
-        </div>
+        )}
 
         {/* User info */}
-        <div className="flex items-center gap-3">
+        <div className={cn('flex items-center', sidebarOpen ? 'gap-3' : 'justify-center')}>
           {user?.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name ?? 'User'}
-              className="w-8 h-8 rounded-full object-cover"
-            />
+            <img src={user.avatarUrl} alt={user.name ?? 'User'} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-              <span className="text-xs text-accent font-medium">
-                {user?.name?.[0]?.toUpperCase() ?? 'G'}
-              </span>
+            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs text-accent font-medium">{user?.name?.[0]?.toUpperCase() ?? 'G'}</span>
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-white truncate">{user?.name ?? 'Ghost'}</p>
-            <p className="text-[11px] text-[rgba(255,255,255,0.3)] uppercase tracking-wider">
-              {user?.plan ?? 'FREE'}
-            </p>
-          </div>
-          <Link href="/settings" className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors">
-            <SettingsIcon size={16} />
-          </Link>
+          {sidebarOpen && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{user?.name ?? 'Ghost'}</p>
+                <p className="text-[11px] text-[rgba(255,255,255,0.3)] uppercase tracking-wider">{user?.plan ?? 'FREE'}</p>
+              </div>
+              <Link href="/settings" className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors">
+                <SettingsIcon size={16} />
+              </Link>
+            </>
+          )}
         </div>
       </div>
-    </aside>
+    </motion.aside>
   );
 }

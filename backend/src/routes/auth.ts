@@ -2,6 +2,21 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { grantTokens } from '../services/tokens.js';
+
+// ─── Trial setup ──────────────────────────────────────────────────────────────
+
+const TRIAL_TOKENS = 50;
+const TRIAL_DAYS   = 7;
+
+async function setupTrialForNewUser(userId: string): Promise<void> {
+  const expiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { trialExpiresAt: expiresAt },
+  });
+  await grantTokens(userId, TRIAL_TOKENS, 'BONUS', { trial: true, expiresAt: expiresAt.toISOString() });
+}
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +105,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     let user = await prisma.user.findUnique({ where: { telegramId } });
 
+    const isNew = !user;
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -98,10 +114,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: tgUser.photo_url,
         },
       });
+      await setupTrialForNewUser(user.id);
     }
 
     const tokens = signTokens(fastify, user.id);
-    return { ...tokens, user, isNew: !user.onboardingDone };
+    return { ...tokens, user, isNew: isNew || !user.onboardingDone };
   });
 
   // ── Yandex OAuth ─────────────────────────────────────────────────────────
@@ -160,6 +177,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
             : undefined,
         },
       });
+      await setupTrialForNewUser(user.id);
     } else if (!user.yandexId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -230,6 +248,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: info.picture,
         },
       });
+      await setupTrialForNewUser(user.id);
     } else if (!user.googleId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -267,6 +286,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: body.photo_url ?? null,
         },
       });
+      await setupTrialForNewUser(user.id);
     }
 
     const tokens = signTokens(fastify, user.id);

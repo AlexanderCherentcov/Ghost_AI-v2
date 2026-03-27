@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { useChatStore } from '@/store/chat.store';
+import { useUIStore } from '@/store/ui.store';
 import { api, setAccessToken } from '@/lib/api';
 import { connectWS } from '@/lib/socket';
 
@@ -13,6 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, isLoading } = useAuthStore();
   const { setChats } = useChatStore();
+  const { sidebarOpen } = useUIStore();
 
   // Silently refresh access token in background — only logout on 401, not network errors
   useEffect(() => {
@@ -97,7 +99,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="hidden lg:block">
         <Sidebar />
       </div>
-      <main className="flex-1 lg:ml-[260px] flex flex-col overflow-hidden pb-[60px] lg:pb-0">
+      <main
+        className={`flex-1 flex flex-col overflow-hidden pb-[60px] lg:pb-0 transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
+      >
         {children}
       </main>
       <BottomNav />

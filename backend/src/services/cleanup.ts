@@ -49,7 +49,51 @@ export async function runCleanup(): Promise<void> {
       },
     });
 
-    // 4. Удаляем старые записи вектор-кэша (если таблица существует)
+    // 4. Истекаем пробные токены
+    // Если trialExpiresAt < now И нет ни одной PURCHASE/SUBSCRIPTION транзакции →
+    // обнуляем баланс (пробный период истёк, ничего не купил)
+    let expiredTrials = 0;
+    try {
+      const expiredUsers = await prisma.user.findMany({
+        where: {
+          trialExpiresAt: { lt: new Date() },
+          tokenBalance: { gt: 0 },
+        },
+        select: {
+          id: true,
+          tokenBalance: true,
+          transactions: {
+            where: { type: { in: ['PURCHASE', 'SUBSCRIPTION'] } },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      });
+
+      for (const u of expiredUsers) {
+        // Skip users who already bought tokens
+        if (u.transactions.length > 0) continue;
+        await prisma.$transaction([
+          prisma.user.update({
+            where: { id: u.id },
+            data: { tokenBalance: 0, trialExpiresAt: null },
+          }),
+          prisma.tokenTransaction.create({
+            data: {
+              userId: u.id,
+              amount: -u.tokenBalance,
+              type: 'USAGE',
+              meta: { reason: 'trial_expired' },
+            },
+          }),
+        ]);
+        expiredTrials++;
+      }
+    } catch (trialErr: any) {
+      console.error('[Cleanup] Trial expiry error:', trialErr.message);
+    }
+
+    // 5. Удаляем старые записи вектор-кэша (если таблица существует)
     let deletedVectors = 0;
     try {
       const result = await prisma.$executeRaw`
@@ -64,7 +108,8 @@ export async function runCleanup(): Promise<void> {
     const elapsed = Date.now() - startMs;
     console.info(
       `[Cleanup] Done in ${elapsed}ms — messages: ${deletedMessages}, ` +
-      `chats: ${deletedChats}, jobs: ${deletedJobs}, vectors: ${deletedVectors}`
+      `chats: ${deletedChats}, jobs: ${deletedJobs}, vectors: ${deletedVectors}, ` +
+      `trialExpired: ${expiredTrials}`
     );
   } catch (err: any) {
     console.error('[Cleanup] Error during cleanup:', err.message);

@@ -1,12 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
-import { ChatWindow } from '@/components/chat/ChatWindow';
+import { useAuthStore } from '@/store/auth.store';
 import { InputBar } from '@/components/chat/InputBar';
-import { ModeSelector } from '@/components/chat/ModeSelector';
+import { ChatQuickActions, type QuickMode } from '@/components/chat/ChatQuickActions';
+import { VisionIcon, ThinkIcon, ChatIcon } from '@/components/icons';
 import { getFileCategory } from '@/components/chat/InputBar';
+import { GhostIcon } from '@/components/icons/GhostIcon';
+
+// Image keywords for auto-routing
+const IMAGE_KEYWORDS = [
+  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
+  'сгенерируй', 'сгенерировать', 'создай изображение', 'визуализируй',
+  'generate image', 'draw', 'make a picture', 'create image',
+];
+function isImageRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
+}
 
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -21,8 +36,7 @@ async function resizeImageToBase64(file: File): Promise<string> {
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * ratio);
         canvas.height = Math.round(img.height * ratio);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL('image/jpeg', 0.72));
       };
       img.src = e.target!.result as string;
@@ -31,28 +45,42 @@ async function resizeImageToBase64(file: File): Promise<string> {
   });
 }
 
+// Quick suggestions shown on empty state
+const SUGGESTIONS = [
+  { icon: '✍️', text: 'Напиши краткое резюме' },
+  { icon: '🌍', text: 'Переведи текст на английский' },
+  { icon: '💡', text: 'Придумай идеи для проекта' },
+  { icon: '🔍', text: 'Объясни простыми словами' },
+];
+
 export default function ChatPage() {
   const router = useRouter();
   const { addChat, mode, setMode } = useChatStore();
+  const { user } = useAuthStore();
+  const [quickMode, setQuickMode] = useState<QuickMode>(null);
+
+  const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
 
   async function handleSend(prompt: string, file?: File) {
-    // Create new chat and redirect to it
-    const chat = await api.chats.create({ mode });
-    addChat(chat);
-    // Store prompt in sessionStorage to auto-send
-    sessionStorage.setItem('initialPrompt', prompt);
+    // If image-create quickMode or auto-detected image request → go to vision
+    if (quickMode === 'image-create' || (quickMode === null && prompt && isImageRequest(prompt))) {
+      router.push('/vision');
+      return;
+    }
 
+    const chatMode = quickMode === 'image-edit' ? 'vision' : mode;
+    const chat = await api.chats.create({ mode: chatMode as any });
+    addChat(chat);
+
+    sessionStorage.setItem('initialPrompt', prompt);
     if (file) {
       const category = getFileCategory(file);
       sessionStorage.setItem('initialFileName', file.name);
-
       if (category === 'image') {
         try {
-          const base64 = await resizeImageToBase64(file);
-          sessionStorage.setItem('initialImageUrl', base64);
+          sessionStorage.setItem('initialImageUrl', await resizeImageToBase64(file));
         } catch {}
       } else if (category === 'text') {
-        // Read text client-side
         try {
           const text = await new Promise<string>((res, rej) => {
             const r = new FileReader();
@@ -64,39 +92,81 @@ export default function ChatPage() {
           sessionStorage.setItem('initialFileLang', file.name.split('.').pop()?.toLowerCase() ?? 'text');
         } catch {}
       } else {
-        // binary: store the file as object URL so the chat page can re-upload it
-        const objectUrl = URL.createObjectURL(file);
-        sessionStorage.setItem('initialBinaryFileUrl', objectUrl);
+        sessionStorage.setItem('initialBinaryFileUrl', URL.createObjectURL(file));
         sessionStorage.setItem('initialFileMime', file.type);
       }
     }
-
     router.push(`/chat/${chat.id}`);
   }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Mode selector */}
-      <div className="flex justify-center pt-4 px-4">
-        <ModeSelector
-          value={mode as 'chat' | 'vision' | 'sound' | 'reel' | 'think'}
-          onChange={(m) => {
-            if (m !== 'chat' && m !== 'think') {
-              router.push(`/${m}`);
-            } else {
-              setMode(m);
-            }
-          }}
-        />
+      {/* Empty state — Gemini-style */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-[640px] text-center"
+        >
+          {/* Ghost icon */}
+          <GhostIcon size={44} className="text-accent animate-float mx-auto mb-6" animated />
+
+          {/* Greeting */}
+          <h1 className="text-[clamp(22px,5vw,36px)] font-normal tracking-tight text-white mb-1">
+            Здравствуйте, {firstName}!
+          </h1>
+          <p className="text-lg text-[rgba(255,255,255,0.4)] mb-10">
+            С чего начнём?
+          </p>
+
+          {/* Suggestion chips */}
+          <div className="flex flex-wrap gap-2 justify-center mb-8">
+            {SUGGESTIONS.map(({ icon, text }) => (
+              <button
+                key={text}
+                onClick={() => handleSend(text)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white hover:border-[rgba(255,255,255,0.2)] transition-all"
+              >
+                <span>{icon}</span>
+                {text}
+              </button>
+            ))}
+          </div>
+
+          {/* Mode pills */}
+          <div className="flex items-center justify-center gap-2 mb-2">
+            {[
+              { label: 'Chat', Icon: ChatIcon, m: 'chat' },
+              { label: 'Think', Icon: ThinkIcon, m: 'think' },
+            ].map(({ label, Icon, m }) => (
+              <button
+                key={m}
+                onClick={() => setMode(m as any)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all ${
+                  mode === m
+                    ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                    : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
+                }`}
+              >
+                <Icon size={12} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </motion.div>
       </div>
 
-      {/* Chat window — empty state */}
-      <ChatWindow onSuggestion={handleSend} />
-
-      {/* Input */}
+      {/* Quick actions + input at bottom */}
+      <ChatQuickActions onSelect={setQuickMode} activeMode={quickMode} />
       <InputBar
         onSend={handleSend}
-        placeholder="Спросите что-нибудь у GhostLine..."
+        placeholder={
+          quickMode === 'image-create' ? '✨ Опишите картинку...' :
+          quickMode === 'image-edit'   ? '🎨 Прикрепите фото и опишите изменения...' :
+          mode === 'think'             ? '🧠 Сложная задача для глубокого анализа...' :
+          'Спросите что-нибудь у GhostLine...'
+        }
       />
     </div>
   );

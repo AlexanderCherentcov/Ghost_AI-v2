@@ -53,15 +53,9 @@ export function Sidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const planTokens = {
-    FREE: 50_000,
-    PRO: 500_000,
-    ULTRA: 2_000_000,
-    TEAM: 10_000_000,
-  };
-  const maxTokens = planTokens[user?.plan ?? 'FREE'];
   const balance = user?.tokenBalance ?? 0;
-  const tokenPercent = Math.min((balance / maxTokens) * 100, 100);
+  // Progress bar: full at 3300 (Про пакет), scales down linearly
+  const tokenPercent = Math.min((balance / 3300) * 100, 100);
 
   const grouped = groupChats(chats);
 
@@ -152,37 +146,35 @@ export function Sidebar() {
       className="flex flex-col h-screen bg-[var(--bg-surface)] border-r border-[var(--border)] flex-shrink-0 overflow-hidden"
       style={{ position: 'fixed', top: 0, left: 0, zIndex: 40 }}
     >
-      {/* Logo + toggle */}
-      <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <GhostIcon size={28} className="text-accent flex-shrink-0" />
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 'auto' }}
-              exit={{ opacity: 0, width: 0 }}
-              className="text-base font-medium tracking-tight text-white overflow-hidden whitespace-nowrap"
-            >
-              GhostLine
-            </motion.span>
-          )}
-        </AnimatePresence>
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            'ml-auto text-[rgba(255,255,255,0.3)] hover:text-white transition-colors flex-shrink-0',
-            !sidebarOpen && 'mx-auto ml-0'
-          )}
-          title={sidebarOpen ? 'Свернуть' : 'Развернуть'}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            {sidebarOpen
-              ? <path d="M10 4L6 8L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              : <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            }
-          </svg>
-        </button>
-      </div>
+      {/* Logo + toggle — two different layouts to avoid overflow clipping */}
+      {sidebarOpen ? (
+        <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
+          <GhostIcon size={24} className="text-accent flex-shrink-0" />
+          <span className="text-base font-medium tracking-tight text-white truncate flex-1">GhostLine</span>
+          <button
+            onClick={toggleSidebar}
+            className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors flex-shrink-0"
+            title="Свернуть"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M10 4L6 8L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center pt-4 pb-3 gap-3">
+          <GhostIcon size={22} className="text-accent" />
+          <button
+            onClick={toggleSidebar}
+            className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors"
+            title="Развернуть"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* New Chat */}
       <div className="px-3 mb-4">
@@ -254,7 +246,7 @@ export function Sidebar() {
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
                 <TokenIcon size={12} className="text-accent" />
-                <span>{formatTokens(balance)} / {formatTokens(maxTokens)}</span>
+                <span>{balance} токенов</span>
               </div>
               <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">
                 + Купить

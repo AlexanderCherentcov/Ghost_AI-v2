@@ -34,10 +34,24 @@ const IMAGE_NOUNS = [
 ];
 const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
 
+const EDIT_VERBS = [
+  'измени', 'изменить', 'отредактируй', 'отредактировать', 'сделай', 'поменяй', 'поменять',
+  'добавь', 'добавить', 'убери', 'убрать', 'замени', 'заменить', 'преврати', 'превратить',
+  'перекрась', 'раскрась', 'стилизуй', 'edit', 'change', 'modify', 'transform', 'remove', 'add',
+];
+
+// Edit-reference keywords — signals user wants to modify a previously generated image
+const IMAGE_REF_KEYWORDS = ['эту картинку', 'это изображение', 'её', 'ее', 'его', 'эту', 'это фото', 'картинку выше', 'изображение выше'];
+
 function isImageRequest(text: string): boolean {
   const lower = text.toLowerCase();
   if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
+}
+
+function isImageEditRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return EDIT_VERBS.some((v) => lower.includes(v)) && IMAGE_REF_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 function extractImagePrompt(content: string): string {
@@ -205,21 +219,21 @@ function ChatApp() {
   }, []);
 
   // ── Image generation ─────────────────────────────────────────────────────────
-  const handleGenerateImage = useCallback(async (prompt: string) => {
+  const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string) => {
     if (!prompt.trim()) return;
     setStreaming(true);
 
     const placeholderId = `gen-${Date.now()}`;
     setMessages((msgs) => [
       ...msgs,
-      { id: `u-${Date.now()}`, role: 'user', content: prompt },
+      { id: `u-${Date.now()}`, role: 'user', content: prompt, mediaUrl: sourceImageUrl },
       { id: placeholderId, role: 'assistant', content: '⏳ Генерирую изображение...' },
     ]);
 
     try {
       const { jobId } = await apiRequest<{ jobId: string }>('/generate/vision', {
         method: 'POST',
-        body: JSON.stringify({ prompt, ...(chatId ? { chatId } : {}) }),
+        body: JSON.stringify({ prompt, ...(chatId ? { chatId } : {}), ...(sourceImageUrl ? { sourceImageUrl } : {}) }),
       });
 
       const poll = async (): Promise<void> => {
@@ -263,6 +277,14 @@ function ChatApp() {
     const prompt = input.trim();
     if (!prompt || streaming) return;
     setInput('');
+
+    // Image edit: user wants to modify last generated image
+    if (isImageEditRequest(prompt)) {
+      const lastImage = [...messages].reverse().find((m) => m.role === 'assistant' && m.mediaUrl);
+      if (lastImage?.mediaUrl) {
+        return handleGenerateImage(prompt, lastImage.mediaUrl);
+      }
+    }
 
     if (isImageRequest(prompt)) {
       const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];

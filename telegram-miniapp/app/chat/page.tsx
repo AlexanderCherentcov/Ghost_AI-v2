@@ -103,16 +103,25 @@ function ChatApp() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
 
-  // Sync height with Telegram stable viewport (fixes input hidden under bottom nav)
+  // Sync height with Telegram viewport — updates dynamically when keyboard opens/closes
   useEffect(() => {
-    const h = window.Telegram?.WebApp?.viewportStableHeight;
-    if (h && h > 100) setVpHeight(`${h}px`);
+    const tgApp = (window.Telegram?.WebApp) as any;
+    if (!tgApp) return;
+
+    function updateHeight() {
+      const h = tgApp.viewportHeight ?? tgApp.viewportStableHeight;
+      if (h && h > 100) setVpHeight(`${h}px`);
+    }
+
+    updateHeight();
+    tgApp.onEvent?.('viewportChanged', updateHeight);
+    return () => tgApp.offEvent?.('viewportChanged', updateHeight);
   }, []);
 
-  // Auto-scroll
+  // Auto-scroll (also fires when keyboard opens → vpHeight changes)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamContent]);
+  }, [messages, streamContent, vpHeight]);
 
   // Close model dropdown on outside click
   useEffect(() => {

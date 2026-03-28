@@ -97,13 +97,14 @@ export default function ChatConversationPage({ params }: Props) {
 
   const [limitType, setLimitType] = useState<LimitType>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [messagesReady, setMessagesReady] = useState(false);
 
   // Load messages
   useEffect(() => {
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);
     api.chats.messages(id)
-      .then(({ messages }) => setMessages(messages))
+      .then(({ messages }) => { setMessages(messages); setMessagesReady(true); })
       .catch(() => router.replace('/chat'));
   }, [id]);
 
@@ -159,7 +160,7 @@ export default function ChatConversationPage({ params }: Props) {
 
   // ── Inline image generation ──────────────────────────────────────────────────
   const handleGenerateImage = useCallback(async (prompt: string) => {
-    if (!accessToken) return;
+    if (!accessToken || !messagesReady) return;
     setGeneratingImage(true);
 
     addMessage({
@@ -220,11 +221,11 @@ export default function ChatConversationPage({ params }: Props) {
     } finally {
       setGeneratingImage(false);
     }
-  }, [accessToken, user]);
+  }, [accessToken, user, messagesReady]);
 
   // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File) => {
-    if ((isStreaming || generatingImage) || !accessToken) return;
+    if ((isStreaming || generatingImage) || !accessToken || !messagesReady) return;
 
     // Auto-detect image intent → generate inline
     if (!file && prompt && isImageRequest(prompt)) {
@@ -353,9 +354,9 @@ export default function ChatConversationPage({ params }: Props) {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user, messagesReady]);
 
-  const busy = isStreaming || generatingImage;
+  const busy = isStreaming || generatingImage || !messagesReady;
 
   return (
     <div className="flex flex-col h-full">

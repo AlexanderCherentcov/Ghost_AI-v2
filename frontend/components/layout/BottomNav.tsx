@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 function IconHistory({ active }: { active: boolean }) {
@@ -55,12 +55,33 @@ const ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 h-[60px] bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden">
       {ITEMS.map(({ href, label, Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
-        return (
+        const handleClick = href === '/chat'
+          ? () => { sessionStorage.setItem('newChat', '1'); router.push('/chat'); }
+          : undefined;
+        return handleClick ? (
+          <button
+            key={href}
+            onClick={handleClick}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative',
+              isActive ? 'text-accent' : 'text-[rgba(255,255,255,0.3)]'
+            )}
+          >
+            {isActive && (
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-accent" />
+            )}
+            <span className={cn('flex items-center justify-center rounded-xl transition-all', isActive ? 'bg-[var(--accent-dim)] px-3 py-1' : 'px-2 py-1')}>
+              <Icon active={isActive} />
+            </span>
+            <span className="text-[10px] uppercase tracking-wider">{label}</span>
+          </button>
+        ) : (
           <Link
             key={href}
             href={href}
@@ -72,12 +93,7 @@ export function BottomNav() {
             {isActive && (
               <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-accent" />
             )}
-            <span
-              className={cn(
-                'flex items-center justify-center rounded-xl transition-all',
-                isActive ? 'bg-[var(--accent-dim)] px-3 py-1' : 'px-2 py-1'
-              )}
-            >
+            <span className={cn('flex items-center justify-center rounded-xl transition-all', isActive ? 'bg-[var(--accent-dim)] px-3 py-1' : 'px-2 py-1')}>
               <Icon active={isActive} />
             </span>
             <span className="text-[10px] uppercase tracking-wider">{label}</span>

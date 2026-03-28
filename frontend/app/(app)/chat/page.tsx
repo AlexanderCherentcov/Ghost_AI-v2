@@ -46,8 +46,10 @@ export default function ChatPage() {
 
   const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
 
-  // Redirect to last opened chat on refresh
+  // Redirect to last opened chat unless user intentionally navigated here (New Chat)
   useEffect(() => {
+    const isNewChat = sessionStorage.getItem('newChat');
+    if (isNewChat) { sessionStorage.removeItem('newChat'); return; }
     const lastId = localStorage.getItem('lastChatId');
     if (lastId) router.replace(`/chat/${lastId}`);
   }, []);

@@ -51,6 +51,7 @@ export function Sidebar() {
   const grouped = groupChats(chats);
 
   function handleNewChat() {
+    sessionStorage.setItem('newChat', '1');
     router.push('/chat');
   }
 

@@ -151,7 +151,7 @@ export default function ChatConversationPage({ params }: Props) {
     if (chat) setActiveChat(chat);
     api.chats.messages(id)
       .then(({ messages }) => { setMessages(messages); setMessagesReady(true); })
-      .catch(() => router.replace('/chat'));
+      .catch(() => { localStorage.removeItem('lastChatId'); router.replace('/chat'); });
   }, [id]);
 
   // Auto-send initial prompt — waits until history is loaded (messagesReady) to avoid race condition

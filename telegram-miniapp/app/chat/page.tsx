@@ -270,9 +270,6 @@ function ChatApp() {
     { key: 'deepseek',  label: 'Про' },
   ];
 
-  // BottomNav height ~60px visible + safe area
-  const NAV_H = 64;
-
   return (
     <div className="flex flex-col bg-[#0A0A12]" style={{ height: vpHeight }}>
       {/* Header */}
@@ -281,8 +278,8 @@ function ChatApp() {
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
       </div>
 
-      {/* Messages — flex-1, scrollable */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      {/* Messages — flex-1, scrollable, min-h-0 prevents flex overflow */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="text-5xl mb-4 animate-float">👻</div>
@@ -361,8 +358,11 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="flex-shrink-0 px-3 pt-2 pb-2 bg-[#0A0A12]">
+      {/* Input — paddingBottom pushes content above the fixed BottomNav */}
+      <div
+        className="flex-shrink-0 px-3 pt-2 bg-[#0A0A12]"
+        style={{ paddingBottom: 'calc(62px + env(safe-area-inset-bottom) + 8px)' }}
+      >
         <div
           className="flex flex-col rounded-2xl px-4 pt-3 pb-2.5 transition-all"
           style={{
@@ -448,8 +448,6 @@ function ChatApp() {
         </div>
       </div>
 
-      {/* Spacer для фиксированного BottomNav */}
-      <div className="flex-shrink-0" style={{ height: `calc(${NAV_H}px + env(safe-area-inset-bottom))` }} />
       <BottomNav />
     </div>
   );

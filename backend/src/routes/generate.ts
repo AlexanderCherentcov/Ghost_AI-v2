@@ -42,14 +42,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first (saves real generation credits)
       const mediaCached = await getMediaCached('vision', prompt);
       if (mediaCached.hit) {
-        await deductByModel(userId, 'black-forest-labs/flux-1.1-pro');
+        // TODO: re-enable after testing: await deductByModel(userId, 'black-forest-labs/flux-1.1-pro');
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'vision', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await deductByModel(userId, 'black-forest-labs/flux-1.1-pro');
+      // TODO: re-enable after testing: await deductByModel(userId, 'black-forest-labs/flux-1.1-pro');
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'vision', prompt },

@@ -116,6 +116,8 @@ export async function buildApp() {
     const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
     reply.header('Content-Type', mime);
     reply.header('Cache-Control', 'public, max-age=31536000');
+    // Allow cross-origin embedding (Helmet defaults to same-origin which blocks <img> from frontend domain)
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
     return reply.send(fs.createReadStream(filepath));
   });
 

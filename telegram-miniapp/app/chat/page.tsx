@@ -191,6 +191,13 @@ function ChatApp() {
     return () => tgApp.offEvent?.('viewportChanged', updateHeight);
   }, []);
 
+  // Sync chatId → URL so page refresh reopens the same chat
+  useEffect(() => {
+    if (chatId) {
+      router.replace(`/chat?id=${chatId}`);
+    }
+  }, [chatId]);
+
   // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

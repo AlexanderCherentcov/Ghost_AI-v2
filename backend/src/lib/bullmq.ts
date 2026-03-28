@@ -16,8 +16,18 @@ const defaultQueueOptions: QueueOptions = {
   },
 };
 
-export const visionQueue = new Queue('vision', defaultQueueOptions);
-export const soundQueue = new Queue('sound', defaultQueueOptions);
-export const reelQueue = new Queue('reel', defaultQueueOptions);
+// Image/sound/video generation: no retries — each attempt charges real money
+const mediaQueueOptions: QueueOptions = {
+  connection,
+  defaultJobOptions: {
+    attempts: 1,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
+  },
+};
+
+export const visionQueue = new Queue('vision', mediaQueueOptions);
+export const soundQueue = new Queue('sound', mediaQueueOptions);
+export const reelQueue = new Queue('reel', mediaQueueOptions);
 
 export { connection as bullmqConnection };

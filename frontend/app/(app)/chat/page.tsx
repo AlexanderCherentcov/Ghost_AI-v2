@@ -1,14 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { InputBar } from '@/components/chat/InputBar';
-import { ChatQuickActions, type QuickMode } from '@/components/chat/ChatQuickActions';
-import { VisionIcon, ThinkIcon, ChatIcon } from '@/components/icons';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
@@ -34,7 +32,6 @@ async function resizeImageToBase64(file: File): Promise<string> {
   });
 }
 
-// Quick suggestions shown on empty state
 const SUGGESTIONS = [
   { icon: '✍️', text: 'Напиши краткое резюме' },
   { icon: '🌍', text: 'Переведи текст на английский' },
@@ -42,25 +39,72 @@ const SUGGESTIONS = [
   { icon: '🔍', text: 'Объясни простыми словами' },
 ];
 
+function ModelSelector({ preferredModel, setPreferredModel }: {
+  preferredModel: 'haiku' | 'deepseek' | undefined;
+  setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const options: { key: 'haiku' | 'deepseek' | undefined; label: string }[] = [
+    { key: undefined,  label: 'Авто' },
+    { key: 'haiku',    label: 'Стандарт' },
+    { key: 'deepseek', label: 'Про' },
+  ];
+
+  const current = options.find(o => o.key === preferredModel) ?? options[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)] transition-colors px-2 py-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.05)]"
+      >
+        {current.label}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl min-w-[110px]">
+          {options.map(opt => (
+            <button
+              key={String(opt.key)}
+              onClick={() => { setPreferredModel(opt.key); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-xs transition-colors hover:bg-[rgba(255,255,255,0.05)] ${
+                preferredModel === opt.key ? 'text-accent' : 'text-[rgba(255,255,255,0.65)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const router = useRouter();
-  const { addChat, mode, setMode, preferredModel, setPreferredModel } = useChatStore();
+  const { addChat, preferredModel, setPreferredModel } = useChatStore();
   const { user } = useAuthStore();
-  const [quickMode, setQuickMode] = useState<QuickMode>(null);
 
   const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
-  const isPaidPlan = user?.plan !== 'FREE';
 
   async function handleSend(prompt: string, file?: File) {
-    const chatMode = quickMode === 'image-edit' ? 'vision' : mode;
-    const chat = await api.chats.create({ mode: chatMode as any });
+    const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
 
-    if (quickMode === 'image-create') {
-      sessionStorage.setItem('initialImagePrompt', prompt);
-    } else {
-      sessionStorage.setItem('initialPrompt', prompt);
-    }
+    sessionStorage.setItem('initialPrompt', prompt);
+
     if (file) {
       const category = getFileCategory(file);
       sessionStorage.setItem('initialFileName', file.name);
@@ -89,7 +133,12 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Empty state — Gemini-style */}
+      {/* Model selector — top right */}
+      <div className="flex items-center justify-end px-4 py-1.5 flex-shrink-0">
+        <ModelSelector preferredModel={preferredModel} setPreferredModel={setPreferredModel} />
+      </div>
+
+      {/* Empty state */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -97,10 +146,8 @@ export default function ChatPage() {
           transition={{ duration: 0.4 }}
           className="w-full max-w-[640px] text-center"
         >
-          {/* Ghost icon */}
           <GhostIcon size={44} className="text-accent animate-float mx-auto mb-6" animated />
 
-          {/* Greeting */}
           <h1 className="text-[clamp(22px,5vw,36px)] font-normal tracking-tight text-white mb-1">
             Здравствуйте, {firstName}!
           </h1>
@@ -108,7 +155,6 @@ export default function ChatPage() {
             С чего начнём?
           </p>
 
-          {/* Suggestion chips */}
           <div className="flex flex-wrap gap-2 justify-center mb-8">
             {SUGGESTIONS.map(({ icon, text }) => (
               <button
@@ -121,60 +167,12 @@ export default function ChatPage() {
               </button>
             ))}
           </div>
-
-          {/* Mode + model pills */}
-          <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
-            {/* Think mode toggle */}
-            <button
-              onClick={() => setMode(mode === 'think' ? 'chat' : 'think')}
-              title={!isPaidPlan ? 'Только для платных тарифов' : undefined}
-              disabled={!isPaidPlan}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all ${
-                !isPaidPlan
-                  ? 'border-[var(--border)] text-[rgba(255,255,255,0.2)] cursor-default'
-                  : mode === 'think'
-                    ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                    : 'border-[var(--border)] text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
-              }`}
-            >
-              <ThinkIcon size={12} />
-              Думать
-              {!isPaidPlan && <span className="text-[9px] bg-[rgba(255,200,50,0.15)] text-[rgba(255,200,50,0.8)] px-1 py-0.5 rounded-full ml-0.5">PRO</span>}
-            </button>
-
-            {/* Model selector */}
-            <div className="flex items-center gap-0.5 rounded-full border border-[var(--border)] p-0.5">
-              {([
-                { key: 'haiku',   label: '⚡ Быстрая' },
-                { key: 'deepseek', label: '🧠 Про' },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setPreferredModel(preferredModel === key ? undefined : key)}
-                  className={`px-3 py-1 rounded-full text-xs transition-all ${
-                    preferredModel === key
-                      ? 'bg-[var(--bg-elevated)] text-white'
-                      : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
         </motion.div>
       </div>
 
-      {/* Quick actions + input at bottom */}
-      <ChatQuickActions onSelect={setQuickMode} activeMode={quickMode} isPaidPlan={isPaidPlan} />
       <InputBar
         onSend={handleSend}
-        placeholder={
-          quickMode === 'image-create' ? '✨ Опишите картинку...' :
-          quickMode === 'image-edit'   ? '🎨 Прикрепите фото и опишите изменения...' :
-          mode === 'think'             ? '🧠 Сложная задача для глубокого анализа...' :
-          'Спросите что-нибудь у GhostLine...'
-        }
+        placeholder="Спросите что-нибудь у GhostLine..."
       />
     </div>
   );

@@ -2,19 +2,17 @@
 
 import { useEffect, useCallback, use, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar } from '@/components/chat/InputBar';
-import { ChatQuickActions, type QuickMode } from '@/components/chat/ChatQuickActions';
 import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
 
-// Keywords that trigger image generation routing
+// Keywords that trigger image generation
 const IMAGE_KEYWORDS = [
   'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
   'сгенерируй', 'сгенерировать', 'generate image', 'draw', 'создай изображение',
@@ -27,7 +25,6 @@ function isImageRequest(text: string): boolean {
   return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-/** Resize an image File to max 800px and return as base64 JPEG data URL */
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -41,8 +38,7 @@ async function resizeImageToBase64(file: File): Promise<string> {
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * ratio);
         canvas.height = Math.round(img.height * ratio);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL('image/jpeg', 0.72));
       };
       img.src = e.target!.result as string;
@@ -60,6 +56,59 @@ async function readFileAsText(file: File): Promise<string> {
   });
 }
 
+function ModelSelector({ preferredModel, setPreferredModel }: {
+  preferredModel: 'haiku' | 'deepseek' | undefined;
+  setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const options: { key: 'haiku' | 'deepseek' | undefined; label: string }[] = [
+    { key: undefined,  label: 'Авто' },
+    { key: 'haiku',    label: 'Стандарт' },
+    { key: 'deepseek', label: 'Про' },
+  ];
+
+  const current = options.find(o => o.key === preferredModel) ?? options[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)] transition-colors px-2 py-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.05)]"
+      >
+        {current.label}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl min-w-[110px]">
+          {options.map(opt => (
+            <button
+              key={String(opt.key)}
+              onClick={() => { setPreferredModel(opt.key); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-xs transition-colors hover:bg-[rgba(255,255,255,0.05)] ${
+                preferredModel === opt.key ? 'text-accent' : 'text-[rgba(255,255,255,0.65)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -71,14 +120,12 @@ export default function ChatConversationPage({ params }: Props) {
   const { show: showToast } = useToast();
   const {
     messages, setMessages, addMessage, appendStreamToken,
-    commitStream, setStreaming, isStreaming, mode, setMode,
+    commitStream, setStreaming, isStreaming, mode,
     setActiveChat, chats, preferredModel, setPreferredModel,
   } = useChatStore();
 
-  const [quickMode, setQuickMode] = useState<QuickMode>(null);
   const [limitType, setLimitType] = useState<LimitType>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [imageSuggestion, setImageSuggestion] = useState<string | null>(null);
 
   // Load messages
   useEffect(() => {
@@ -139,13 +186,11 @@ export default function ChatConversationPage({ params }: Props) {
     return unsub;
   }, []);
 
-  // ── Inline image generation ─────────────────────────────────────────────────
+  // ── Inline image generation ──────────────────────────────────────────────────
   const handleGenerateImage = useCallback(async (prompt: string) => {
     if (!accessToken) return;
     setGeneratingImage(true);
-    setImageSuggestion(null);
 
-    // Add user message
     addMessage({
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -157,7 +202,6 @@ export default function ChatConversationPage({ params }: Props) {
       createdAt: new Date().toISOString(),
     });
 
-    // Placeholder "generating" message
     const placeholderId = `gen-${Date.now()}`;
     addMessage({
       id: placeholderId,
@@ -173,13 +217,11 @@ export default function ChatConversationPage({ params }: Props) {
     try {
       const { jobId } = await api.generate.vision({ prompt, size: '1024x1024' });
 
-      // Poll for result
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);
         if (job.status === 'done' && job.mediaUrl) {
-          const { setMessages } = useChatStore.getState();
           const current = useChatStore.getState().messages;
-          setMessages(current.map((m) =>
+          useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
               ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 }
               : m
@@ -189,9 +231,8 @@ export default function ChatConversationPage({ params }: Props) {
             setUser({ ...user, balanceImages: Math.max(0, user.balanceImages - 10) });
           }
         } else if (job.status === 'failed') {
-          const { setMessages } = useChatStore.getState();
           const current = useChatStore.getState().messages;
-          setMessages(current.map((m) =>
+          useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
               ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать изображение'}` }
               : m
@@ -214,25 +255,11 @@ export default function ChatConversationPage({ params }: Props) {
   const handleSend = useCallback(async (prompt: string, file?: File) => {
     if ((isStreaming || generatingImage) || !accessToken) return;
 
-    // Auto-route: image-create mode → generate inline
-    if (quickMode === 'image-create') {
-      setQuickMode(null);
+    // Auto-detect image intent → generate inline
+    if (!file && prompt && isImageRequest(prompt)) {
       return handleGenerateImage(prompt);
     }
 
-    // Auto-detect image intent in plain chat → show suggestion banner
-    if (quickMode === null && prompt && isImageRequest(prompt)) {
-      setImageSuggestion(prompt);
-      return;
-    }
-
-    // image-edit: attach file to prompt for vision API
-    if (quickMode === 'image-edit' && !file) {
-      showToast('Прикрепите фото для редактирования', 'warning');
-      return;
-    }
-
-    // ── Process attached file ────────────────────────────────────────────────
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
@@ -345,94 +372,26 @@ export default function ChatConversationPage({ params }: Props) {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user, quickMode]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user]);
 
   const busy = isStreaming || generatingImage;
 
   return (
     <div className="flex flex-col h-full">
       <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
-      <ChatWindow onSuggestion={handleSend} />
 
-      {/* Image suggestion banner (auto-detected intent) */}
-      <AnimatePresence>
-        {imageSuggestion && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="mx-4 mb-2 max-w-[720px] mx-auto w-full"
-          >
-            <div className="bg-[rgba(92,140,240,0.08)] border border-[rgba(92,140,240,0.25)] rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-lg">🖼️</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-[rgba(255,255,255,0.6)]">Похоже, вы хотите создать изображение</p>
-                <p className="text-xs text-[rgba(255,255,255,0.3)] truncate">«{imageSuggestion}»</p>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button
-                  onClick={() => { const p = imageSuggestion; setImageSuggestion(null); handleGenerateImage(p); }}
-                  className="text-xs px-3 py-1.5 bg-[#5C8CF0] text-white rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  Создать
-                </button>
-                <button
-                  onClick={() => { const p = imageSuggestion; setImageSuggestion(null); handleSend(p); }}
-                  className="text-xs px-3 py-1.5 border border-[var(--border)] text-[rgba(255,255,255,0.5)] rounded-lg hover:text-white transition-colors"
-                >
-                  Чат
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Quick actions bar */}
-      <ChatQuickActions
-        onSelect={setQuickMode}
-        activeMode={quickMode}
-        isPaidPlan={user?.plan !== 'FREE'}
-      />
-
-      {/* Model selector */}
-      <div className="flex items-center gap-1.5 px-4 pb-2 max-w-[720px] mx-auto w-full">
-        <span className="text-[11px] text-[rgba(255,255,255,0.3)] mr-1">Модель:</span>
-        {([
-          { key: 'haiku' as const,    label: '⚡ Быстрая' },
-          { key: 'deepseek' as const, label: '🧠 Про' },
-        ]).map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setPreferredModel(preferredModel === key ? undefined : key)}
-            className={`px-3 py-1 rounded-full text-[11px] border transition-all ${
-              preferredModel === key
-                ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                : 'border-[var(--border)] text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.6)]'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        {preferredModel && (
-          <button
-            onClick={() => setPreferredModel(undefined)}
-            className="ml-1 text-[10px] text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.5)] transition-colors"
-          >
-            Авто
-          </button>
-        )}
+      {/* Top bar: model selector */}
+      <div className="flex items-center justify-end px-4 py-1.5 flex-shrink-0">
+        <ModelSelector preferredModel={preferredModel} setPreferredModel={setPreferredModel} />
       </div>
+
+      <ChatWindow onSuggestion={handleSend} />
 
       <InputBar
         onSend={handleSend}
         onStop={() => { abortStream(); setStreaming(false); }}
         isStreaming={busy}
-        placeholder={
-          quickMode === 'image-create' ? '✨ Опишите картинку которую хотите создать...' :
-          quickMode === 'image-edit'   ? '🎨 Прикрепите фото и опишите изменения...' :
-          'Продолжайте диалог...'
-        }
+        placeholder="Продолжайте диалог..."
       />
     </div>
   );

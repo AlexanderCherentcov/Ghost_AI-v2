@@ -2,7 +2,7 @@
 
 import { useState, useRef, KeyboardEvent } from 'react';
 import { motion } from 'framer-motion';
-import { SendIcon, AttachIcon } from '@/components/icons';
+import { SendIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 // ─── Accepted file types ──────────────────────────────────────────────────────
@@ -196,7 +196,9 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
             title="Прикрепить файл (изображение, PDF, Word, Excel, код и другие)"
             type="button"
           >
-            <AttachIcon size={18} />
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 3.5V14.5M3.5 9H14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
           </button>
 
           {/* Textarea */}

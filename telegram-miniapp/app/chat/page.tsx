@@ -18,12 +18,23 @@ interface Message {
   mediaUrl?: string | null;
 }
 
-type ChatMode = 'chat' | 'image';
 type ModelChoice = 'haiku' | 'deepseek';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
   ?? API_URL.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+
+const IMAGE_KEYWORDS = [
+  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
+  'сгенерируй', 'сгенерировать', 'generate image', 'draw', 'создай изображение',
+  'создать изображение', 'нарисуй мне', 'хочу картинку', 'сделай картинку',
+  'покажи картинку', 'изображение в стиле',
+];
+
+function isImageRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
+}
 
 export default function TgChatPage() {
   return (
@@ -41,35 +52,46 @@ function ChatApp() {
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const [chatId, setChatId] = useState<string | null>(null);
-  const [chatMode, setChatMode] = useState<ChatMode>('chat');
   const [model, setModel] = useState<ModelChoice>('haiku');
-  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const modelRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamContent]);
 
-  // Close menu on outside click
+  // Close model dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setModeMenuOpen(false);
+      if (modelRef.current && !modelRef.current.contains(e.target as Node)) {
+        setModelOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Init chat
+  // Init: load last chat or create new
   useEffect(() => {
-    apiRequest<{ id: string }>('/chats', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'chat' }),
-    }).then((chat) => setChatId(chat.id)).catch(() => {});
+    apiRequest<{ chats: Array<{ id: string }> }>('/chats')
+      .then(async ({ chats }) => {
+        if (chats.length > 0) {
+          const id = chats[0].id;
+          setChatId(id);
+          const { messages: msgs } = await apiRequest<{ messages: Message[] }>(`/chats/${id}/messages`);
+          setMessages(msgs);
+        } else {
+          const chat = await apiRequest<{ id: string }>('/chats', {
+            method: 'POST',
+            body: JSON.stringify({ mode: 'chat' }),
+          });
+          setChatId(chat.id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // WS
@@ -175,7 +197,8 @@ function ChatApp() {
     if (!prompt || streaming) return;
     setInput('');
 
-    if (chatMode === 'image') {
+    // Auto-detect image request
+    if (isImageRequest(prompt)) {
       return handleGenerateImage(prompt);
     }
 
@@ -197,13 +220,13 @@ function ChatApp() {
       jwt: token,
       preferredModel: model,
     }));
-  }, [input, streaming, chatId, messages, tg, chatMode, model, handleGenerateImage]);
+  }, [input, streaming, chatId, messages, tg, model, handleGenerateImage]);
 
   const isEmpty = !messages.length && !streaming;
 
-  const MODE_LABELS: Record<ChatMode, string> = {
-    chat: '💬 Чат',
-    image: '🖼️ Картинка',
+  const modelLabels: Record<ModelChoice, string> = {
+    haiku: 'Стандарт',
+    deepseek: 'Про',
   };
 
   return (
@@ -212,24 +235,49 @@ function ChatApp() {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
-        {/* Model toggle */}
-        <div className="flex items-center gap-0.5 rounded-full p-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          {([
-            { key: 'haiku' as const,    label: '⚡' },
-            { key: 'deepseek' as const, label: '🧠' },
-          ]).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setModel(key)}
-              className="px-2.5 py-1 rounded-full text-sm transition-all"
-              style={{
-                background: model === key ? 'rgba(123,92,240,0.25)' : 'transparent',
-                color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.3)',
-              }}
-            >
-              {label}
-            </button>
-          ))}
+
+        {/* Model selector dropdown */}
+        <div className="relative" ref={modelRef}>
+          <button
+            onClick={() => setModelOpen(v => !v)}
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-all"
+            style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)' }}
+          >
+            {modelLabels[model]}
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <AnimatePresence>
+            {modelOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                transition={{ duration: 0.12 }}
+                className="absolute top-full right-0 mt-1 z-50 rounded-xl overflow-hidden shadow-xl"
+                style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '110px' }}
+              >
+                {([
+                  { key: undefined,    label: 'Авто' },
+                  { key: 'haiku' as const,    label: 'Стандарт' },
+                  { key: 'deepseek' as const, label: 'Про' },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={String(key)}
+                    onClick={() => { if (key) setModel(key); else setModel('haiku'); setModelOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-xs transition-all"
+                    style={{
+                      color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
+                      background: 'transparent',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -240,7 +288,7 @@ function ChatApp() {
             <div className="text-5xl mb-4 animate-float">👻</div>
             <p className="text-white font-medium mb-1">Чем займёмся?</p>
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {chatMode === 'image' ? 'Опишите картинку' : 'Напишите что-нибудь'}
+              Напишите что-нибудь или попросите создать картинку
             </p>
           </div>
         ) : (
@@ -304,60 +352,11 @@ function ChatApp() {
       {/* Input */}
       <div className="fixed bottom-[60px] left-0 right-0 px-3 py-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]">
         <div className="flex gap-2 items-end">
-          {/* Mode popup button */}
-          <div className="relative flex-shrink-0" ref={menuRef}>
-            <button
-              onClick={() => setModeMenuOpen((v) => !v)}
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-sm transition-all"
-              style={{
-                background: modeMenuOpen ? 'rgba(123,92,240,0.2)' : 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: modeMenuOpen ? '#7B5CF0' : 'rgba(255,255,255,0.4)',
-              }}
-            >
-              {chatMode === 'image' ? '🖼️' : '💬'}
-            </button>
-
-            <AnimatePresence>
-              {modeMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute bottom-full mb-2 left-0 z-50 rounded-2xl overflow-hidden shadow-xl"
-                  style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', width: '180px' }}
-                >
-                  {([
-                    { mode: 'chat' as const,  icon: '💬', label: 'Обычный чат',  desc: 'Диалог с AI' },
-                    { mode: 'image' as const, icon: '🖼️', label: 'Создать картинку', desc: 'Генерация AI' },
-                  ]).map(({ mode: m, icon, label, desc }) => (
-                    <button
-                      key={m}
-                      onClick={() => { setChatMode(m); setModeMenuOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all"
-                      style={{
-                        background: chatMode === m ? 'rgba(123,92,240,0.12)' : 'transparent',
-                        color: chatMode === m ? '#7B5CF0' : 'rgba(255,255,255,0.75)',
-                      }}
-                    >
-                      <span className="text-lg">{icon}</span>
-                      <div>
-                        <p className="text-xs font-medium">{label}</p>
-                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{desc}</p>
-                      </div>
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder={chatMode === 'image' ? 'Опишите картинку...' : 'Сообщение...'}
+            placeholder="Сообщение..."
             style={{ fontSize: '16px' }}
             className="flex-1 h-11"
             disabled={streaming}
@@ -371,22 +370,6 @@ function ChatApp() {
             ↑
           </button>
         </div>
-
-        {/* Active mode indicator */}
-        {chatMode !== 'chat' && (
-          <div className="flex items-center gap-1.5 mt-1.5 px-1">
-            <span className="text-[10px]" style={{ color: '#7B5CF0' }}>
-              {MODE_LABELS[chatMode]}
-            </span>
-            <button
-              onClick={() => setChatMode('chat')}
-              className="text-[10px]"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
-            >
-              ✕
-            </button>
-          </div>
-        )}
       </div>
 
       <BottomNav />

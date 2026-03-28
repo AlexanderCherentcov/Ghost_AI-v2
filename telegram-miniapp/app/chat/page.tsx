@@ -40,21 +40,14 @@ function isImageRequest(text: string): boolean {
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
 }
 
-async function downloadImage(url: string) {
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `ghostline-${Date.now()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-  } catch {
-    window.open(url, '_blank');
+function downloadImage(url: string) {
+  // Telegram WebApp: use openLink to open in browser where user can save
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.openLink(url);
+    return;
   }
+  window.open(url, '_blank');
 }
 
 export default function TgChatPage() {

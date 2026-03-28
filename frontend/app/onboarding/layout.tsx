@@ -1,8 +1,25 @@
 'use client';
 
+import { useEffect } from 'react';
 import { GhostIcon } from '@/components/icons/GhostIcon';
+import { api, setAccessToken } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
+  // Onboarding pages are outside (app) group — refresh token manually
+  // so accessToken is available when user reloads the page mid-onboarding
+  useEffect(() => {
+    const { refreshToken, setAuth } = useAuthStore.getState();
+    if (!refreshToken) return;
+    api.auth.refreshToken(refreshToken)
+      .then(async ({ accessToken, refreshToken: newRT }) => {
+        setAccessToken(accessToken);
+        const me = await api.auth.me();
+        setAuth(me, accessToken, newRT);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--bg-void)] flex flex-col">
       {/* Header */}

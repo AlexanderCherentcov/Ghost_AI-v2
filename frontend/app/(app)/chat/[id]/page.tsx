@@ -28,6 +28,27 @@ function isImageRequest(text: string): boolean {
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
 }
 
+// Extract clean image prompt from markdown (strips headers, bold markers, bullet points etc.)
+function extractImagePrompt(content: string): string {
+  // Try to grab the longest bold **...** span — usually the actual prompt
+  const boldMatches = content.match(/\*\*([^*]{30,})\*\*/g);
+  if (boldMatches && boldMatches.length > 0) {
+    const longest = boldMatches
+      .map((m) => m.replace(/\*\*/g, '').trim())
+      .sort((a, b) => b.length - a.length)[0];
+    if (longest) return longest.slice(0, 600);
+  }
+  // Fallback: strip all markdown formatting
+  return content
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/---+/g, '')
+    .replace(/\n+/g, ' ')
+    .trim()
+    .slice(0, 600);
+}
+
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -214,7 +235,7 @@ export default function ChatConversationPage({ params }: Props) {
       if (isRef) {
         const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
         if (lastAssistant) {
-          return handleGenerateImage(lastAssistant.content);
+          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
         }
       }
       return handleGenerateImage(prompt);

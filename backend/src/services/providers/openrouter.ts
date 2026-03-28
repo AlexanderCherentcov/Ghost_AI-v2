@@ -88,7 +88,7 @@ export async function generateImageFlux(
     },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: `Generate an image. Visual scene description: ${prompt}` }],
       modalities: ['image'],
     }),
   });

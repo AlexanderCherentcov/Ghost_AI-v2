@@ -40,6 +40,24 @@ function isImageRequest(text: string): boolean {
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
 }
 
+function extractImagePrompt(content: string): string {
+  const boldMatches = content.match(/\*\*([^*]{30,})\*\*/g);
+  if (boldMatches && boldMatches.length > 0) {
+    const longest = boldMatches
+      .map((m) => m.replace(/\*\*/g, '').trim())
+      .sort((a, b) => b.length - a.length)[0];
+    if (longest) return longest.slice(0, 600);
+  }
+  return content
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/---+/g, '')
+    .replace(/\n+/g, ' ')
+    .trim()
+    .slice(0, 600);
+}
+
 async function downloadImage(url: string) {
   // For data URIs — convert to blob and download directly
   if (url.startsWith('data:')) {
@@ -245,7 +263,7 @@ function ChatApp() {
       if (isRef) {
         const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
         if (lastAssistant) {
-          return handleGenerateImage(lastAssistant.content);
+          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
         }
       }
       return handleGenerateImage(prompt);

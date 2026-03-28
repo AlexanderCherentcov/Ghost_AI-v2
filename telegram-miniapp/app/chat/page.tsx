@@ -259,14 +259,12 @@ function ChatApp() {
   }, [tg, router, chatId]);
 
   // ── Chat send ─────────────────────────────────────────────────────────────────
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const prompt = input.trim();
     if (!prompt || streaming) return;
     setInput('');
 
     if (isImageRequest(prompt)) {
-      // If user refers to a previous message ("по этому промту", "по нему" etc.)
-      // use the last assistant message as the actual image prompt
       const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
       const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
       if (isRef) {
@@ -278,7 +276,21 @@ function ChatApp() {
       return handleGenerateImage(prompt);
     }
 
-    if (!chatId) return;
+    // If chatId not yet set (init still loading) — create chat on the fly
+    let activeChatId = chatId;
+    if (!activeChatId) {
+      try {
+        const chat = await apiRequest<{ id: string }>('/chats', {
+          method: 'POST',
+          body: JSON.stringify({ mode: 'chat' }),
+        });
+        activeChatId = chat.id;
+        setChatId(chat.id);
+      } catch {
+        return;
+      }
+    }
+
     tg?.HapticFeedback.impactOccurred('medium');
 
     setMessages((msgs) => [
@@ -289,7 +301,7 @@ function ChatApp() {
 
     const token = getToken() ?? '';
     wsRef.current?.send(JSON.stringify({
-      chatId,
+      chatId: activeChatId,
       mode: 'chat',
       prompt,
       history: messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
@@ -317,6 +329,22 @@ function ChatApp() {
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
+        {/* New chat button */}
+        <button
+          type="button"
+          onClick={() => {
+            setMessages([]);
+            setChatId(null);
+            tg?.HapticFeedback.impactOccurred('light');
+          }}
+          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
+          style={{ color: 'rgba(255,255,255,0.4)' }}
+          title="Новый чат"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+          </svg>
+        </button>
       </div>
 
       {/* Messages — flex-1, scrollable, min-h-0 prevents flex overflow */}

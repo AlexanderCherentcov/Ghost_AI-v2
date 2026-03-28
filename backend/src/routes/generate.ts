@@ -69,12 +69,15 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         data: { userId, mode: 'vision', prompt },
       });
 
+      // FREE plan: quality locked to 1024x1024 (no HD sizes)
+      const effectiveSize = userPlan?.plan === 'FREE' ? '1024x1024' : (size ?? '1024x1024');
+
       const bullJob = await visionQueue.add('generate-image', {
         jobId: job.id,
         userId,
         prompt,
         chatId: chatId ?? null,
-        size: size ?? '1024x1024',
+        size: effectiveSize,
       });
 
       await prisma.generateJob.update({

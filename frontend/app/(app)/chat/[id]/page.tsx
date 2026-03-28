@@ -371,6 +371,8 @@ export default function ChatConversationPage({ params }: Props) {
         placeholder="Продолжайте диалог..."
         preferredModel={preferredModel}
         setPreferredModel={setPreferredModel}
+        userPlan={user?.plan}
+        onUpgradeRequired={() => setLimitType('pro')}
       />
     </div>
   );

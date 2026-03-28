@@ -34,7 +34,7 @@ export async function refreshFreeQuota(userId: string, plan: string): Promise<vo
   // Daily messages: reset if last reset was before today (UTC midnight)
   const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   if (!user.freeDailyMsgsReset || user.freeDailyMsgsReset < todayUTC) {
-    updates.balanceMessages = 5;
+    updates.balanceMessages = 10;
     updates.freeDailyMsgsReset = now;
   }
 

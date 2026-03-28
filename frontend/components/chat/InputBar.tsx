@@ -88,9 +88,13 @@ const MODEL_OPTIONS: { key: 'haiku' | 'deepseek' | undefined; label: string }[] 
 function ModelPill({
   preferredModel,
   setPreferredModel,
+  userPlan,
+  onUpgradeRequired,
 }: {
   preferredModel: 'haiku' | 'deepseek' | undefined;
   setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
+  userPlan?: string;
+  onUpgradeRequired?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -128,21 +132,31 @@ function ModelPill({
             className="absolute bottom-full mb-2 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl"
             style={{ minWidth: '130px' }}
           >
-            {MODEL_OPTIONS.map(opt => (
-              <button
-                key={String(opt.key)}
-                type="button"
-                onClick={() => { setPreferredModel(opt.key); setOpen(false); }}
-                className={cn(
-                  'w-full text-left px-4 py-2.5 text-[12px] transition-colors hover:bg-[rgba(255,255,255,0.05)]',
-                  preferredModel === opt.key
-                    ? 'text-accent'
-                    : 'text-[rgba(255,255,255,0.65)]'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {MODEL_OPTIONS.map(opt => {
+              const isProLocked = opt.key === 'deepseek' && userPlan === 'FREE';
+              return (
+                <button
+                  key={String(opt.key)}
+                  type="button"
+                  onClick={() => {
+                    if (isProLocked) { onUpgradeRequired?.(); setOpen(false); return; }
+                    setPreferredModel(opt.key);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-4 py-2.5 text-[12px] transition-colors hover:bg-[rgba(255,255,255,0.05)] flex items-center justify-between',
+                    preferredModel === opt.key
+                      ? 'text-accent'
+                      : 'text-[rgba(255,255,255,0.65)]'
+                  )}
+                >
+                  {opt.label}
+                  {isProLocked && (
+                    <span className="text-[10px] text-[rgba(123,92,240,0.7)] ml-2">PRO</span>
+                  )}
+                </button>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -160,11 +174,13 @@ interface InputBarProps {
   placeholder?: string;
   preferredModel?: 'haiku' | 'deepseek' | undefined;
   setPreferredModel?: (m: 'haiku' | 'deepseek' | undefined) => void;
+  userPlan?: string;
+  onUpgradeRequired?: () => void;
 }
 
 export function InputBar({
   onSend, onStop, disabled = false, isStreaming = false,
-  placeholder, preferredModel, setPreferredModel,
+  placeholder, preferredModel, setPreferredModel, userPlan, onUpgradeRequired,
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -295,6 +311,8 @@ export function InputBar({
                 <ModelPill
                   preferredModel={preferredModel}
                   setPreferredModel={setPreferredModel}
+                  userPlan={userPlan}
+                  onUpgradeRequired={onUpgradeRequired}
                 />
               )}
             </div>

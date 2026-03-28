@@ -124,22 +124,22 @@ function FileChip({ name }: { name: string }) {
 }
 
 async function downloadImage(url: string) {
-  // data URI — fetch locally and download
-  if (url.startsWith('data:')) {
-    const res = await fetch(url);
+  try {
+    const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
+    const ext = blob.type.includes('png') ? 'png' : 'jpg';
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = `ghostline-${Date.now()}.jpg`;
+    a.download = `ghostline-${Date.now()}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-    return;
+  } catch {
+    // Fallback: open in new tab
+    window.open(url, '_blank');
   }
-  // Remote URL — open in new tab (avoids CORS fetch issues)
-  window.open(url, '_blank');
 }
 
 function MediaContent({ mediaUrl, mode }: { mediaUrl: string; mode: string }) {

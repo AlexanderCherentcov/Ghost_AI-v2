@@ -4,6 +4,20 @@ import { prisma } from '../lib/prisma.js';
 import { generateImageFlux } from '../services/providers/openrouter.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'images');
+
+function saveDataUri(dataUri: string): string {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  const [header, base64] = dataUri.split(',');
+  const ext = header.includes('png') ? 'png' : 'jpg';
+  const filename = `${crypto.randomUUID()}.${ext}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, filename), Buffer.from(base64, 'base64'));
+  return `${process.env.API_URL ?? 'http://localhost:4000'}/images/${filename}`;
+}
 
 interface VisionJob {
   jobId: string;
@@ -24,7 +38,12 @@ export function startVisionWorker() {
         data: { status: 'processing' },
       });
 
-      const mediaUrl = await generateImageFlux(prompt);
+      let mediaUrl = await generateImageFlux(prompt);
+
+      // If Gemini returned a base64 data URI — save to disk and use HTTP URL
+      if (mediaUrl.startsWith('data:')) {
+        mediaUrl = saveDataUri(mediaUrl);
+      }
 
       await prisma.generateJob.update({
         where: { id: jobId },

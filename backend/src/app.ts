@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
+import fs from 'node:fs';
+import path from 'node:path';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
@@ -100,6 +102,22 @@ export async function buildApp() {
   await fastify.register(uploadRoutes, { prefix: '/api' });
   await fastify.register(paymentRoutes, { prefix: '/api' });
   await fastify.register(generateRoutes, { prefix: '/api' });
+
+  // ── Static image serving (generated images saved to disk) ────────────────
+  fastify.get('/images/:filename', async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    // Prevent path traversal
+    if (filename.includes('/') || filename.includes('..')) {
+      return reply.code(400).send({ error: 'Invalid filename' });
+    }
+    const filepath = path.join(process.cwd(), 'uploads', 'images', filename);
+    if (!fs.existsSync(filepath)) return reply.code(404).send({ error: 'Not found' });
+    const ext = path.extname(filename).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+    reply.header('Content-Type', mime);
+    reply.header('Cache-Control', 'public, max-age=31536000');
+    return reply.send(fs.createReadStream(filepath));
+  });
 
   // ── Health check ──────────────────────────────────────────────────────────
   fastify.get('/health', async () => ({

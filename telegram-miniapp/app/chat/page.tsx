@@ -72,6 +72,7 @@ function ChatApp() {
   const [modelOpen, setModelOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll
@@ -89,6 +90,13 @@ function ChatApp() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  function handleTextareaInput() {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }
 
   // Init: load last chat or create new
   useEffect(() => {
@@ -259,49 +267,6 @@ function ChatApp() {
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
-
-        {/* Model selector */}
-        <div className="relative" ref={modelRef}>
-          <button
-            onClick={() => setModelOpen(v => !v)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
-            style={{
-              color: 'rgba(255,255,255,0.7)',
-              border: '1px solid rgba(255,255,255,0.12)',
-            }}
-          >
-            {model ? MODEL_LABEL[model] : 'Авто'}
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
-          </button>
-          <AnimatePresence>
-            {modelOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.96 }}
-                transition={{ duration: 0.12 }}
-                className="absolute top-full right-0 mt-1 z-50 rounded-xl overflow-hidden shadow-xl"
-                style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '120px' }}
-              >
-                {modelOptions.map(({ key, label }) => (
-                  <button
-                    key={String(key)}
-                    onClick={() => { setModel(key); setModelOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-xs transition-all"
-                    style={{
-                      color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
-                      background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
 
       {/* Messages — flex-1, scrollable */}
@@ -384,26 +349,90 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — в потоке */}
-      <div className="flex-shrink-0 px-3 pt-2 pb-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]">
-        <div className="flex gap-2 items-end">
-          <input
+      {/* Input */}
+      <div className="flex-shrink-0 px-3 pt-2 pb-2 bg-[#0A0A12]">
+        <div
+          className="flex flex-col rounded-2xl px-4 pt-3 pb-2.5 transition-all"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: input.trim()
+              ? '1px solid rgba(123,92,240,0.5)'
+              : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: input.trim() ? '0 0 0 3px rgba(123,92,240,0.12)' : 'none',
+          }}
+        >
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => { setInput(e.target.value); handleTextareaInput(); }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
             placeholder="Сообщение..."
-            style={{ fontSize: '16px', minHeight: '44px' }}
-            className="flex-1 rounded-xl px-4 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.25)] outline-none"
             disabled={streaming}
+            rows={1}
+            style={{ fontSize: '16px', minHeight: '36px' }}
+            className="w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[160px]"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || streaming}
-            className="w-11 h-11 rounded-xl text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0"
-            style={{ background: '#7B5CF0' }}
-          >
-            ↑
-          </button>
+
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between mt-2">
+            {/* Model selector */}
+            <div className="relative" ref={modelRef}>
+              <button
+                type="button"
+                onClick={() => setModelOpen(v => !v)}
+                className="flex items-center gap-1 text-[12px] rounded-md px-1.5 py-0.5"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
+              >
+                {model ? MODEL_LABEL[model] : 'Авто'}
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <AnimatePresence>
+                {modelOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute bottom-full mb-2 left-0 z-50 rounded-xl overflow-hidden shadow-xl"
+                    style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '130px' }}
+                  >
+                    {modelOptions.map(({ key, label }) => (
+                      <button
+                        key={String(key)}
+                        type="button"
+                        onClick={() => { setModel(key); setModelOpen(false); }}
+                        className="w-full text-left px-4 py-2.5 text-[12px] transition-all"
+                        style={{
+                          color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
+                          background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Send button */}
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!input.trim() || streaming}
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40"
+              style={{
+                background: input.trim() && !streaming ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d="M7.5 12V3M3.5 7L7.5 3L11.5 7" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

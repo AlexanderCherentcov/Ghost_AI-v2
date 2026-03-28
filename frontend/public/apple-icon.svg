@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <!-- Background -->
+  <rect width="180" height="180" rx="40" fill="#0A0A12"/>
+  <!-- Subtle glow -->
+  <circle cx="90" cy="82" r="65" fill="#7B5CF0" fill-opacity="0.06"/>
+  <!-- Ghost body -->
+  <path d="M90 16C63.49 16 42 37.49 42 64V156C42 156 53 147 64 156C75 165 75 156 86 156C97 156 97 165 108 156C119 147 119 156 130 156C141 147 138 156 138 156V64C138 37.49 116.51 16 90 16Z" fill="#7B5CF0" fill-opacity="0.18" stroke="#7B5CF0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Eyes -->
+  <circle cx="72" cy="72" r="11" fill="#7B5CF0"/>
+  <circle cx="108" cy="72" r="11" fill="#7B5CF0"/>
+  <!-- Eye shine -->
+  <circle cx="72" cy="72" r="5.5" fill="white" fill-opacity="0.78"/>
+  <circle cx="108" cy="72" r="5.5" fill="white" fill-opacity="0.78"/>
+</svg>

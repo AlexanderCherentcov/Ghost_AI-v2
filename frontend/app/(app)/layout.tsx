@@ -12,7 +12,7 @@ import { connectWS } from '@/lib/socket';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, isLoading } = useAuthStore();
+  const { user, isLoading, accessToken } = useAuthStore();
   const { setChats } = useChatStore();
   const { sidebarOpen } = useUIStore();
 
@@ -46,10 +46,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, isLoading]);
 
   useEffect(() => {
-    if (user) {
+    if (user && accessToken) {
       api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
     }
-  }, [user]);
+  }, [user, accessToken]);
 
   // ── Telegram Mini App: notify ready + expand ──────────────────────────────
   useEffect(() => {

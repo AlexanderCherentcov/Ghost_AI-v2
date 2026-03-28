@@ -5,8 +5,7 @@ on:
     branches: [master]
     paths:
       - 'backend/**'
-      - 'bot/**'
-      - 'infra/**'
+      - 'infra/docker-compose.yml'
       - '.github/workflows/deploy.yml'
 
 jobs:
@@ -25,16 +24,10 @@ jobs:
             git pull origin master
             cd infra
 
-            # 1. Инфраструктура (postgres + redis) — без пересборки
-            docker compose up -d --remove-orphans postgres redis
+            # Пересобираем и рестартуем только backend
+            docker compose up -d --build --no-deps backend
 
-            # 2. Backend + Bot — пересобираем при изменениях
-            docker compose up -d --build --remove-orphans backend bot
-
-            # 3. Nginx + Certbot — без пересборки (используют образы)
-            docker compose up -d --remove-orphans nginx certbot
-
-            # 5. Очищаем старые образы
+            # Очищаем старые образы
             docker image prune -f
 
             echo "✅ Deploy done: $(date)"

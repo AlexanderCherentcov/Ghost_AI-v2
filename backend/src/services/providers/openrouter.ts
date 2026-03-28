@@ -4,7 +4,7 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 // Models available via OpenRouter
 export const OR_MODELS = {
-  haiku:      'openai/gpt-4o-mini',
+  haiku:      'google/gemini-2.0-flash-001',
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
   flux:       'google/gemini-3.1-flash-image-preview',

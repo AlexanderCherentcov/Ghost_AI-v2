@@ -3,11 +3,13 @@ import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateImageFlux } from '../services/providers/openrouter.js';
 import { setMediaCached } from '../services/cache.js';
+import { encrypt } from '../lib/crypto.js';
 
 interface VisionJob {
   jobId: string;
   userId: string;
   prompt: string;
+  chatId: string | null;
   size: '1024x1024' | '1792x1024' | '1024x1792';
 }
 
@@ -15,7 +17,7 @@ export function startVisionWorker() {
   const worker = new Worker<VisionJob>(
     'vision',
     async (job: Job<VisionJob>) => {
-      const { jobId, prompt } = job.data;
+      const { jobId, userId, prompt, chatId } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -28,6 +30,13 @@ export function startVisionWorker() {
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
+
+      // Save assistant message with image to chat history
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl },
+        }).catch(() => {});
+      }
 
       // Cache for future identical prompts (30-day TTL)
       setMediaCached('vision', prompt, mediaUrl).catch(() => {});

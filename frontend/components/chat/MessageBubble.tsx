@@ -124,7 +124,8 @@ function FileChip({ name }: { name: string }) {
 }
 
 async function downloadImage(url: string) {
-  try {
+  // data URI — fetch locally and download
+  if (url.startsWith('data:')) {
     const res = await fetch(url);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
@@ -135,9 +136,10 @@ async function downloadImage(url: string) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-  } catch {
-    window.open(url, '_blank');
+    return;
   }
+  // Remote URL — open in new tab (avoids CORS fetch issues)
+  window.open(url, '_blank');
 }
 
 function MediaContent({ mediaUrl, mode }: { mediaUrl: string; mode: string }) {

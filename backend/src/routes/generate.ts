@@ -5,9 +5,11 @@ import { deductByModel, refreshFreeQuota } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit } from '../services/user-limiter.js';
+import { encrypt } from '../lib/crypto.js';
 
 const generateSchema = z.object({
   prompt: z.string().min(1).max(2000),
+  chatId: z.string().optional(),
   style: z.string().optional(),
   duration: z.number().int().min(5).max(30).optional(),
   size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional(),
@@ -19,7 +21,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, size } = generateSchema.parse(request.body);
+      const { prompt, size, chatId } = generateSchema.parse(request.body);
 
       // FREE plan: refresh monthly image quota (3/month)
       const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
@@ -39,10 +41,22 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
+      // Save user message to chat history (if chatId provided)
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0 },
+        }).catch(() => {});
+      }
+
       // Check media cache first (saves real generation credits)
       const mediaCached = await getMediaCached('vision', prompt);
       if (mediaCached.hit) {
         // TODO: re-enable after testing: await deductByModel(userId, 'black-forest-labs/flux-1.1-pro');
+        if (chatId) {
+          await prisma.message.create({
+            data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: mediaCached.url },
+          }).catch(() => {});
+        }
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'vision', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
@@ -59,6 +73,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
+        chatId: chatId ?? null,
         size: size ?? '1024x1024',
       });
 

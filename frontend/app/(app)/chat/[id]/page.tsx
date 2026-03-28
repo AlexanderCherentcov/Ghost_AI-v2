@@ -165,7 +165,7 @@ export default function ChatConversationPage({ params }: Props) {
     });
 
     try {
-      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024' });
+      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024', chatId: id });
 
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);

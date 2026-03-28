@@ -1,10 +1,20 @@
 import { Queue, QueueOptions } from 'bullmq';
 
 // DB 1 — BullMQ queues (isolated from cache, noeviction protects jobs)
-const connection = {
-  url: process.env.REDIS_URL ?? 'redis://localhost:6379',
-  db: 1,
-};
+// ioredis options object does NOT accept a 'url' field — parse it manually.
+function parsedConnection(db: number) {
+  const raw = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  const u = new URL(raw);
+  return {
+    host: u.hostname,
+    port: u.port ? parseInt(u.port) : 6379,
+    ...(u.password ? { password: decodeURIComponent(u.password) } : {}),
+    ...(u.username ? { username: decodeURIComponent(u.username) } : {}),
+    db,
+  };
+}
+
+const connection = parsedConnection(1);
 
 const defaultQueueOptions: QueueOptions = {
   connection,

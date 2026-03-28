@@ -75,29 +75,6 @@ services:
     networks:
       - ghost_net
 
-  # ── Frontend (Next.js) ────────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.ghostlineai.ru}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://api.ghostlineai.ru}
-    image: ghostline-frontend:latest
-    restart: always
-    env_file: .env
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - ghost_net
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
   # ── Nginx (reverse proxy + SSL) ───────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
@@ -111,7 +88,6 @@ services:
       - letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
-      - frontend
     networks:
       - ghost_net
 

@@ -123,6 +123,17 @@ export async function buildApp() {
       return reply.code(error.statusCode).send({ error: error.message });
     }
 
+    // Custom application error codes (thrown without statusCode)
+    const codeToStatus: Record<string, number> = {
+      LIMIT_MESSAGES: 402,
+      LIMIT_IMAGES: 402,
+      UNAUTHORIZED: 401,
+    };
+    const code = (error as any).code as string | undefined;
+    if (code && codeToStatus[code]) {
+      return reply.code(codeToStatus[code]).send({ error: error.message, code });
+    }
+
     return reply.code(500).send({ error: 'Internal server error' });
   });
 

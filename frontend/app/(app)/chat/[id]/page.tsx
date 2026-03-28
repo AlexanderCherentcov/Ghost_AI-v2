@@ -207,6 +207,16 @@ export default function ChatConversationPage({ params }: Props) {
 
     // Auto-detect image intent → generate inline
     if (!file && prompt && isImageRequest(prompt)) {
+      // If user refers to previous message ("по этому промту", "по нему" etc.)
+      // use the last assistant message as the actual image prompt
+      const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
+      const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
+      if (isRef) {
+        const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          return handleGenerateImage(lastAssistant.content);
+        }
+      }
       return handleGenerateImage(prompt);
     }
 

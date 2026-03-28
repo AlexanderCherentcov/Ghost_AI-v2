@@ -227,6 +227,16 @@ function ChatApp() {
     setInput('');
 
     if (isImageRequest(prompt)) {
+      // If user refers to a previous message ("по этому промту", "по нему" etc.)
+      // use the last assistant message as the actual image prompt
+      const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
+      const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
+      if (isRef) {
+        const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          return handleGenerateImage(lastAssistant.content);
+        }
+      }
       return handleGenerateImage(prompt);
     }
 

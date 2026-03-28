@@ -24,15 +24,20 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
   ?? API_URL.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
 
-const IMAGE_KEYWORDS = [
-  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
-  'сгенерируй', 'сгенерировать', 'generate image', 'draw', 'создай изображение',
-  'создать изображение', 'нарисуй мне', 'хочу картинку', 'сделай картинку',
-  'покажи картинку', 'изображение в стиле',
+const IMAGE_VERBS = [
+  'нарисуй', 'нарисовать', 'создай', 'создать', 'сгенерируй', 'сгенерировать',
+  'сделай', 'сделать', 'покажи', 'draw', 'generate', 'create', 'make',
 ];
+const IMAGE_NOUNS = [
+  'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
+  'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
+];
+const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
 
 function isImageRequest(text: string): boolean {
-  return IMAGE_KEYWORDS.some((kw) => text.toLowerCase().includes(kw));
+  const lower = text.toLowerCase();
+  if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
+  return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
 }
 
 async function downloadImage(url: string) {

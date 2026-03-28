@@ -12,17 +12,20 @@ import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
 
-// Keywords that trigger image generation
-const IMAGE_KEYWORDS = [
-  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
-  'сгенерируй', 'сгенерировать', 'generate image', 'draw', 'создай изображение',
-  'создать изображение', 'нарисуй мне', 'хочу картинку', 'сделай картинку',
-  'покажи картинку', 'изображение в стиле',
+const IMAGE_VERBS = [
+  'нарисуй', 'нарисовать', 'создай', 'создать', 'сгенерируй', 'сгенерировать',
+  'сделай', 'сделать', 'покажи', 'draw', 'generate', 'create', 'make',
 ];
+const IMAGE_NOUNS = [
+  'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
+  'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
+];
+const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
 
 function isImageRequest(text: string): boolean {
   const lower = text.toLowerCase();
-  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
+  if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
+  return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
 }
 
 async function resizeImageToBase64(file: File): Promise<string> {

@@ -243,6 +243,25 @@ export default function ChatConversationPage({ params }: Props) {
   const handleSend = useCallback(async (prompt: string, file?: File) => {
     if ((isStreaming || generatingImage) || !accessToken || !messagesReady) return;
 
+    // Verb-only generation command ("сгенерируй", "нарисуй", "create" etc. without a noun)
+    // → use last assistant message as the image prompt
+    if (!file && prompt) {
+      const lowerPrompt = prompt.toLowerCase().trim();
+      const verbOnly = IMAGE_VERBS.some(v =>
+        lowerPrompt === v ||
+        lowerPrompt.startsWith(v + ' это') ||
+        lowerPrompt.startsWith(v + ' его') ||
+        lowerPrompt.startsWith(v + ' её') ||
+        lowerPrompt.startsWith(v + ' пожалуйста')
+      );
+      if (verbOnly) {
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
+        }
+      }
+    }
+
     // Auto-detect image intent → generate inline
     if (!file && prompt && isImageRequest(prompt)) {
       // If user refers to previous message ("по этому промту", "по нему" etc.)

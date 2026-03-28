@@ -363,6 +363,25 @@ function ChatApp() {
       }
     }
 
+    // Verb-only generation command ("сгенерируй", "нарисуй", "create" etc. without a noun)
+    // → use last assistant message as the image prompt
+    if (!fileToSend) {
+      const lowerPrompt = prompt.toLowerCase().trim();
+      const verbOnly = IMAGE_VERBS.some(v =>
+        lowerPrompt === v ||
+        lowerPrompt.startsWith(v + ' это') ||
+        lowerPrompt.startsWith(v + ' его') ||
+        lowerPrompt.startsWith(v + ' её') ||
+        lowerPrompt.startsWith(v + ' пожалуйста')
+      );
+      if (verbOnly) {
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
+        }
+      }
+    }
+
     // Pure text image generation request
     if (!fileToSend && isImageRequest(prompt)) {
       const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];

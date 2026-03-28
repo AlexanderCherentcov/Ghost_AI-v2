@@ -123,11 +123,39 @@ function FileChip({ name }: { name: string }) {
   );
 }
 
+async function downloadImage(url: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `ghostline-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    window.open(url, '_blank');
+  }
+}
+
 function MediaContent({ mediaUrl, mode }: { mediaUrl: string; mode: string }) {
   if (mode === 'vision') {
     return (
       <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
         <img src={mediaUrl} alt="Generated" className="w-full h-auto" loading="lazy" />
+        <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
+          <button
+            onClick={() => downloadImage(mediaUrl)}
+            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Скачать
+          </button>
+        </div>
       </div>
     );
   }

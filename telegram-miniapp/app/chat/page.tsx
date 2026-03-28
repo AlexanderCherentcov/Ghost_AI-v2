@@ -18,7 +18,7 @@ interface Message {
   mediaUrl?: string | null;
 }
 
-type ModelChoice = 'haiku' | 'deepseek';
+type ModelChoice = 'haiku' | 'deepseek' | undefined;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -32,8 +32,24 @@ const IMAGE_KEYWORDS = [
 ];
 
 function isImageRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
+  return IMAGE_KEYWORDS.some((kw) => text.toLowerCase().includes(kw));
+}
+
+async function downloadImage(url: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `ghostline-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    window.open(url, '_blank');
+  }
 }
 
 export default function TgChatPage() {
@@ -52,7 +68,7 @@ function ChatApp() {
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const [chatId, setChatId] = useState<string | null>(null);
-  const [model, setModel] = useState<ModelChoice>('haiku');
+  const [model, setModel] = useState<ModelChoice>(undefined);
   const [modelOpen, setModelOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -197,7 +213,6 @@ function ChatApp() {
     if (!prompt || streaming) return;
     setInput('');
 
-    // Auto-detect image request
     if (isImageRequest(prompt)) {
       return handleGenerateImage(prompt);
     }
@@ -218,32 +233,44 @@ function ChatApp() {
       prompt,
       history: messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
       jwt: token,
-      preferredModel: model,
+      ...(model ? { preferredModel: model } : {}),
     }));
   }, [input, streaming, chatId, messages, tg, model, handleGenerateImage]);
 
   const isEmpty = !messages.length && !streaming;
 
-  const modelLabels: Record<ModelChoice, string> = {
+  const MODEL_LABEL: Record<string, string> = {
     haiku: 'Стандарт',
     deepseek: 'Про',
   };
 
+  const modelOptions: { key: ModelChoice; label: string }[] = [
+    { key: undefined,   label: 'Авто' },
+    { key: 'haiku',     label: 'Стандарт' },
+    { key: 'deepseek',  label: 'Про' },
+  ];
+
+  // BottomNav height ~60px
+  const NAV_H = 60;
+
   return (
-    <div className="flex flex-col h-dvh bg-[#0A0A12]">
+    <div className="flex flex-col bg-[#0A0A12]" style={{ height: '100dvh' }}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
+      <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
 
-        {/* Model selector dropdown */}
+        {/* Model selector */}
         <div className="relative" ref={modelRef}>
           <button
             onClick={() => setModelOpen(v => !v)}
-            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-all"
-            style={{ color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)' }}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              color: 'rgba(255,255,255,0.7)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
           >
-            {modelLabels[model]}
+            {model ? MODEL_LABEL[model] : 'Авто'}
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
@@ -256,20 +283,16 @@ function ChatApp() {
                 exit={{ opacity: 0, y: -4, scale: 0.96 }}
                 transition={{ duration: 0.12 }}
                 className="absolute top-full right-0 mt-1 z-50 rounded-xl overflow-hidden shadow-xl"
-                style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '110px' }}
+                style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '120px' }}
               >
-                {([
-                  { key: undefined,    label: 'Авто' },
-                  { key: 'haiku' as const,    label: 'Стандарт' },
-                  { key: 'deepseek' as const, label: 'Про' },
-                ] as const).map(({ key, label }) => (
+                {modelOptions.map(({ key, label }) => (
                   <button
                     key={String(key)}
-                    onClick={() => { if (key) setModel(key); else setModel('haiku'); setModelOpen(false); }}
+                    onClick={() => { setModel(key); setModelOpen(false); }}
                     className="w-full text-left px-4 py-2.5 text-xs transition-all"
                     style={{
                       color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
-                      background: 'transparent',
+                      background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
                     }}
                   >
                     {label}
@@ -281,8 +304,8 @@ function ChatApp() {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-[120px]">
+      {/* Messages — flex-1, scrollable */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="text-5xl mb-4 animate-float">👻</div>
@@ -300,7 +323,7 @@ function ChatApp() {
                 animate={{ opacity: 1, y: 0 }}
                 className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start gap-2'}`}
               >
-                {msg.role === 'assistant' && <span className="text-base flex-shrink-0">👻</span>}
+                {msg.role === 'assistant' && <span className="text-base flex-shrink-0 mt-1">👻</span>}
                 <div
                   className={`max-w-[85%] text-sm rounded-2xl px-4 py-3 ${
                     msg.role === 'user'
@@ -309,7 +332,19 @@ function ChatApp() {
                   }`}
                 >
                   {msg.mediaUrl ? (
-                    <img src={msg.mediaUrl} alt="generated" className="rounded-xl max-w-full" />
+                    <div>
+                      <img src={msg.mediaUrl} alt="generated" className="rounded-xl max-w-full mb-2" />
+                      <button
+                        onClick={() => downloadImage(msg.mediaUrl!)}
+                        className="flex items-center gap-1.5 text-[11px] opacity-60 hover:opacity-100 transition-opacity"
+                        style={{ color: '#7B5CF0' }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Скачать
+                      </button>
+                    </div>
                   ) : msg.role === 'assistant' ? (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                   ) : (
@@ -349,16 +384,19 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="fixed bottom-[60px] left-0 right-0 px-3 py-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]">
+      {/* Input — в потоке, над BottomNav */}
+      <div
+        className="flex-shrink-0 px-3 py-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]"
+        style={{ paddingBottom: `calc(0.5rem + ${NAV_H}px + env(safe-area-inset-bottom))` }}
+      >
         <div className="flex gap-2 items-end">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
             placeholder="Сообщение..."
-            style={{ fontSize: '16px' }}
-            className="flex-1 h-11"
+            style={{ fontSize: '16px', minHeight: '44px' }}
+            className="flex-1 rounded-xl px-4 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.25)] outline-none"
             disabled={streaming}
           />
           <button

@@ -174,7 +174,7 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
 
         <div
           className={cn(
-            'flex items-end gap-3 bg-[var(--bg-input)] border rounded-2xl px-4 py-3 transition-all',
+            'flex items-end gap-3 bg-[var(--bg-input)] border rounded-2xl px-4 py-4 transition-all',
             hasContent
               ? 'border-[var(--accent-border)] shadow-[0_0_0_3px_var(--accent-glow)]'
               : 'border-[var(--border)] focus-within:border-[var(--accent-border)] focus-within:shadow-[0_0_0_3px_var(--accent-glow)]'
@@ -210,9 +210,9 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
             placeholder={placeholder ?? 'Напишите что-нибудь...'}
             disabled={disabled}
             rows={1}
-            style={{ fontSize: '16px' }}
+            style={{ fontSize: '16px', minHeight: '36px' }}
             className={cn(
-              'flex-1 bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-6 max-h-[200px]',
+              'flex-1 bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[200px]',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           />

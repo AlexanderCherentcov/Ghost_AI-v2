@@ -83,7 +83,7 @@ function ModelSelector({ preferredModel, setPreferredModel }: {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 text-xs text-[rgba(255,255,255,0.4)] hover:text-[rgba(255,255,255,0.7)] transition-colors px-2 py-1.5 rounded-lg hover:bg-[rgba(255,255,255,0.05)]"
+        className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.6)] border border-[var(--border)] rounded-lg px-3 py-1.5 hover:border-[rgba(255,255,255,0.25)] hover:text-white transition-all"
       >
         {current.label}
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">

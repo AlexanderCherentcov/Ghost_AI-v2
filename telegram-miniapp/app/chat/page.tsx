@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,6 +16,7 @@ interface Message {
   tokensCost?: number;
   cacheHit?: boolean;
   mediaUrl?: string | null;
+  fileName?: string | null;
 }
 
 type ModelChoice = 'haiku' | 'deepseek' | undefined;
@@ -40,7 +41,6 @@ const EDIT_VERBS = [
   'перекрась', 'раскрась', 'стилизуй', 'edit', 'change', 'modify', 'transform', 'remove', 'add',
 ];
 
-// Edit-reference keywords — signals user wants to modify a previously generated image
 const IMAGE_REF_KEYWORDS = ['эту картинку', 'это изображение', 'её', 'ее', 'его', 'эту', 'это фото', 'картинку выше', 'изображение выше'];
 
 function isImageRequest(text: string): boolean {
@@ -72,8 +72,62 @@ function extractImagePrompt(content: string): string {
     .slice(0, 600);
 }
 
+function getFileCategory(file: File): 'image' | 'text' | 'binary' {
+  if (file.type.startsWith('image/')) return 'image';
+  const textExts = ['js', 'ts', 'tsx', 'jsx', 'json', 'csv', 'md', 'txt', 'xml', 'yaml', 'yml', 'html', 'css', 'py', 'go', 'rs', 'java', 'php', 'rb', 'sh', 'c', 'cpp', 'h'];
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (file.type.startsWith('text/') || textExts.includes(ext)) return 'text';
+  return 'binary';
+}
+
+async function resizeImageToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 800;
+        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = e.target!.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => resolve(e.target!.result as string);
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+async function extractFile(file: File): Promise<{ text: string; lang: string; truncated: boolean }> {
+  const form = new FormData();
+  form.append('file', file);
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/upload/extract`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
+  }
+  return res.json();
+}
+
 async function downloadImage(url: string) {
-  // For data URIs — convert to blob and download directly
   if (url.startsWith('data:')) {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -87,7 +141,6 @@ async function downloadImage(url: string) {
     URL.revokeObjectURL(blobUrl);
     return;
   }
-  // For remote URLs in Telegram — open in external browser
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.openLink(url); return; }
   window.open(url, '_blank');
@@ -96,7 +149,9 @@ async function downloadImage(url: string) {
 export default function TgChatPage() {
   return (
     <TelegramProvider>
-      <ChatApp />
+      <Suspense>
+        <ChatApp />
+      </Suspense>
     </TelegramProvider>
   );
 }
@@ -104,6 +159,7 @@ export default function TgChatPage() {
 function ChatApp() {
   const tg = useTg();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -112,10 +168,13 @@ function ChatApp() {
   const [model, setModel] = useState<ModelChoice>(undefined);
   const [modelOpen, setModelOpen] = useState(false);
   const [vpHeight, setVpHeight] = useState('100dvh');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync height with Telegram viewport — updates dynamically when keyboard opens/closes
   useEffect(() => {
@@ -132,7 +191,7 @@ function ChatApp() {
     return () => tgApp.offEvent?.('viewportChanged', updateHeight);
   }, []);
 
-  // Auto-scroll (also fires when keyboard opens → vpHeight changes)
+  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamContent, vpHeight]);
@@ -155,8 +214,17 @@ function ChatApp() {
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
 
-  // Init: load last chat or create new
+  // Init: load chat by ?id param, or last chat, or create new
   useEffect(() => {
+    const idParam = searchParams.get('id');
+    if (idParam) {
+      setChatId(idParam);
+      apiRequest<{ messages: Message[] }>(`/chats/${idParam}/messages`)
+        .then(({ messages: msgs }) => setMessages(msgs))
+        .catch(() => {});
+      return;
+    }
+
     apiRequest<{ chats: Array<{ id: string }> }>('/chats')
       .then(async ({ chats }) => {
         if (chats.length > 0) {
@@ -272,21 +340,31 @@ function ChatApp() {
     }
   }, [tg, router, chatId]);
 
+  // ── File selection ────────────────────────────────────────────────────────────
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    e.target.value = '';
+  }
+
   // ── Chat send ─────────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
-    if (!prompt || streaming) return;
+    if ((!prompt && !selectedFile) || streaming) return;
     setInput('');
+    const fileToSend = selectedFile;
+    setSelectedFile(null);
 
     // Image edit: user wants to modify last generated image
-    if (isImageEditRequest(prompt)) {
+    if (!fileToSend && isImageEditRequest(prompt)) {
       const lastImage = [...messages].reverse().find((m) => m.role === 'assistant' && m.mediaUrl);
       if (lastImage?.mediaUrl) {
         return handleGenerateImage(prompt, lastImage.mediaUrl);
       }
     }
 
-    if (isImageRequest(prompt)) {
+    // Pure text image generation request
+    if (!fileToSend && isImageRequest(prompt)) {
       const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
       const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
       if (isRef) {
@@ -296,6 +374,51 @@ function ChatApp() {
         }
       }
       return handleGenerateImage(prompt);
+    }
+
+    // Process attached file
+    let imageUrl: string | undefined;
+    let fileContent: string | undefined;
+    let fileName: string | undefined;
+    let fileLang: string | undefined;
+    let fileDisplayUrl: string | undefined;
+
+    if (fileToSend) {
+      const category = getFileCategory(fileToSend);
+      fileName = fileToSend.name;
+
+      if (category === 'image') {
+        try {
+          imageUrl = await resizeImageToBase64(fileToSend);
+          fileDisplayUrl = imageUrl;
+          // Image editing intent with attached image
+          if (prompt && EDIT_VERBS.some((v) => prompt.toLowerCase().includes(v))) {
+            return handleGenerateImage(prompt, imageUrl);
+          }
+        } catch {
+          tg?.showAlert('Не удалось обработать изображение');
+          return;
+        }
+      } else if (category === 'text') {
+        try {
+          const raw = await readFileAsText(fileToSend);
+          fileContent = raw.slice(0, 60_000);
+          fileLang = fileToSend.name.split('.').pop()?.toLowerCase();
+        } catch {
+          tg?.showAlert('Не удалось прочитать файл');
+          return;
+        }
+      } else {
+        try {
+          tg?.showAlert('Извлечение текста из файла...');
+          const result = await extractFile(fileToSend);
+          fileContent = result.text;
+          fileLang = result.lang;
+        } catch (err: any) {
+          tg?.showAlert(err.message ?? 'Ошибка загрузки файла');
+          return;
+        }
+      }
     }
 
     // If chatId not yet set (init still loading) — create chat on the fly
@@ -315,9 +438,16 @@ function ChatApp() {
 
     tg?.HapticFeedback.impactOccurred('medium');
 
+    const displayContent = prompt || (fileName ? `[Файл: ${fileName}]` : '');
     setMessages((msgs) => [
       ...msgs,
-      { id: `tmp-${Date.now()}`, role: 'user', content: prompt },
+      {
+        id: `tmp-${Date.now()}`,
+        role: 'user',
+        content: displayContent,
+        mediaUrl: fileDisplayUrl ?? null,
+        fileName: fileName ?? null,
+      },
     ]);
     setStreaming(true);
 
@@ -325,12 +455,16 @@ function ChatApp() {
     wsRef.current?.send(JSON.stringify({
       chatId: activeChatId,
       mode: 'chat',
-      prompt,
+      prompt: prompt || (fileName ? `[Файл: ${fileName}]` : ''),
       history: messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
       jwt: token,
       ...(model ? { preferredModel: model } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(fileContent ? { fileContent } : {}),
+      ...(fileName ? { fileName } : {}),
+      ...(fileLang ? { fileLang } : {}),
     }));
-  }, [input, streaming, chatId, messages, tg, model, handleGenerateImage]);
+  }, [input, streaming, chatId, messages, tg, model, handleGenerateImage, selectedFile]);
 
   const isEmpty = !messages.length && !streaming;
 
@@ -347,6 +481,57 @@ function ChatApp() {
 
   return (
     <div className="flex flex-col bg-[#0A0A12]" style={{ height: vpHeight }}>
+      {/* Image lightbox */}
+      <AnimatePresence>
+        {viewerUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 flex flex-col items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)', zIndex: 200 }}
+            onClick={() => setViewerUrl(null)}
+          >
+            <motion.img
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              src={viewerUrl}
+              alt="preview"
+              className="max-w-[92vw] max-h-[72vh] rounded-2xl object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div
+              className="flex items-center gap-3 mt-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => downloadImage(viewerUrl)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
+                style={{ background: '#7B5CF0', color: 'white' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Скачать
+              </button>
+              <button
+                onClick={() => setViewerUrl(null)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
+                style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Закрыть
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
@@ -357,6 +542,7 @@ function ChatApp() {
           onClick={() => {
             setMessages([]);
             setChatId(null);
+            setSelectedFile(null);
             tg?.HapticFeedback.impactOccurred('light');
           }}
           className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
@@ -369,8 +555,11 @@ function ChatApp() {
         </button>
       </div>
 
-      {/* Messages — flex-1, scrollable, min-h-0 prevents flex overflow */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+      {/* Messages — flex-1, scrollable, padding-bottom accounts for fixed input + bottom nav */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-4"
+        style={{ paddingBottom: 'calc(200px + env(safe-area-inset-bottom))' }}
+      >
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="text-5xl mb-4 animate-float">👻</div>
@@ -398,17 +587,26 @@ function ChatApp() {
                 >
                   {msg.mediaUrl ? (
                     <div>
-                      <img src={msg.mediaUrl} alt="generated" className="rounded-xl max-w-full mb-2" />
-                      <button
-                        onClick={() => downloadImage(msg.mediaUrl!)}
-                        className="flex items-center gap-1.5 text-[11px] opacity-60 hover:opacity-100 transition-opacity"
-                        style={{ color: '#7B5CF0' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        Скачать
-                      </button>
+                      <img
+                        src={msg.mediaUrl}
+                        alt="generated"
+                        className="rounded-xl max-w-full mb-2 cursor-pointer active:opacity-80"
+                        onClick={() => setViewerUrl(msg.mediaUrl!)}
+                      />
+                      {msg.content && msg.content !== msg.mediaUrl && (
+                        <p className="mt-1 text-[rgba(255,255,255,0.6)] text-xs">{msg.content}</p>
+                      )}
+                    </div>
+                  ) : msg.fileName ? (
+                    <div className="flex items-center gap-2">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 1h5l3 3v9H3V1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                        <path d="M8 1v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                      </svg>
+                      <span className="truncate">{msg.fileName}</span>
+                      {msg.content && msg.content !== `[Файл: ${msg.fileName}]` && (
+                        <span className="text-[rgba(255,255,255,0.5)]">— {msg.content}</span>
+                      )}
                     </div>
                   ) : msg.role === 'assistant' ? (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
@@ -449,19 +647,56 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — paddingBottom pushes content above the fixed BottomNav */}
+      {/* Input — fixed above BottomNav, doesn't move when keyboard opens */}
       <div
-        className="flex-shrink-0 px-3 pt-2 bg-[#0A0A12]"
-        style={{ paddingBottom: 'calc(62px + env(safe-area-inset-bottom) + 8px)' }}
+        style={{
+          position: 'fixed',
+          bottom: 'calc(60px + env(safe-area-inset-bottom))',
+          left: 0,
+          right: 0,
+          zIndex: 40,
+          padding: '8px 12px',
+          background: '#0A0A12',
+        }}
       >
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="*/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {/* Attached file chip */}
+        {selectedFile && (
+          <div
+            className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl text-xs"
+            style={{ background: 'rgba(123,92,240,0.12)', border: '1px solid rgba(123,92,240,0.3)', color: 'rgba(255,255,255,0.7)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+              <path d="M3 1h5l3 3v9H3V1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              <path d="M8 1v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+            <span className="flex-1 truncate">{selectedFile.name}</span>
+            <button
+              type="button"
+              onClick={() => setSelectedFile(null)}
+              className="opacity-60 hover:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div
           className="flex flex-col rounded-2xl px-4 pt-3 pb-2.5 transition-all"
           style={{
             background: 'rgba(255,255,255,0.04)',
-            border: input.trim()
+            border: (input.trim() || selectedFile)
               ? '1px solid rgba(123,92,240,0.5)'
               : '1px solid rgba(255,255,255,0.08)',
-            boxShadow: input.trim() ? '0 0 0 3px rgba(123,92,240,0.12)' : 'none',
+            boxShadow: (input.trim() || selectedFile) ? '0 0 0 3px rgba(123,92,240,0.12)' : 'none',
           }}
         >
           {/* Textarea */}
@@ -479,56 +714,72 @@ function ChatApp() {
 
           {/* Bottom toolbar */}
           <div className="flex items-center justify-between mt-2">
-            {/* Model selector */}
-            <div className="relative" ref={modelRef}>
+            <div className="flex items-center gap-2">
+              {/* Attach file button */}
               <button
                 type="button"
-                onClick={() => setModelOpen(v => !v)}
-                className="flex items-center gap-1 text-[12px] rounded-md px-1.5 py-0.5"
-                style={{ color: 'rgba(255,255,255,0.45)' }}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming}
+                className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors disabled:opacity-30"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+                title="Прикрепить файл"
               >
-                {model ? MODEL_LABEL[model] : 'Авто'}
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                  <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                  <path d="M13 7.5l-5.5 5.5a3.5 3.5 0 0 1-5-5L8 2.5a2 2 0 0 1 2.8 2.8L5.3 10.8a.5.5 0 0 1-.7-.7L10 4.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
-              <AnimatePresence>
-                {modelOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 4, scale: 0.97 }}
-                    transition={{ duration: 0.12 }}
-                    className="absolute bottom-full mb-2 left-0 z-50 rounded-xl overflow-hidden shadow-xl"
-                    style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '130px' }}
-                  >
-                    {modelOptions.map(({ key, label }) => (
-                      <button
-                        key={String(key)}
-                        type="button"
-                        onClick={() => { setModel(key); setModelOpen(false); }}
-                        className="w-full text-left px-4 py-2.5 text-[12px] transition-all"
-                        style={{
-                          color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
-                          background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+
+              {/* Model selector */}
+              <div className="relative" ref={modelRef}>
+                <button
+                  type="button"
+                  onClick={() => setModelOpen(v => !v)}
+                  className="flex items-center gap-1 text-[12px] rounded-md px-1.5 py-0.5"
+                  style={{ color: 'rgba(255,255,255,0.45)' }}
+                >
+                  {model ? MODEL_LABEL[model] : 'Авто'}
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                <AnimatePresence>
+                  {modelOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute bottom-full mb-2 left-0 z-50 rounded-xl overflow-hidden shadow-xl"
+                      style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '130px' }}
+                    >
+                      {modelOptions.map(({ key, label }) => (
+                        <button
+                          key={String(key)}
+                          type="button"
+                          onClick={() => { setModel(key); setModelOpen(false); }}
+                          className="w-full text-left px-4 py-2.5 text-[12px] transition-all"
+                          style={{
+                            color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
+                            background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             {/* Send button */}
             <button
               type="button"
               onClick={handleSend}
-              disabled={!input.trim() || streaming}
+              disabled={(!input.trim() && !selectedFile) || streaming}
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40"
               style={{
-                background: input.trim() && !streaming ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
+                background: (input.trim() || selectedFile) && !streaming ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">

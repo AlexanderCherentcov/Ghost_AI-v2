@@ -213,13 +213,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
         const responseStyle = userProfile?.responseStyle ?? null;
 
-        // FREE plan: only basic chat (no think, no image/file attachments)
-        if (userProfile?.plan === 'FREE') {
-          const hasAttachment = !!(imageUrl || fileContent);
-          if (mode !== 'chat' || hasAttachment) {
-            send({ type: 'error', code: 'PLAN_RESTRICTED', message: 'Обновите тариф для использования этой функции.' });
-            return;
-          }
+        // FREE plan: only block think mode (image/file attachments allowed — balance is checked below)
+        if (userProfile?.plan === 'FREE' && mode !== 'chat') {
+          send({ type: 'error', code: 'PLAN_RESTRICTED', message: 'Обновите тариф для использования этой функции.' });
+          return;
         }
 
         // Effective prompt for AI (fall back to placeholder if only image/file sent)

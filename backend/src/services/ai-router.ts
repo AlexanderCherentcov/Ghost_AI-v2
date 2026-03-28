@@ -70,7 +70,17 @@ export function route(
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
 
-  // Documents always use DeepSeek; otherwise respect preferredModel, then auto-route
+  // Images always use gemini-3.1-flash-image-preview (supports vision + editing)
+  if (hasImage) {
+    return {
+      provider: 'openrouter-haiku' as Provider,
+      complexity: 'complex',
+      model: OR_MODELS.flux,
+      fallbackModel: undefined,
+      maxTokens: plan === 'FREE' ? 400 : undefined,
+    };
+  }
+
   const useDeepSeek = hasDocument
     ? true
     : preferredModel === 'deepseek'

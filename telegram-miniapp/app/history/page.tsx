@@ -31,6 +31,7 @@ function HistoryApp() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<{ chats: Chat[] }>('/chats')
@@ -39,8 +40,16 @@ function HistoryApp() {
       .finally(() => setLoading(false));
   }, []);
 
-  function handleNew() {
-    router.push('/chat');
+  async function handleNew() {
+    try {
+      const chat = await apiRequest<{ id: string; title: string; updatedAt: string }>('/chats', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'chat' }),
+      });
+      router.push(`/chat?id=${chat.id}`);
+    } catch {
+      router.push('/chat');
+    }
   }
 
   async function handleRename(chatId: string) {
@@ -51,6 +60,18 @@ function HistoryApp() {
     });
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: editTitle } : c)));
     setEditingId(null);
+  }
+
+  async function handleDelete(chatId: string) {
+    setDeletingId(chatId);
+    try {
+      await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const grouped = groupChats(chats);
@@ -84,26 +105,45 @@ function HistoryApp() {
               </div>
             ) : (
               <div
-                className="flex items-center rounded-xl px-4 py-3"
+                className="flex items-center rounded-xl px-4 py-3 gap-1"
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
                 onClick={() => router.push(`/chat?id=${chat.id}`)}
               >
                 <span
-                  className="flex-1 text-sm truncate pr-2"
+                  className="flex-1 text-sm truncate"
                   style={{ color: 'rgba(255,255,255,0.75)' }}
                 >
-                  {chat.title.length > 38 ? chat.title.slice(0, 38) + '…' : chat.title}
+                  {chat.title.length > 34 ? chat.title.slice(0, 34) + '…' : chat.title}
                 </span>
+                {/* Rename button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingId(chat.id);
                     setEditTitle(chat.title);
                   }}
-                  className="p-1.5"
+                  className="p-1.5 flex-shrink-0"
                   style={{ color: 'rgba(255,255,255,0.3)' }}
+                  title="Переименовать"
                 >
-                  ✏️
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(chat.id);
+                  }}
+                  disabled={deletingId === chat.id}
+                  className="p-1.5 flex-shrink-0 disabled:opacity-30 transition-opacity"
+                  style={{ color: 'rgba(255,80,80,0.6)' }}
+                  title="Удалить"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 3.5h10M5 3.5V2.5h4v1M5.5 6v4.5M8.5 6v4.5M3 3.5l.5 8h7l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
               </div>
             )}

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import { CopyIcon, CheckIcon } from '@/components/icons';
+import { ImageViewer } from '@/components/ui/ImageViewer';
 import type { Message } from '@/lib/api';
 
 interface MessageBubbleProps {
@@ -14,6 +15,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const isUser = message.role === 'user';
 
   async function handleCopy() {
@@ -23,6 +25,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   return (
+    <>
+    <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} />
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -64,7 +68,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           /* Ghost response — clean text like Gemini */
           <div className="flex-1">
             {message.mediaUrl ? (
-              <MediaContent mediaUrl={message.mediaUrl} mode={message.mode} />
+              <MediaContent mediaUrl={message.mediaUrl} mode={message.mode} onOpen={() => setViewerUrl(message.mediaUrl!)} />
             ) : (
               <div className="prose-ghost text-sm">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -95,6 +99,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
       </div>
     </motion.div>
+    </>
   );
 }
 
@@ -142,11 +147,18 @@ async function downloadImage(url: string) {
   }
 }
 
-function MediaContent({ mediaUrl, mode }: { mediaUrl: string; mode: string }) {
+function MediaContent({ mediaUrl, mode, onOpen }: { mediaUrl: string; mode: string; onOpen?: () => void }) {
   if (mode === 'vision') {
     return (
       <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
-        <img src={mediaUrl} alt="Generated" className="w-full h-auto" loading="lazy" />
+        <img
+          src={mediaUrl}
+          alt="Generated"
+          className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+          loading="lazy"
+          onClick={onOpen}
+          title="Нажмите для просмотра"
+        />
         <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
           <button
             onClick={() => downloadImage(mediaUrl)}

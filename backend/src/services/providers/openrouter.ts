@@ -106,27 +106,38 @@ export async function generateImageFlux(
     data?: Array<{ url?: string; b64_json?: string }>;
   };
 
-  // Format 1: data[].url
+  // Format 1: data[].url (OpenAI-images style)
   const imgData = data.data?.[0];
   if (imgData?.url) return imgData.url;
   if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
-  // Format 2: choices[].message.content as string URL or markdown
   const content = data.choices?.[0]?.message?.content;
-  if (typeof content === 'string') {
-    const trimmed = content.trim();
-    if (trimmed.startsWith('http') || trimmed.startsWith('data:')) return trimmed;
-    const mdMatch = trimmed.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
-    if (mdMatch) return mdMatch[1];
-  }
 
-  // Format 3: choices[].message.content as array
+  // Format 2: content as array of parts
   if (Array.isArray(content)) {
     for (const part of content) {
-      if (part.type === 'image_url' && part.image_url?.url) return part.image_url.url;
-      if (part.type === 'image' && (part as any).url) return (part as any).url;
+      const p = part as any;
+      if (p.type === 'image_url' && p.image_url?.url) return p.image_url.url;
+      if (p.type === 'image' && p.url) return p.url;
+      if (p.type === 'image' && p.image_url?.url) return p.image_url.url;
+      if (p.type === 'image' && p.source?.url) return p.source.url;
     }
   }
 
-  throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 300)}`);
+  // Format 3: content as string (URL, data-URI, or markdown image)
+  if (typeof content === 'string' && content.trim()) {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('//')) return trimmed;
+    const urlMatch = trimmed.match(/https?:\/\/\S+/);
+    if (urlMatch) return urlMatch[0];
+    const mdMatch = trimmed.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
+    if (mdMatch) return mdMatch[1];
+    // If looks like base64
+    if (trimmed.length > 100 && /^[A-Za-z0-9+/=]+$/.test(trimmed.slice(0, 20))) {
+      return `data:image/png;base64,${trimmed}`;
+    }
+  }
+
+  console.error('[generateImageFlux] Unrecognized response:', JSON.stringify(data).slice(0, 1000));
+  throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 500)}`);
 }

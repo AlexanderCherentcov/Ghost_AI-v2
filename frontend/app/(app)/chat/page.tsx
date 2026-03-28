@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -38,59 +37,6 @@ const SUGGESTIONS = [
   { icon: '💡', text: 'Придумай идеи для проекта' },
   { icon: '🔍', text: 'Объясни простыми словами' },
 ];
-
-function ModelSelector({ preferredModel, setPreferredModel }: {
-  preferredModel: 'haiku' | 'deepseek' | undefined;
-  setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const options: { key: 'haiku' | 'deepseek' | undefined; label: string }[] = [
-    { key: undefined,  label: 'Авто' },
-    { key: 'haiku',    label: 'Стандарт' },
-    { key: 'deepseek', label: 'Про' },
-  ];
-
-  const current = options.find(o => o.key === preferredModel) ?? options[0];
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.6)] border border-[var(--border)] rounded-lg px-3 py-1.5 hover:border-[rgba(255,255,255,0.25)] hover:text-white transition-all"
-      >
-        {current.label}
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path d="M2 4L5 7L8 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute top-full right-0 mt-1 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl min-w-[110px]">
-          {options.map(opt => (
-            <button
-              key={String(opt.key)}
-              onClick={() => { setPreferredModel(opt.key); setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-xs transition-colors hover:bg-[rgba(255,255,255,0.05)] ${
-                preferredModel === opt.key ? 'text-accent' : 'text-[rgba(255,255,255,0.65)]'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ChatPage() {
   const router = useRouter();
@@ -133,11 +79,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Model selector — top right */}
-      <div className="flex items-center justify-end px-4 py-1.5 flex-shrink-0">
-        <ModelSelector preferredModel={preferredModel} setPreferredModel={setPreferredModel} />
-      </div>
-
       {/* Empty state */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 overflow-y-auto">
         <motion.div
@@ -173,6 +114,8 @@ export default function ChatPage() {
       <InputBar
         onSend={handleSend}
         placeholder="Спросите что-нибудь у GhostLine..."
+        preferredModel={preferredModel}
+        setPreferredModel={setPreferredModel}
       />
     </div>
   );

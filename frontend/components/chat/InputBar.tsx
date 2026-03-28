@@ -1,41 +1,30 @@
 'use client';
 
-import { useState, useRef, KeyboardEvent } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef, KeyboardEvent, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SendIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 // ─── Accepted file types ──────────────────────────────────────────────────────
 
-// Every mime / extension we let through
 const ACCEPT = [
-  // Images
   'image/*',
-  // Documents
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods',
-  // Text / config
   '.txt', '.md', '.markdown', '.mdx', '.rst', '.log', '.csv', '.tsv',
-  // Web
   '.html', '.htm', '.xhtml', '.xml', '.svg', '.css', '.scss', '.less', '.styl',
-  // JavaScript / TypeScript
   '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
-  // Data
   '.json', '.jsonc', '.json5', '.yaml', '.yml', '.toml', '.ini', '.env',
   '.conf', '.cfg', '.config', '.gitignore', '.gitattributes', '.editorconfig',
-  // Programming languages
   '.py', '.pyw', '.java', '.kt', '.kts', '.swift', '.dart',
   '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hxx',
   '.go', '.rs', '.rb', '.php', '.pl', '.pm', '.r',
   '.lua', '.ex', '.exs', '.erl', '.hs', '.scala', '.clj',
   '.vue', '.svelte',
-  // Shell
   '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd',
-  // Infrastructure / DB
   '.sql', '.tf', '.hcl', '.dockerfile', '.makefile', '.cmake',
   '.proto', '.graphql', '.gql', '.thrift',
 ].join(',');
 
-// File-type category detection
 const TEXT_EXTS = new Set([
   'txt','md','markdown','mdx','rst','log','csv','tsv',
   'html','htm','xhtml','xml','svg',
@@ -62,7 +51,7 @@ export function getFileCategory(file: File): FileCategory {
   if (IMAGE_EXTS.has(ext)) return 'image';
   if (BINARY_EXTS.has(ext)) return 'binary';
   if (TEXT_EXTS.has(ext) || file.type.startsWith('text/')) return 'text';
-  return 'text'; // default: try as text
+  return 'text';
 }
 
 function fileIcon(file: File): string {
@@ -88,6 +77,79 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// ─── Model selector (inline in toolbar) ───────────────────────────────────────
+
+const MODEL_OPTIONS: { key: 'haiku' | 'deepseek' | undefined; label: string }[] = [
+  { key: undefined,  label: 'Авто' },
+  { key: 'haiku',    label: 'Стандарт' },
+  { key: 'deepseek', label: 'Про' },
+];
+
+function ModelPill({
+  preferredModel,
+  setPreferredModel,
+}: {
+  preferredModel: 'haiku' | 'deepseek' | undefined;
+  setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const current = MODEL_OPTIONS.find(o => o.key === preferredModel) ?? MODEL_OPTIONS[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-[12px] text-[rgba(255,255,255,0.45)] hover:text-[rgba(255,255,255,0.8)] transition-colors rounded-md px-1.5 py-0.5 hover:bg-[rgba(255,255,255,0.06)]"
+      >
+        {current.label}
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="absolute bottom-full mb-2 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl"
+            style={{ minWidth: '130px' }}
+          >
+            {MODEL_OPTIONS.map(opt => (
+              <button
+                key={String(opt.key)}
+                type="button"
+                onClick={() => { setPreferredModel(opt.key); setOpen(false); }}
+                className={cn(
+                  'w-full text-left px-4 py-2.5 text-[12px] transition-colors hover:bg-[rgba(255,255,255,0.05)]',
+                  preferredModel === opt.key
+                    ? 'text-accent'
+                    : 'text-[rgba(255,255,255,0.65)]'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface InputBarProps {
@@ -96,9 +158,14 @@ interface InputBarProps {
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
+  preferredModel?: 'haiku' | 'deepseek' | undefined;
+  setPreferredModel?: (m: 'haiku' | 'deepseek' | undefined) => void;
 }
 
-export function InputBar({ onSend, onStop, disabled = false, isStreaming = false, placeholder }: InputBarProps) {
+export function InputBar({
+  onSend, onStop, disabled = false, isStreaming = false,
+  placeholder, preferredModel, setPreferredModel,
+}: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -110,7 +177,9 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
     onSend(trimmed, attachedFile ?? undefined);
     setValue('');
     setAttachedFile(null);
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -172,15 +241,16 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
           </motion.div>
         )}
 
+        {/* Input container */}
         <div
           className={cn(
-            'flex items-end gap-3 bg-[var(--bg-input)] border rounded-2xl px-4 py-4 transition-all',
+            'flex flex-col bg-[var(--bg-input)] border rounded-2xl px-4 pt-3.5 pb-2.5 transition-all',
             hasContent
               ? 'border-[var(--accent-border)] shadow-[0_0_0_3px_var(--accent-glow)]'
               : 'border-[var(--border)] focus-within:border-[var(--accent-border)] focus-within:shadow-[0_0_0_3px_var(--accent-glow)]'
           )}
         >
-          {/* Hidden file input — maximum file types */}
+          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -188,18 +258,6 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
             className="hidden"
             onChange={handleFileChange}
           />
-
-          {/* Attach button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.55)] transition-colors flex-shrink-0 mb-0.5 focus:outline-none"
-            title="Прикрепить файл (изображение, PDF, Word, Excel, код и другие)"
-            type="button"
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 3.5V14.5M3.5 9H14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </button>
 
           {/* Textarea */}
           <textarea
@@ -212,38 +270,63 @@ export function InputBar({ onSend, onStop, disabled = false, isStreaming = false
             rows={1}
             style={{ fontSize: '16px', minHeight: '36px' }}
             className={cn(
-              'flex-1 bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[200px]',
+              'w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[200px]',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           />
 
-          {/* Stop / Send button */}
-          {isStreaming ? (
-            <motion.button
-              onClick={onStop}
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              title="Остановить"
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mb-0.5 bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] transition-all"
-            >
-              <span className="w-3.5 h-3.5 rounded-sm bg-white block" />
-            </motion.button>
-          ) : (
-            <motion.button
-              onClick={handleSend}
-              disabled={!hasContent || disabled}
-              whileTap={{ scale: 0.92 }}
-              type="button"
-              className={cn(
-                'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all mb-0.5 focus:outline-none',
-                hasContent && !disabled
-                  ? 'bg-accent text-white hover:opacity-90'
-                  : 'bg-[var(--bg-elevated)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-1">
+              {/* Attach / plus button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-7 h-7 flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.65)] transition-colors focus:outline-none rounded-md hover:bg-[rgba(255,255,255,0.06)]"
+                title="Прикрепить файл"
+                type="button"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+
+              {/* Model selector — shown when props provided */}
+              {setPreferredModel && (
+                <ModelPill
+                  preferredModel={preferredModel}
+                  setPreferredModel={setPreferredModel}
+                />
               )}
-            >
-              <SendIcon size={16} />
-            </motion.button>
-          )}
+            </div>
+
+            {/* Stop / Send */}
+            {isStreaming ? (
+              <motion.button
+                onClick={onStop}
+                whileTap={{ scale: 0.92 }}
+                type="button"
+                title="Остановить"
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.14)] transition-all"
+              >
+                <span className="w-3 h-3 rounded-sm bg-white block" />
+              </motion.button>
+            ) : (
+              <motion.button
+                onClick={handleSend}
+                disabled={!hasContent || disabled}
+                whileTap={{ scale: 0.92 }}
+                type="button"
+                className={cn(
+                  'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all focus:outline-none',
+                  hasContent && !disabled
+                    ? 'bg-accent text-white hover:opacity-90'
+                    : 'bg-[var(--bg-elevated)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
+                )}
+              >
+                <SendIcon size={15} />
+              </motion.button>
+            )}
+          </div>
         </div>
 
         <p className="text-center text-[11px] text-[rgba(255,255,255,0.15)] mt-2">

@@ -384,11 +384,8 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — в потоке, над BottomNav */}
-      <div
-        className="flex-shrink-0 px-3 py-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]"
-        style={{ paddingBottom: `calc(0.5rem + ${NAV_H}px + env(safe-area-inset-bottom))` }}
-      >
+      {/* Input — в потоке */}
+      <div className="flex-shrink-0 px-3 pt-2 pb-2 bg-[#0A0A12] border-t border-[rgba(255,255,255,0.06)]">
         <div className="flex gap-2 items-end">
           <input
             value={input}
@@ -410,6 +407,8 @@ function ChatApp() {
         </div>
       </div>
 
+      {/* Spacer для фиксированного BottomNav */}
+      <div className="flex-shrink-0" style={{ height: `calc(${NAV_H}px + env(safe-area-inset-bottom))` }} />
       <BottomNav />
     </div>
   );

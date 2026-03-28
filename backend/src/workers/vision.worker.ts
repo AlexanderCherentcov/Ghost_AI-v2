@@ -41,9 +41,20 @@ export function startVisionWorker() {
 
       let mediaUrl = await generateImageFlux(prompt, undefined, sourceImageUrl);
 
-      // If Gemini returned a base64 data URI — save to disk and use HTTP URL
+      // Always serve from our own server — avoids CORS/expiry issues with external CDN URLs
       if (mediaUrl.startsWith('data:')) {
         mediaUrl = saveDataUri(mediaUrl);
+      } else if (mediaUrl.startsWith('http')) {
+        // Download external URL and save to disk
+        const imgRes = await fetch(mediaUrl);
+        if (!imgRes.ok) throw new Error(`Failed to download image: ${imgRes.status}`);
+        const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+        const ext = contentType.includes('png') ? 'png' : 'jpg';
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        const filename = `${crypto.randomUUID()}.${ext}`;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+        mediaUrl = `${process.env.API_URL ?? 'http://localhost:4000'}/images/${filename}`;
       }
 
       await prisma.generateJob.update({

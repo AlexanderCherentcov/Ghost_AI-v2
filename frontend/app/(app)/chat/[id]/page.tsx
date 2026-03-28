@@ -122,8 +122,10 @@ export default function ChatConversationPage({ params }: Props) {
       .catch(() => router.replace('/chat'));
   }, [id]);
 
-  // Auto-send initial prompt
+  // Auto-send initial prompt — waits until history is loaded (messagesReady) to avoid race condition
   useEffect(() => {
+    if (!messagesReady) return; // wait for history to load before auto-sending
+
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
@@ -140,7 +142,7 @@ export default function ChatConversationPage({ params }: Props) {
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
-    setTimeout(async () => {
+    (async () => {
       if (initialImagePrompt) {
         handleGenerateImage(initialImagePrompt);
       } else if (initialImageUrl) {
@@ -160,8 +162,8 @@ export default function ChatConversationPage({ params }: Props) {
       } else {
         handleSend(initialPrompt ?? '');
       }
-    }, 300);
-  }, [id]);
+    })();
+  }, [id, messagesReady]);
 
   // Connect WS
   useEffect(() => {

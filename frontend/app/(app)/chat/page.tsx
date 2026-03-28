@@ -12,17 +12,6 @@ import { VisionIcon, ThinkIcon, ChatIcon } from '@/components/icons';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
-// Image keywords for auto-routing
-const IMAGE_KEYWORDS = [
-  'нарисуй', 'нарисовать', 'создай картинку', 'создать картинку',
-  'сгенерируй', 'сгенерировать', 'создай изображение', 'визуализируй',
-  'generate image', 'draw', 'make a picture', 'create image',
-];
-function isImageRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  return IMAGE_KEYWORDS.some((kw) => lower.includes(kw));
-}
-
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -63,17 +52,15 @@ export default function ChatPage() {
   const isPaidPlan = user?.plan !== 'FREE';
 
   async function handleSend(prompt: string, file?: File) {
-    // If image-create quickMode or auto-detected image request → go to vision
-    if (quickMode === 'image-create' || (quickMode === null && prompt && isImageRequest(prompt))) {
-      router.push('/vision');
-      return;
-    }
-
     const chatMode = quickMode === 'image-edit' ? 'vision' : mode;
     const chat = await api.chats.create({ mode: chatMode as any });
     addChat(chat);
 
-    sessionStorage.setItem('initialPrompt', prompt);
+    if (quickMode === 'image-create') {
+      sessionStorage.setItem('initialImagePrompt', prompt);
+    } else {
+      sessionStorage.setItem('initialPrompt', prompt);
+    }
     if (file) {
       const category = getFileCategory(file);
       sessionStorage.setItem('initialFileName', file.name);

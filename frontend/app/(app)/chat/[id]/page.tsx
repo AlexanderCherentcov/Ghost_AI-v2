@@ -92,6 +92,7 @@ export default function ChatConversationPage({ params }: Props) {
   // Auto-send initial prompt
   useEffect(() => {
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
+    const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
     const initialFileContent = sessionStorage.getItem('initialFileContent');
     const initialFileName    = sessionStorage.getItem('initialFileName');
@@ -99,15 +100,17 @@ export default function ChatConversationPage({ params }: Props) {
     const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
 
-    const hasAny = initialPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    ['initialPrompt','initialImageUrl','initialFileContent',
+    ['initialPrompt','initialImagePrompt','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     setTimeout(async () => {
-      if (initialImageUrl) {
+      if (initialImagePrompt) {
+        handleGenerateImage(initialImagePrompt);
+      } else if (initialImageUrl) {
         const res = await fetch(initialImageUrl);
         const blob = await res.blob();
         const file = new File([blob], initialFileName ?? 'image.jpg', { type: 'image/jpeg' });

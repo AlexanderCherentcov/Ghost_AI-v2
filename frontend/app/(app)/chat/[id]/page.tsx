@@ -46,7 +46,7 @@ function isImageEditRequest(text: string): boolean {
 function extractImagePrompt(content: string): string {
   // 1. Code block ```...``` — highest priority, unambiguous
   const codeBlock = content.match(/```[^\n]*\n?([\s\S]+?)```/);
-  if (codeBlock?.[1]?.trim().length > 20) return codeBlock[1].trim().slice(0, 600);
+  if ((codeBlock?.[1]?.trim().length ?? 0) > 20) return codeBlock![1].trim().slice(0, 600);
 
   // 2. Inline code `...` > 20 chars
   const inline = content.match(/`([^`]{20,})`/);

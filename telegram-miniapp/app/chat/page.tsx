@@ -83,15 +83,8 @@ function ChatApp() {
 
   // Sync height with Telegram stable viewport (fixes input hidden under bottom nav)
   useEffect(() => {
-    const app = window.Telegram?.WebApp;
-    if (!app) return;
-    const update = () => {
-      const h = app.viewportStableHeight;
-      if (h && h > 100) setVpHeight(`${h}px`);
-    };
-    update();
-    app.onEvent('viewportChanged', update);
-    return () => app.offEvent('viewportChanged', update);
+    const h = window.Telegram?.WebApp?.viewportStableHeight;
+    if (h && h > 100) setVpHeight(`${h}px`);
   }, []);
 
   // Auto-scroll

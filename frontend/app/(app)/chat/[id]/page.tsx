@@ -22,10 +22,24 @@ const IMAGE_NOUNS = [
 ];
 const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
 
+// Edit-intent keywords — used when user has attached an image and wants to modify it
+const EDIT_VERBS = [
+  'измени', 'изменить', 'отредактируй', 'отредактировать', 'сделай', 'поменяй', 'поменять',
+  'добавь', 'добавить', 'убери', 'убрать', 'замени', 'заменить', 'преврати', 'превратить',
+  'перекрась', 'раскрась', 'нарисуй', 'стилизуй', 'edit', 'change', 'modify', 'transform',
+  'remove', 'add', 'make it', 'turn into',
+];
+
 function isImageRequest(text: string): boolean {
   const lower = text.toLowerCase();
   if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
+}
+
+// Returns true if user attached an image and wants to edit it
+function isImageEditRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return EDIT_VERBS.some((v) => lower.includes(v));
 }
 
 // Extract clean image prompt from markdown (strips headers, bold markers, bullet points etc.)
@@ -159,7 +173,7 @@ export default function ChatConversationPage({ params }: Props) {
   }, []);
 
   // ── Inline image generation ──────────────────────────────────────────────────
-  const handleGenerateImage = useCallback(async (prompt: string) => {
+  const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string) => {
     if (!accessToken || !messagesReady) return;
     setGeneratingImage(true);
 
@@ -170,7 +184,7 @@ export default function ChatConversationPage({ params }: Props) {
       mode: 'vision',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: sourceImageUrl ?? null,
       createdAt: new Date().toISOString(),
     });
 
@@ -187,7 +201,7 @@ export default function ChatConversationPage({ params }: Props) {
     });
 
     try {
-      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024', chatId: id });
+      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024', chatId: id, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
 
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);
@@ -256,6 +270,11 @@ export default function ChatConversationPage({ params }: Props) {
         try {
           imageUrl = await resizeImageToBase64(file);
           fileDisplayUrl = imageUrl;
+
+          // Image editing: user attached an image and wants to modify it
+          if (prompt && isImageEditRequest(prompt)) {
+            return handleGenerateImage(prompt, imageUrl);
+          }
         } catch {
           showToast('Не удалось обработать изображение', 'error');
         }

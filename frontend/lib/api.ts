@@ -113,7 +113,7 @@ export const api = {
   },
 
   generate: {
-    vision: (data: { prompt: string; size?: string; chatId?: string }) =>
+    vision: (data: { prompt: string; size?: string; chatId?: string; sourceImageUrl?: string }) =>
       request<{ jobId: string }>('/generate/vision', {
         method: 'POST',
         body: JSON.stringify(data),

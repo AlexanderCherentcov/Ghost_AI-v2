@@ -25,20 +25,21 @@ interface VisionJob {
   prompt: string;
   chatId: string | null;
   size: '1024x1024' | '1792x1024' | '1024x1792';
+  sourceImageUrl?: string; // image editing mode
 }
 
 export function startVisionWorker() {
   const worker = new Worker<VisionJob>(
     'vision',
     async (job: Job<VisionJob>) => {
-      const { jobId, userId, prompt, chatId } = job.data;
+      const { jobId, userId, prompt, chatId, sourceImageUrl } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      let mediaUrl = await generateImageFlux(prompt);
+      let mediaUrl = await generateImageFlux(prompt, undefined, sourceImageUrl);
 
       // If Gemini returned a base64 data URI — save to disk and use HTTP URL
       if (mediaUrl.startsWith('data:')) {

@@ -13,6 +13,7 @@ const generateSchema = z.object({
   style: z.string().optional(),
   duration: z.number().int().min(5).max(30).optional(),
   size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional(),
+  sourceImageUrl: z.string().url().optional(), // for image editing mode
 });
 
 export default async function generateRoutes(fastify: FastifyInstance) {
@@ -21,7 +22,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, size, chatId } = generateSchema.parse(request.body);
+      const { prompt, size, chatId, sourceImageUrl } = generateSchema.parse(request.body);
 
       // FREE plan: refresh monthly image quota (3/month)
       const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
@@ -78,6 +79,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         prompt,
         chatId: chatId ?? null,
         size: effectiveSize,
+        ...(sourceImageUrl ? { sourceImageUrl } : {}),
       });
 
       await prisma.generateJob.update({

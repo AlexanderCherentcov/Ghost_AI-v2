@@ -76,8 +76,17 @@ export async function* streamOpenRouter(
 
 export async function generateImageFlux(
   prompt: string,
-  model: string = OR_MODELS.flux
+  model: string = OR_MODELS.flux,
+  sourceImageUrl?: string      // if provided — image editing mode
 ): Promise<string> {
+  // Build user message: editing = [image, text], generation = [text]
+  const userContent = sourceImageUrl
+    ? [
+        { type: 'image_url', image_url: { url: sourceImageUrl, detail: 'high' } },
+        { type: 'text', text: `Edit this image: ${prompt}` },
+      ]
+    : `Generate an image. Visual scene description: ${prompt}`;
+
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -88,7 +97,7 @@ export async function generateImageFlux(
     },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'user', content: `Generate an image. Visual scene description: ${prompt}` }],
+      messages: [{ role: 'user', content: userContent }],
       modalities: ['image'],
     }),
   });

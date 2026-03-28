@@ -70,10 +70,24 @@ function ChatApp() {
   const [chatId, setChatId] = useState<string | null>(null);
   const [model, setModel] = useState<ModelChoice>(undefined);
   const [modelOpen, setModelOpen] = useState(false);
+  const [vpHeight, setVpHeight] = useState('100dvh');
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
+
+  // Sync height with Telegram stable viewport (fixes input hidden under bottom nav)
+  useEffect(() => {
+    const app = window.Telegram?.WebApp;
+    if (!app) return;
+    const update = () => {
+      const h = app.viewportStableHeight;
+      if (h && h > 100) setVpHeight(`${h}px`);
+    };
+    update();
+    app.onEvent('viewportChanged', update);
+    return () => app.offEvent('viewportChanged', update);
+  }, []);
 
   // Auto-scroll
   useEffect(() => {
@@ -258,11 +272,11 @@ function ChatApp() {
     { key: 'deepseek',  label: 'Про' },
   ];
 
-  // BottomNav height ~60px
-  const NAV_H = 60;
+  // BottomNav height ~60px visible + safe area
+  const NAV_H = 64;
 
   return (
-    <div className="flex flex-col bg-[#0A0A12]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-[#0A0A12]" style={{ height: vpHeight }}>
       {/* Header */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>

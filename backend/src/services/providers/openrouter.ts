@@ -7,7 +7,7 @@ export const OR_MODELS = {
   haiku:      'anthropic/claude-haiku-4-5',
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
-  flux:       'black-forest-labs/flux-1.1-pro',
+  flux:       'google/gemini-3.1-flash-image-preview',
   fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;
 
@@ -89,6 +89,7 @@ export async function generateImageFlux(
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: prompt }],
+      modalities: ['image'],
     }),
   });
 

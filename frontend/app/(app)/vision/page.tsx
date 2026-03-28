@@ -27,9 +27,11 @@ export default function VisionPage() {
         if (updated.status === 'done' || updated.status === 'failed') {
           clearInterval(interval);
           if (updated.status === 'done') setHistory((h) => [updated, ...h]);
+          if (updated.status === 'failed') show(updated.error ?? 'Ошибка генерации', 'error');
         }
       } catch {
         clearInterval(interval);
+        setJob((prev) => prev ? { ...prev, status: 'failed', error: 'Ошибка соединения' } : prev);
       }
     }, 2000);
     return () => clearInterval(interval);
@@ -52,6 +54,8 @@ export default function VisionPage() {
         show('Изображение уже генерируется — дождитесь результата', 'warning');
       } else if (err.code === 'RATE_LIMITED') {
         show('Слишком много запросов. Подождите минуту.', 'warning');
+      } else if (err.code === 'LIMIT_IMAGES' || err.status === 402) {
+        show('Недостаточно изображений. Пополните баланс.', 'error');
       } else {
         show(err.message ?? 'Ошибка генерации', 'error');
       }

@@ -229,7 +229,7 @@ function ChatApp() {
     } finally {
       setStreaming(false);
     }
-  }, [tg, router]);
+  }, [tg, router, chatId]);
 
   // ── Chat send ─────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {

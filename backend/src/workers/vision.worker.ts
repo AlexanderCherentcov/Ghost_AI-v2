@@ -54,7 +54,7 @@ export function startVisionWorker() {
       if (chatId) {
         await prisma.message.create({
           data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl },
-        }).catch(() => {});
+        }).catch((e) => console.error('[VisionWorker] Failed to save assistant message:', e.message));
       }
 
       // Cache for future identical prompts (30-day TTL)

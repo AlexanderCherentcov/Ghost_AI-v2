@@ -45,7 +45,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       if (chatId) {
         await prisma.message.create({
           data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0 },
-        }).catch(() => {});
+        }).catch((e) => console.error('[generate/vision] Failed to save user message:', e.message));
       }
 
       // Check media cache first (saves real generation credits)
@@ -55,7 +55,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         if (chatId) {
           await prisma.message.create({
             data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: mediaCached.url },
-          }).catch(() => {});
+          }).catch((e) => console.error('[generate/vision] Failed to save cached assistant message:', e.message));
         }
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'vision', prompt, status: 'done', mediaUrl: mediaCached.url },

@@ -32,7 +32,7 @@ export default function OnboardingNamePage() {
   async function handleNext() {
     if (!name.trim() || loading) return;
     setLoading(true);
-    const user = await api.auth.updateMe({ name: name.trim() });
+    const user = await api.auth.updateMe({ name: name.trim(), onboardingDone: true });
     setUser(user);
     router.push('/onboarding/birthdate');
   }

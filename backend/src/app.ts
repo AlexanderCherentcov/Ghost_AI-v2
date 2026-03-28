@@ -45,6 +45,9 @@ export async function buildApp() {
     ...(process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     process.env.FRONTEND_URL ?? 'http://localhost:3000',
     process.env.MINIAPP_URL ?? 'http://localhost:3001',
+    // Production domains — always allowed regardless of env vars
+    'https://ghostlineai.ru',
+    'https://www.ghostlineai.ru',
   ].filter(Boolean));
 
   // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted

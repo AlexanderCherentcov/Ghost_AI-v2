@@ -243,47 +243,69 @@ function ChatApp() {
       .catch(() => {});
   }, []);
 
-  // WS
+  // WS with auto-reconnect
   useEffect(() => {
-    const ws = new WebSocket(`${WS_URL}/api/chat/stream`);
-    wsRef.current = ws;
+    let destroyed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    ws.onmessage = (e) => {
-      const chunk = JSON.parse(e.data);
-      if (chunk.type === 'token' && chunk.data) {
-        setStreamContent((prev) => prev + chunk.data);
-      }
-      if (chunk.type === 'done') {
-        setStreamContent((prev) => {
-          const content = prev;
-          setMessages((msgs) => [
-            ...msgs,
-            {
-              id: `msg-${Date.now()}`,
-              role: 'assistant',
-              content,
-              tokensCost: chunk.tokensCost,
-              cacheHit: chunk.cacheHit,
-            },
-          ]);
-          return '';
-        });
-        setStreaming(false);
-        tg?.HapticFeedback.notificationOccurred('success');
-      }
-      if (chunk.type === 'error') {
-        setStreaming(false);
-        setStreamContent('');
-        if (chunk.code === 'LIMIT_MESSAGES' || chunk.code === 'LIMIT_IMAGES') {
-          tg?.showAlert('Лимит исчерпан! Пополните баланс.', () => {
-            router.push('/balance');
-          });
-          tg?.HapticFeedback.notificationOccurred('error');
+    function connect() {
+      if (destroyed) return;
+      const ws = new WebSocket(`${WS_URL}/api/chat/stream`);
+      wsRef.current = ws;
+
+      ws.onmessage = (e) => {
+        const chunk = JSON.parse(e.data);
+        if (chunk.type === 'token' && chunk.data) {
+          setStreamContent((prev) => prev + chunk.data);
         }
-      }
-    };
+        if (chunk.type === 'done') {
+          setStreamContent((prev) => {
+            const content = prev;
+            setMessages((msgs) => [
+              ...msgs,
+              {
+                id: `msg-${Date.now()}`,
+                role: 'assistant',
+                content,
+                tokensCost: chunk.tokensCost,
+                cacheHit: chunk.cacheHit,
+              },
+            ]);
+            return '';
+          });
+          setStreaming(false);
+          tg?.HapticFeedback.notificationOccurred('success');
+        }
+        if (chunk.type === 'error') {
+          setStreaming(false);
+          setStreamContent('');
+          if (chunk.code === 'LIMIT_MESSAGES' || chunk.code === 'LIMIT_IMAGES') {
+            tg?.showAlert('Лимит исчерпан! Пополните баланс.', () => {
+              router.push('/balance');
+            });
+            tg?.HapticFeedback.notificationOccurred('error');
+          }
+        }
+      };
 
-    return () => ws.close();
+      ws.onclose = () => {
+        if (!destroyed) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    connect();
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
+    };
   }, []);
 
   // ── Image generation ─────────────────────────────────────────────────────────

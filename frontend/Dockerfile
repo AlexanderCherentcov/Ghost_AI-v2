@@ -10,7 +10,7 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 
 # Install deps
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Build
 COPY . .

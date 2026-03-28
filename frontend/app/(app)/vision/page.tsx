@@ -21,11 +21,15 @@ export default function VisionPage() {
   useEffect(() => {
     if (!jobId || job?.status === 'done' || job?.status === 'failed') return;
     const interval = setInterval(async () => {
-      const updated = await api.generate.status(jobId);
-      setJob(updated);
-      if (updated.status === 'done' || updated.status === 'failed') {
+      try {
+        const updated = await api.generate.status(jobId);
+        setJob(updated);
+        if (updated.status === 'done' || updated.status === 'failed') {
+          clearInterval(interval);
+          if (updated.status === 'done') setHistory((h) => [updated, ...h]);
+        }
+      } catch {
         clearInterval(interval);
-        if (updated.status === 'done') setHistory((h) => [updated, ...h]);
       }
     }, 2000);
     return () => clearInterval(interval);

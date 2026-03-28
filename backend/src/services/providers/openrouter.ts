@@ -89,6 +89,7 @@ export async function generateImageFlux(
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: prompt }],
+      modalities: ['image'],
     }),
   });
 
@@ -97,48 +98,41 @@ export async function generateImageFlux(
     throw new Error(`OpenRouter image generation failed: ${err}`);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string | Array<{ type: string; image_url?: { url: string }; url?: string }>;
-      };
-    }>;
-    data?: Array<{ url?: string; b64_json?: string }>;
-  };
+  const data = (await response.json()) as any;
 
-  // Format 1: data[].url (OpenAI-images style)
-  const imgData = data.data?.[0];
+  const msg = data?.choices?.[0]?.message;
+
+  // Format 1: message.images[] — OpenRouter image generation models (seedream, flux.2, etc.)
+  const images = msg?.images;
+  if (Array.isArray(images) && images.length > 0) {
+    const img = images[0];
+    if (img?.image_url?.url) return img.image_url.url;
+    if (img?.url) return img.url;
+  }
+
+  // Format 2: data[].url (OpenAI DALL-E style)
+  const imgData = data?.data?.[0];
   if (imgData?.url) return imgData.url;
   if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
-  const content = data.choices?.[0]?.message?.content;
-
-  // Format 2: content as array of parts
+  // Format 3: content as array of parts
+  const content = msg?.content;
   if (Array.isArray(content)) {
-    for (const part of content) {
-      const p = part as any;
-      if (p.type === 'image_url' && p.image_url?.url) return p.image_url.url;
-      if (p.type === 'image' && p.url) return p.url;
-      if (p.type === 'image' && p.image_url?.url) return p.image_url.url;
-      if (p.type === 'image' && p.source?.url) return p.source.url;
+    for (const p of content) {
+      if (p?.type === 'image_url' && p.image_url?.url) return p.image_url.url;
+      if (p?.type === 'image' && p.image_url?.url) return p.image_url.url;
+      if (p?.type === 'image' && p.url) return p.url;
     }
   }
 
-  // Format 3: content as string (URL, data-URI, or markdown image)
+  // Format 4: content as string URL or data-URI
   if (typeof content === 'string' && content.trim()) {
-    const trimmed = content.trim();
-    if (trimmed.startsWith('http') || trimmed.startsWith('data:') || trimmed.startsWith('//')) return trimmed;
-    const urlMatch = trimmed.match(/https?:\/\/\S+/);
-    if (urlMatch) return urlMatch[0];
-    const mdMatch = trimmed.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
-    if (mdMatch) return mdMatch[1];
-    // If looks like base64
-    if (trimmed.length > 100 && /^[A-Za-z0-9+/=]+$/.test(trimmed.slice(0, 20))) {
-      return `data:image/png;base64,${trimmed}`;
-    }
+    const t = content.trim();
+    if (t.startsWith('http') || t.startsWith('data:')) return t;
+    const m = t.match(/https?:\/\/\S+/);
+    if (m) return m[0];
   }
 
-  const dump = JSON.stringify(data, null, 2).slice(0, 2000);
-  console.error('[generateImageFlux] Unrecognized response structure:\n', dump);
+  console.error('[generateImageFlux] Unknown response:\n', JSON.stringify(data, null, 2).slice(0, 2000));
   throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 300)}`);
 }

@@ -106,6 +106,11 @@ export async function generateImageFlux(
     data?: Array<{ url?: string; b64_json?: string }>;
   };
 
+  // Debug: log response structure
+  console.log('[generateImageFlux] response keys:', Object.keys(data));
+  console.log('[generateImageFlux] choices[0].message:', JSON.stringify((data as any).choices?.[0]?.message).slice(0, 500));
+  console.log('[generateImageFlux] data field:', JSON.stringify((data as any).data).slice(0, 200));
+
   // Format 1: data[].url (OpenAI-images style)
   const imgData = data.data?.[0];
   if (imgData?.url) return imgData.url;

@@ -44,15 +44,46 @@ function isImageEditRequest(text: string): boolean {
 
 // Extract clean image prompt from markdown (strips headers, bold markers, bullet points etc.)
 function extractImagePrompt(content: string): string {
-  // Try to grab the longest bold **...** span — usually the actual prompt
+  // 1. Code block ```...``` — highest priority, unambiguous
+  const codeBlock = content.match(/```[^\n]*\n?([\s\S]+?)```/);
+  if (codeBlock?.[1]?.trim().length > 20) return codeBlock[1].trim().slice(0, 600);
+
+  // 2. Inline code `...` > 20 chars
+  const inline = content.match(/`([^`]{20,})`/);
+  if (inline?.[1]?.trim()) return inline[1].trim().slice(0, 600);
+
+  // 3. Bold **...** > 30 chars that's NOT a section header (doesn't end with : or —)
   const boldMatches = content.match(/\*\*([^*]{30,})\*\*/g);
-  if (boldMatches && boldMatches.length > 0) {
-    const longest = boldMatches
+  if (boldMatches?.length) {
+    const candidates = boldMatches
       .map((m) => m.replace(/\*\*/g, '').trim())
-      .sort((a, b) => b.length - a.length)[0];
-    if (longest) return longest.slice(0, 600);
+      .filter((t) => !t.endsWith(':') && !t.endsWith('—') && !t.endsWith('-'))
+      .sort((a, b) => b.length - a.length);
+    if (candidates[0]) return candidates[0].slice(0, 600);
   }
-  // Fallback: strip all markdown formatting
+
+  // 4. Quoted text "..." or «...» > 30 chars
+  const quoted = content.match(/["""«]([^"""»\n]{30,})["""»]/);
+  if (quoted?.[1]?.trim()) return quoted[1].trim().slice(0, 600);
+
+  // 5. Find a line that looks like an image prompt (has visual keywords, not an intro sentence)
+  const IMAGE_KEYWORDS = ['4k', '8k', 'photorealistic', 'detailed', 'style', 'lighting',
+    'portrait', 'landscape', 'digital art', 'cinematic', 'high quality', 'beautiful',
+    'stunning', 'realistic', 'illustration', 'render', 'resolution'];
+  const INTRO_PREFIXES = ['конечно', 'вот ', 'используй', 'этот промт', 'данный', 'можно',
+    'вы можете', 'для генерации', 'для создания', 'ниже', 'предлагаю', 'here ', 'this '];
+  const lines = content
+    .replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s+/g, '').replace(/`/g, '')
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 30 && !l.endsWith(':'));
+  const keywordLine = lines.find((l) => IMAGE_KEYWORDS.some((kw) => l.toLowerCase().includes(kw)));
+  if (keywordLine) return keywordLine.slice(0, 600);
+  const nonIntroLine = lines.find((l) => !INTRO_PREFIXES.some((p) => l.toLowerCase().startsWith(p)));
+  if (nonIntroLine) return nonIntroLine.slice(0, 600);
+  if (lines.length) return lines.sort((a, b) => b.length - a.length)[0].slice(0, 600);
+
+  // Final fallback: strip all markdown
   return content
     .replace(/#{1,6}\s+/g, '')
     .replace(/\*\*/g, '')
@@ -115,6 +146,7 @@ export default function ChatConversationPage({ params }: Props) {
 
   // Load messages
   useEffect(() => {
+    localStorage.setItem('lastChatId', id);
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);
     api.chats.messages(id)

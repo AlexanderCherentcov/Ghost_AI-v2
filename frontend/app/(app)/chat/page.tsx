@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
@@ -40,10 +41,16 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const router = useRouter();
-  const { addChat, preferredModel, setPreferredModel } = useChatStore();
+  const { addChat, preferredModel, setPreferredModel, chats } = useChatStore();
   const { user } = useAuthStore();
 
   const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
+
+  // Redirect to last opened chat on refresh
+  useEffect(() => {
+    const lastId = localStorage.getItem('lastChatId');
+    if (lastId) router.replace(`/chat/${lastId}`);
+  }, []);
 
   async function handleSend(prompt: string, file?: File) {
     const chat = await api.chats.create({ mode: 'chat' });

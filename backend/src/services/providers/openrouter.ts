@@ -7,8 +7,8 @@ export const OR_MODELS = {
   haiku:      'anthropic/claude-haiku-4-5',
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
-  flux:       'black-forest-labs/flux-schnell',
-  fluxFill:   'black-forest-labs/flux-schnell',
+  flux:       'bytedance-seed/seedream-4.5',
+  fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;
 
 function getClient() {

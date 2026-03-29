@@ -10,26 +10,26 @@ const PLANS = [
     key: 'BASIC',
     name: 'Базовый',
     price: 699,
-    features: ['500 сообщ./мес', '30 картинок', '40 файлов'],
+    features: ['500 сообщ./мес', '20 картинок', '40 файлов'],
   },
   {
     key: 'STANDARD',
     name: 'Стандарт',
     price: 1199,
-    features: ['1 500 сообщ./мес', '70 картинок', '150 файлов'],
+    features: ['1 500 сообщ./мес', '30 картинок', '150 файлов', '5 видео'],
     popular: true,
   },
   {
     key: 'PRO',
     name: 'Про',
     price: 2490,
-    features: ['Безлимитный чат', '150 картинок', '500 файлов'],
+    features: ['Безлимитный чат', '80 картинок', '500 файлов', '15 видео'],
   },
   {
     key: 'ULTRA',
     name: 'Ультра',
     price: 5490,
-    features: ['Безлимитный чат', '350 картинок', '1 000 файлов'],
+    features: ['Безлимитный чат', '150 картинок', '1 000 файлов', '40 видео'],
   },
 ];
 
@@ -38,10 +38,12 @@ interface User {
   messagesUsed:  number;
   filesUsed:     number;
   imagesUsed:    number;
+  videoUsed:     number;
   messagesToday: number;
   messagesLimit: number;
   filesLimit:    number;
   imagesLimit:   number;
+  videoLimit:    number;
 }
 
 function UsageRow({ label, used, limit }: { label: string; used: number; limit: number }) {
@@ -86,7 +88,8 @@ function BalanceApp() {
   }
 
   const plan = user?.plan ?? 'FREE';
-  const isDaily = plan === 'FREE' || plan === 'PRO' || plan === 'ULTRA';
+  const isUnlimitedChat = plan === 'PRO' || plan === 'ULTRA';
+  const isMonthlyMessages = plan === 'BASIC' || plan === 'STANDARD';
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0A0A12] pb-[80px]">
@@ -101,23 +104,23 @@ function BalanceApp() {
         {user && (
           <div className="bg-[#0E0E1A] border border-[rgba(255,255,255,0.06)] rounded-2xl p-4 space-y-3">
             <p className="text-xs text-[rgba(255,255,255,0.35)] font-medium uppercase tracking-wider">Использование</p>
-            {isDaily ? (
-              <>
-                <UsageRow
-                  label="Сообщения сегодня"
-                  used={user.messagesToday}
-                  limit={plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400}
-                />
-                {plan !== 'FREE' && (
-                  <p className="text-xs text-[rgba(255,255,255,0.3)]">Чат безлимитный, сброс каждый день</p>
-                )}
-              </>
-            ) : (
+
+            {plan === 'FREE' && (
+              <UsageRow label="Сообщения сегодня" used={user.messagesToday} limit={10} />
+            )}
+            {isMonthlyMessages && (
               <UsageRow label="Сообщения" used={user.messagesUsed} limit={user.messagesLimit} />
             )}
+            {isUnlimitedChat && (
+              <p className="text-xs text-[rgba(255,255,255,0.3)]">Чат безлимитный, сброс каждый день</p>
+            )}
+
             <UsageRow label="Картинки" used={user.imagesUsed} limit={user.imagesLimit} />
             {user.filesLimit > 0 && (
               <UsageRow label="Файлы" used={user.filesUsed} limit={user.filesLimit} />
+            )}
+            {(user.videoLimit ?? 0) > 0 && (
+              <UsageRow label="Видео" used={user.videoUsed ?? 0} limit={user.videoLimit} />
             )}
           </div>
         )}

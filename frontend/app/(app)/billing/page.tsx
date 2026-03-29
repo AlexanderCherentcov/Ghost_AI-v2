@@ -14,28 +14,28 @@ const PLANS = [
     name: 'Базовый',
     price: 699,
     badge: undefined as string | undefined,
-    features: ['500 сообщений/месяц', '30 картинок/месяц', '40 файлов/месяц'],
+    features: ['500 сообщений/месяц', '20 картинок/месяц', '40 файлов/месяц'],
   },
   {
     key: 'STANDARD',
     name: 'Стандарт',
     price: 1199,
     badge: 'Популярный',
-    features: ['1 500 сообщений/месяц', '70 картинок/месяц', '150 файлов/месяц'],
+    features: ['1 500 сообщений/месяц', '30 картинок/месяц', '150 файлов/месяц', '5 видео/месяц'],
   },
   {
     key: 'PRO',
     name: 'Про',
     price: 2490,
     badge: undefined,
-    features: ['Безлимитный чат', '150 картинок/месяц', '500 файлов/месяц', 'Модель DeepSeek'],
+    features: ['Безлимитный чат', '80 картинок/месяц', '500 файлов/месяц', '15 видео/месяц'],
   },
   {
     key: 'ULTRA',
     name: 'Ультра',
     price: 5490,
     badge: 'Максимум',
-    features: ['Безлимитный чат', '350 картинок/месяц', '1 000 файлов/месяц', 'Модель DeepSeek', 'Приоритетная обработка'],
+    features: ['Безлимитный чат', '150 картинок/месяц', '1 000 файлов/месяц', '40 видео/месяц', 'Приоритетная обработка'],
   },
 ];
 
@@ -73,7 +73,8 @@ export default function BillingPage() {
   }
 
   const plan = user?.plan ?? 'FREE';
-  const isDaily = plan === 'FREE' || plan === 'PRO' || plan === 'ULTRA';
+  const isUnlimitedChat = plan === 'PRO' || plan === 'ULTRA';
+  const isMonthlyMessages = plan === 'BASIC' || plan === 'STANDARD';
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -88,30 +89,24 @@ export default function BillingPage() {
         {user && (
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider">Использование</p>
-            {isDaily ? (
-              <>
-                <div>
-                  <div className="flex justify-between text-xs text-[rgba(255,255,255,0.4)] mb-1">
-                    <span>Сообщения сегодня</span>
-                    <span>{user.messagesToday} / {plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400}</span>
-                  </div>
-                  <div className="h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full"
-                      style={{ width: `${Math.min((user.messagesToday / (plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400)) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                {plan !== 'FREE' && (
-                  <p className="text-xs text-[rgba(255,255,255,0.3)]">Чат: безлимитный (дневной сброс)</p>
-                )}
-              </>
-            ) : (
+
+            {/* Messages */}
+            {plan === 'FREE' && (
+              <UsageBar used={user.messagesToday} limit={10} label="Сообщения сегодня" />
+            )}
+            {isMonthlyMessages && (
               <UsageBar used={user.messagesUsed} limit={user.messagesLimit} label="Сообщений" />
             )}
+            {isUnlimitedChat && (
+              <p className="text-xs text-[rgba(255,255,255,0.3)]">Чат: безлимитный (дневной сброс)</p>
+            )}
+
             <UsageBar used={user.imagesUsed} limit={user.imagesLimit} label="Картинок" />
             {user.filesLimit > 0 && (
               <UsageBar used={user.filesUsed} limit={user.filesLimit} label="Файлов" />
+            )}
+            {(user.videoLimit ?? 0) > 0 && (
+              <UsageBar used={user.videoUsed ?? 0} limit={user.videoLimit} label="Видео" />
             )}
           </div>
         )}

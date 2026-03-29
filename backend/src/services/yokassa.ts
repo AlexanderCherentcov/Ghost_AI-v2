@@ -20,11 +20,11 @@ function yokassaHeaders(idempotencyKey: string) {
 // messages: monthly cap (-1 = daily mode), images: monthly cap, files: monthly cap
 
 export const PLANS = {
-  FREE:     { price: 0,    label: 'Бесплатный', messagesLimit: -1,   imagesLimit: 3,   filesLimit: 0    },
-  BASIC:    { price: 699,  label: 'Базовый',    messagesLimit: 500,  imagesLimit: 30,  filesLimit: 40   },
-  STANDARD: { price: 1199, label: 'Стандарт',   messagesLimit: 1500, imagesLimit: 70,  filesLimit: 150  },
-  PRO:      { price: 2490, label: 'Про',        messagesLimit: -1,   imagesLimit: 150, filesLimit: 500  },
-  ULTRA:    { price: 5490, label: 'Ультра',     messagesLimit: -1,   imagesLimit: 350, filesLimit: 1000 },
+  FREE:     { price: 0,    label: 'Бесплатный', messagesLimit: -1,   imagesLimit: 3,   filesLimit: 0,    videoLimit: 0  },
+  BASIC:    { price: 699,  label: 'Базовый',    messagesLimit: 500,  imagesLimit: 20,  filesLimit: 40,   videoLimit: 0  },
+  STANDARD: { price: 1199, label: 'Стандарт',   messagesLimit: 1500, imagesLimit: 30,  filesLimit: 150,  videoLimit: 5  },
+  PRO:      { price: 2490, label: 'Про',        messagesLimit: -1,   imagesLimit: 80,  filesLimit: 500,  videoLimit: 15 },
+  ULTRA:    { price: 5490, label: 'Ультра',     messagesLimit: -1,   imagesLimit: 150, filesLimit: 1000, videoLimit: 40 },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
@@ -99,6 +99,7 @@ export async function processWebhook(body: unknown): Promise<void> {
           messagesLimit: planInfo.messagesLimit,
           filesLimit:    planInfo.filesLimit,
           imagesLimit:   planInfo.imagesLimit,
+          videoLimit:    planInfo.videoLimit,
         },
         payment.plan
       );

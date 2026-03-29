@@ -11,9 +11,10 @@
 
 import { redis } from '../lib/redis.js';
 
-const CHAT_RPM = parseInt(process.env.CHAT_RPM ?? '10');  // 10 сообщений чата в минуту
-const GEN_RPM  = parseInt(process.env.GEN_RPM  ?? '3');   // 3 генерации в минуту
-const LOCK_TTL = 120; // секунд — max время удержания лока (страховка от вечного лока)
+const CHAT_RPM  = parseInt(process.env.CHAT_RPM  ?? '10');  // 10 сообщений чата в минуту
+const GEN_RPM   = parseInt(process.env.GEN_RPM   ?? '3');   // 3 генерации картинок в минуту
+const VIDEO_RPM = parseInt(process.env.VIDEO_RPM ?? '1');   // 1 генерация видео в минуту
+const LOCK_TTL  = 120; // секунд — max время удержания лока (страховка от вечного лока)
 
 // ─── Chat rate limit ──────────────────────────────────────────────────────────
 
@@ -45,6 +46,23 @@ export async function checkGenRateLimit(userId: string): Promise<boolean> {
     const count = await redis.incr(key);
     if (count === 1) await redis.expire(key, 60);
     return count <= GEN_RPM;
+  } catch {
+    return true;
+  }
+}
+
+// ─── Video rate limit ─────────────────────────────────────────────────────────
+
+/**
+ * Проверяет лимит запросов на видео-генерацию (1 в минуту).
+ * @returns true — в пределах лимита, false — превышен
+ */
+export async function checkVideoRateLimit(userId: string): Promise<boolean> {
+  try {
+    const key = `rl:video:${userId}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, 60);
+    return count <= VIDEO_RPM;
   } catch {
     return true;
   }

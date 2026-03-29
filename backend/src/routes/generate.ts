@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { checkResets, checkAndDeduct } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
-import { checkGenRateLimit } from '../services/user-limiter.js';
+import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { encrypt } from '../lib/crypto.js';
 import crypto from 'crypto';
 
@@ -179,14 +179,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Reset counters if period ended
       await checkResets(userId);
 
-      // FREE plan: no reel generation
+      // FREE / BASIC: no video generation
       const userPlanR = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (userPlanR?.plan === 'FREE') {
-        return reply.code(403).send({ error: 'Обновите тариф для генерации видео.', code: 'PLAN_RESTRICTED' });
+      if (userPlanR?.plan === 'FREE' || userPlanR?.plan === 'BASIC') {
+        return reply.code(403).send({ error: 'Генерация видео доступна начиная со тарифа Стандарт.', code: 'LIMIT_VIDEOS_UNAVAILABLE' });
       }
 
-      // Per-user rate limit
-      if (!await checkGenRateLimit(userId)) {
+      // Per-user video rate limit (1/min)
+      if (!await checkVideoRateLimit(userId)) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
       }
 
@@ -202,14 +202,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first
       const mediaCached = await getMediaCached('reel', prompt);
       if (mediaCached.hit) {
-        await checkAndDeduct(userId, 'image_generate');
+        await checkAndDeduct(userId, 'video_generate');
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'reel', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await checkAndDeduct(userId, 'image_generate');
+      await checkAndDeduct(userId, 'video_generate');
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'reel', prompt },
@@ -219,7 +219,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
-        duration: (duration === 10 ? 10 : 5) as 5 | 10,
       });
 
       await prisma.generateJob.update({

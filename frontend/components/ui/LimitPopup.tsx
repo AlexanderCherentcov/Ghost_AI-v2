@@ -8,6 +8,8 @@ export type LimitType =
   | 'LIMIT_MESSAGES'
   | 'LIMIT_FILES'
   | 'LIMIT_IMAGES'
+  | 'LIMIT_VIDEOS'
+  | 'LIMIT_VIDEOS_UNAVAILABLE'
   | 'FREE_LOCKED'
   | null;
 
@@ -46,10 +48,24 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
     btn1: 'Перейти на следующий тариф',
     btn2: 'Закрыть',
   },
+  LIMIT_VIDEOS: {
+    icon: '🎬',
+    title: 'Лимит видео исчерпан',
+    desc: 'Лимит генераций видео на этот месяц исчерпан. Чат и картинки работают.',
+    btn1: 'Перейти на следующий тариф',
+    btn2: 'Закрыть',
+  },
+  LIMIT_VIDEOS_UNAVAILABLE: {
+    icon: '🎬',
+    title: 'Видео недоступно',
+    desc: 'Генерация видео доступна начиная со тарифа Стандарт.',
+    btn1: 'Посмотреть тарифы',
+    btn2: 'Закрыть',
+  },
   FREE_LOCKED: {
     icon: '⚡',
     title: 'Функция недоступна',
-    desc: 'Картинки и файлы доступны с платного тарифа.',
+    desc: 'Картинки, файлы и видео доступны с платного тарифа.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },

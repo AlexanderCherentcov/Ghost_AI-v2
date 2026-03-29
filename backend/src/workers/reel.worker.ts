@@ -1,35 +1,34 @@
 import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideo } from '../services/providers/runway.js';
+import { generateVideoKling } from '../services/providers/kling.js';
 import { setMediaCached } from '../services/cache.js';
 
 interface ReelJob {
   jobId: string;
   userId: string;
   prompt: string;
-  duration: 5 | 10;
 }
 
 export function startReelWorker() {
   const worker = new Worker<ReelJob>(
     'reel',
     async (job: Job<ReelJob>) => {
-      const { jobId, prompt, duration } = job.data;
+      const { jobId, prompt } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      const mediaUrl = await generateVideo(prompt, duration);
+      const mediaUrl = await generateVideoKling(prompt);
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
 
-      // Cache for future identical prompts (30-day TTL)
+      // Cache for future identical prompts (7-day TTL — GoAPI video expiry)
       setMediaCached('reel', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };
@@ -50,6 +49,10 @@ export function startReelWorker() {
     console.error(`[ReelWorker] Job ${job?.id} failed:`, err.message);
   });
 
-  console.info('[ReelWorker] Started');
+  worker.on('completed', (job) => {
+    console.info(`[ReelWorker] Job ${job.id} completed`);
+  });
+
+  console.info('[ReelWorker] Started (GoAPI Kling V2.5)');
   return worker;
 }

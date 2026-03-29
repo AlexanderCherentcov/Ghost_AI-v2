@@ -146,12 +146,14 @@ export interface User {
   messagesUsed:  number;
   filesUsed:     number;
   imagesUsed:    number;
+  videoUsed:     number;
   // Daily counters (FREE/PRO/ULTRA)
   messagesToday: number;
   // Limits
   messagesLimit: number;  // -1 = daily mode
   filesLimit:    number;
   imagesLimit:   number;
+  videoLimit:    number;
   periodStart:   string;
   dayStart:      string;
   purposes: string[];

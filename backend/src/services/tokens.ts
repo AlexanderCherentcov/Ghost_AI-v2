@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 
-export type RequestType = 'message' | 'message_with_file' | 'image_generate' | 'image_edit';
+export type RequestType = 'message' | 'message_with_file' | 'image_generate' | 'image_edit' | 'video_generate';
 
 const DAILY_PLANS = ['FREE', 'PRO', 'ULTRA'] as const;
 
@@ -41,7 +41,7 @@ export async function checkResets(userId: string): Promise<void> {
     }
   }
 
-  // Monthly reset (all plans — images/files)
+  // Monthly reset (all plans — images/files/videos)
   const periodEnd = new Date(user.periodStart);
   periodEnd.setDate(periodEnd.getDate() + 30);
   if (now >= periodEnd) {
@@ -64,16 +64,29 @@ export async function checkAndDeduct(userId: string, requestType: RequestType): 
     where: { id: userId },
     select: {
       plan: true,
-      messagesUsed: true, filesUsed: true, imagesUsed: true,
+      messagesUsed: true, filesUsed: true, imagesUsed: true, videoUsed: true,
       messagesToday: true,
-      messagesLimit: true, filesLimit: true, imagesLimit: true,
+      messagesLimit: true, filesLimit: true, imagesLimit: true, videoLimit: true,
     },
   });
   if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
   const isImage = requestType === 'image_generate' || requestType === 'image_edit';
+  const isVideo = requestType === 'video_generate';
   const isFile  = requestType === 'message_with_file';
   const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
+
+  // ── Videos ──────────────────────────────────────────────────────────────────
+  if (isVideo) {
+    if ((user.videoLimit ?? 0) === 0) {
+      throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
+    }
+    if (user.videoUsed >= (user.videoLimit ?? 0)) {
+      throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
+    }
+    await prisma.user.update({ where: { id: userId }, data: { videoUsed: { increment: 1 } } });
+    return;
+  }
 
   // ── Images ──────────────────────────────────────────────────────────────────
   if (isImage) {
@@ -123,11 +136,14 @@ export async function refundCounter(userId: string, requestType: RequestType): P
     if (!user) return;
 
     const isImage = requestType === 'image_generate' || requestType === 'image_edit';
+    const isVideo = requestType === 'video_generate';
     const isFile  = requestType === 'message_with_file';
     const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
 
     const updates: Record<string, unknown> = {};
-    if (isImage) {
+    if (isVideo) {
+      updates.videoUsed = { decrement: 1 };
+    } else if (isImage) {
       updates.imagesUsed = { decrement: 1 };
     } else {
       if (isDaily) updates.messagesToday = { decrement: 1 };
@@ -146,6 +162,7 @@ export interface PlanLimits {
   messagesLimit: number;
   filesLimit:    number;
   imagesLimit:   number;
+  videoLimit:    number;
 }
 
 export async function applyPlanLimits(userId: string, limits: PlanLimits, planName: string): Promise<void> {
@@ -157,10 +174,12 @@ export async function applyPlanLimits(userId: string, limits: PlanLimits, planNa
       messagesLimit: limits.messagesLimit,
       filesLimit:    limits.filesLimit,
       imagesLimit:   limits.imagesLimit,
+      videoLimit:    limits.videoLimit,
       // Reset counters on plan change
       messagesUsed:  0,
       filesUsed:     0,
       imagesUsed:    0,
+      videoUsed:     0,
       periodStart:   now,
       ...(isDaily ? { messagesToday: 0, dayStart: now } : {}),
     },

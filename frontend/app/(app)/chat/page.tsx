@@ -10,6 +10,22 @@ import { InputBar } from '@/components/chat/InputBar';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
+const IMAGE_VERBS = [
+  'нарисуй', 'нарисовать', 'создай', 'создать', 'сгенерируй', 'сгенерировать',
+  'сделай', 'сделать', 'покажи', 'draw', 'generate', 'create', 'make',
+];
+const IMAGE_NOUNS = [
+  'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
+  'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
+];
+const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
+
+function isImageRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
+  return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
+}
+
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -57,6 +73,13 @@ export default function ChatPage() {
   async function handleSend(prompt: string, file?: File) {
     const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
+
+    // Direct image generation request (no history yet in new chat)
+    if (!file && isImageRequest(prompt)) {
+      sessionStorage.setItem('initialImagePrompt', prompt);
+      router.push(`/chat/${chat.id}`);
+      return;
+    }
 
     sessionStorage.setItem('initialPrompt', prompt);
 

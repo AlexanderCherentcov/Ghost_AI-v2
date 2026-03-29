@@ -279,12 +279,15 @@ export default function ChatConversationPage({ params }: Props) {
     // → use last assistant message as the image prompt
     if (!file && prompt) {
       const lowerPrompt = prompt.toLowerCase().trim();
+      const PROMPT_REF = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'из чата'];
       const verbOnly = IMAGE_VERBS.some(v =>
         lowerPrompt === v ||
         lowerPrompt.startsWith(v + ' это') ||
         lowerPrompt.startsWith(v + ' его') ||
         lowerPrompt.startsWith(v + ' её') ||
-        lowerPrompt.startsWith(v + ' пожалуйста')
+        lowerPrompt.startsWith(v + ' пожалуйста') ||
+        // Verb + reference to previous prompt, no image noun needed ("нарисуй по этому промту")
+        (lowerPrompt.startsWith(v) && PROMPT_REF.some(ref => lowerPrompt.includes(ref)))
       );
       if (verbOnly) {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);

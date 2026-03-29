@@ -416,24 +416,19 @@ function ChatApp() {
     const fileToSend = selectedFile;
     setSelectedFile(null);
 
-    // Image edit: user wants to modify last generated image
-    if (!fileToSend && isImageEditRequest(prompt)) {
-      const lastImage = [...messages].reverse().find((m) => m.role === 'assistant' && m.mediaUrl);
-      if (lastImage?.mediaUrl) {
-        return handleGenerateImage(prompt, lastImage.mediaUrl);
-      }
-    }
-
     // Verb-only generation command ("сгенерируй", "нарисуй", "create" etc. without a noun)
     // → use last assistant message as the image prompt
-    if (!fileToSend) {
+    if (!fileToSend && prompt) {
       const lowerPrompt = prompt.toLowerCase().trim();
+      const PROMPT_REF = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'из чата'];
       const verbOnly = IMAGE_VERBS.some(v =>
         lowerPrompt === v ||
         lowerPrompt.startsWith(v + ' это') ||
         lowerPrompt.startsWith(v + ' его') ||
         lowerPrompt.startsWith(v + ' её') ||
-        lowerPrompt.startsWith(v + ' пожалуйста')
+        lowerPrompt.startsWith(v + ' пожалуйста') ||
+        // Verb + reference to previous prompt, no image noun needed ("нарисуй по этому промту")
+        (lowerPrompt.startsWith(v) && PROMPT_REF.some(ref => lowerPrompt.includes(ref)))
       );
       if (verbOnly) {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
@@ -443,8 +438,10 @@ function ChatApp() {
       }
     }
 
-    // Pure text image generation request
+    // Auto-detect image intent → generate inline
     if (!fileToSend && isImageRequest(prompt)) {
+      // If user refers to previous message ("по этому промту", "по нему" etc.)
+      // use the last assistant message as the actual image prompt
       const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
       const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
       if (isRef) {
@@ -454,6 +451,15 @@ function ChatApp() {
         }
       }
       return handleGenerateImage(prompt);
+    }
+
+    // Image edit: user wants to modify last generated image (no file attached)
+    // Only trigger for explicit edit commands with a clear image reference pronoun
+    if (!fileToSend && isImageEditRequest(prompt)) {
+      const lastImage = [...messages].reverse().find((m) => m.role === 'assistant' && m.mediaUrl);
+      if (lastImage?.mediaUrl) {
+        return handleGenerateImage(prompt, lastImage.mediaUrl);
+      }
     }
 
     // Process attached file

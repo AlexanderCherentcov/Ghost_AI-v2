@@ -42,10 +42,13 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
 
   const cameraControl = buildCameraControl(cameraPreset);
 
+  // enable_audio on v2.6 requires pro mode
+  const mode = enableAudio ? 'pro' : 'std';
+
   const input: Record<string, unknown> = {
     prompt,
     duration,
-    mode: 'std',
+    mode,
     cfg_scale: cfgScale,
     ...(imageUrl ? { image_url: imageUrl } : { aspect_ratio: aspectRatio }),
     ...(enableAudio ? { enable_audio: true } : {}),

@@ -19,25 +19,11 @@ enum Plan {
   TEAM
 }
 
-enum TxType {
-  USAGE
-  PURCHASE
-  SUBSCRIPTION
-  BONUS
-  REFUND
-}
-
 enum PaymentStatus {
   PENDING
   SUCCEEDED
   CANCELED
   REFUNDED
-}
-
-enum PaymentType {
-  TOKEN_PACK
-  SUBSCRIPTION
-  ADDON
 }
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
@@ -52,30 +38,39 @@ model User {
   googleId      String?   @unique
   avatarUrl     String?
 
-  // Per-type balances (main plan allocation — can expire with plan)
-  balanceMessages Int      @default(0)
-  balanceImages  Int       @default(0)
+  plan          Plan      @default(FREE)
+  planExpiresAt DateTime?
 
-  // Addons (never expire — cumulative)
-  addonMessages  Int       @default(0)
-  addonImages    Int       @default(0)
+  // ── Monthly counters (BASIC / STANDARD) ───────────────────────────────────
+  messagesUsed  Int       @default(0)
+  filesUsed     Int       @default(0)
+  imagesUsed    Int       @default(0)
+  videoUsed     Int       @default(0)   // reserved = 0
 
-  trialExpiresAt       DateTime?
-  freeDailyMsgsReset   DateTime?  // FREE: дата последнего сброса дневных сообщений
-  freeMonthlyImgsReset DateTime?  // FREE: дата последнего сброса месячных картинок
-  plan           Plan      @default(FREE)
-  planExpiresAt  DateTime?
+  // ── Daily counters (FREE / PRO / ULTRA) ───────────────────────────────────
+  messagesToday Int       @default(0)
+  dayStart      DateTime  @default(now())
 
-  // Onboarding
+  // ── Limits (copied from PLANS on subscribe) ───────────────────────────────
+  // messagesLimit = -1 means "daily mode" (FREE/PRO/ULTRA)
+  messagesLimit Int       @default(-1)  // FREE default: daily mode
+  filesLimit    Int       @default(0)   // FREE default: no files
+  imagesLimit   Int       @default(3)   // FREE default: 3/month
+  videoLimit    Int       @default(0)   // reserved
+
+  // ── Billing period ────────────────────────────────────────────────────────
+  periodStart   DateTime  @default(now())
+
+  // ── Onboarding ────────────────────────────────────────────────────────────
   purposes      String[]  @default([])
   responseStyle String    @default("ghost")
   onboardingDone Boolean  @default(false)
 
-  // Relations
-  messages     Message[]
-  chats        Chat[]
-  transactions TokenTransaction[]
-  payments     Payment[]
+  // ── Relations ─────────────────────────────────────────────────────────────
+  messages      Message[]
+  chats         Chat[]
+  payments      Payment[]
+  imageRequests UserImageRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -106,26 +101,15 @@ model Message {
   role       String   // 'user' | 'assistant'
   content    String   @db.Text
   mode       String   // 'chat' | 'vision' | 'sound' | 'reel' | 'think'
-  complexity String?  // 'simple' | 'complex'
-  provider   String?  // internal: 'openrouter-haiku' | 'openrouter-sonnet' | ...
+  complexity String?
+  provider   String?
   cacheHit   Boolean  @default(false)
   tokensCost Int      @default(0)
-  mediaUrl   String?  // for Vision/Sound/Reel
+  mediaUrl   String?
+  fileName   String?
   createdAt  DateTime @default(now())
 
   @@index([chatId, createdAt])
-  @@index([userId, createdAt])
-}
-
-model TokenTransaction {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  amount    Int      // negative = spend, positive = receive
-  type      TxType
-  meta      Json?    // { balanceType, mode, paymentId, ... }
-  createdAt DateTime @default(now())
-
   @@index([userId, createdAt])
 }
 
@@ -134,13 +118,9 @@ model Payment {
   userId        String
   user          User          @relation(fields: [userId], references: [id])
   yokassaId     String        @unique
-  amount        Float         // in rubles
+  amount        Float
   status        PaymentStatus @default(PENDING)
-  type          PaymentType
   plan          Plan?
-  // For addons: which type and how many
-  addonType     String?       // 'messages' | 'images'
-  addonAmount   Int?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -160,4 +140,15 @@ model GenerateJob {
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
+}
+
+model UserImageRequest {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  promptHash String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, promptHash])
+  @@index([promptHash])
 }

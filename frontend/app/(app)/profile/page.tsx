@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
-import { UserIcon, TokenIcon } from '@/components/icons';
-import { formatDate, formatTokens } from '@/lib/utils';
+import { UserIcon } from '@/components/icons';
+import { formatDate } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 
 export default function ProfilePage() {
@@ -77,16 +77,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Token stats */}
+        {/* Plan info */}
         <div className="card">
-          <div className="flex items-center gap-2 mb-4">
-            <TokenIcon size={18} className="text-accent" />
-            <h2 className="font-medium text-white">Токены</h2>
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[var(--bg-elevated)] rounded-xl p-3">
-              <p className="text-xs text-[rgba(255,255,255,0.3)] mb-1">Баланс</p>
-              <p className="text-lg font-medium text-accent">{formatTokens((user?.balanceMessages ?? 0) + (user?.addonMessages ?? 0) + (user?.balanceImages ?? 0) + (user?.addonImages ?? 0))}</p>
+              <p className="text-xs text-[rgba(255,255,255,0.3)] mb-1">Тариф</p>
+              <p className="text-lg font-medium text-accent">{user?.plan ?? 'FREE'}</p>
             </div>
             <div className="bg-[var(--bg-elevated)] rounded-xl p-3">
               <p className="text-xs text-[rgba(255,255,255,0.3)] mb-1">Истекает</p>

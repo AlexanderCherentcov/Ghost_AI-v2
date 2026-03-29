@@ -1,11 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createPayment, processWebhook, PLANS, ADDON_PACKS } from '../services/yokassa.js';
+import { createPayment, processWebhook, PLANS } from '../services/yokassa.js';
 import { prisma } from '../lib/prisma.js';
 
 const createPaymentSchema = z.object({
-  type: z.enum(['SUBSCRIPTION', 'ADDON']),
-  key: z.string(),
+  plan: z.string(),
   returnUrl: z.string().url().optional(),
 });
 
@@ -15,20 +14,17 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { type, key, returnUrl } = createPaymentSchema.parse(request.body);
+      const { plan, returnUrl } = createPaymentSchema.parse(request.body);
 
-      const validKeys = type === 'SUBSCRIPTION'
-        ? Object.keys(PLANS)
-        : Object.keys(ADDON_PACKS);
-
-      if (!validKeys.includes(key)) {
-        return reply.code(400).send({ error: 'Invalid plan/pack key' });
+      const validPlans = Object.keys(PLANS).filter((k) => PLANS[k as keyof typeof PLANS].price > 0);
+      if (!validPlans.includes(plan)) {
+        return reply.code(400).send({ error: 'Invalid plan key' });
       }
 
       const frontendUrl = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
       const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
-      const result = await createPayment(userId, type, key as any, effectiveReturnUrl);
+      const result = await createPayment(userId, plan as any, effectiveReturnUrl);
       return result;
     },
   });
@@ -52,7 +48,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
       const { yokassaId } = request.params as { yokassaId: string };
       const payment = await prisma.payment.findFirst({
         where: { yokassaId, userId },
-        select: { status: true, type: true, plan: true, addonType: true, addonAmount: true },
+        select: { status: true, plan: true },
       });
       if (!payment) return reply.code(404).send({ error: 'Not found' });
       return payment;
@@ -81,8 +77,5 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
   });
 
   // ── Plans info (public) ───────────────────────────────────────────────────
-  fastify.get('/plans', async () => ({
-    plans:  PLANS,
-    addons: ADDON_PACKS,
-  }));
+  fastify.get('/plans', async () => ({ plans: PLANS }));
 }

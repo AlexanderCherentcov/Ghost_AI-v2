@@ -9,7 +9,7 @@ import { PlusIcon, EditIcon, TrashIcon, TokenIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { api, type Chat } from '@/lib/api';
-import { formatTokens, truncate, cn } from '@/lib/utils';
+import { truncate, cn } from '@/lib/utils';
 
 function groupChats(chats: Chat[]) {
   const now = Date.now();
@@ -32,8 +32,11 @@ export default function HistoryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const balance = (user?.balanceMessages ?? 0) + (user?.addonMessages ?? 0) + (user?.balanceImages ?? 0) + (user?.addonImages ?? 0);
-  const tokenPercent = Math.min((balance / 8000) * 100, 100);
+  const plan = user?.plan ?? 'FREE';
+  const isDaily = plan === 'FREE' || plan === 'PRO' || plan === 'ULTRA';
+  const todayUsed = user?.messagesToday ?? 0;
+  const todayLimit = plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400;
+  const tokenPercent = isDaily ? Math.min((todayUsed / todayLimit) * 100, 100) : Math.min(((user?.messagesUsed ?? 0) / Math.max(user?.messagesLimit ?? 1, 1)) * 100, 100);
   const grouped = groupChats(chats);
 
   function handleNewChat() {
@@ -131,9 +134,9 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
             <TokenIcon size={12} className="text-accent" />
-            <span>{formatTokens(balance)} токенов</span>
+            <span>{isDaily ? `${todayUsed}/${todayLimit} сегодня` : `${user?.messagesUsed ?? 0}/${user?.messagesLimit ?? 0} сообщ.`}</span>
           </div>
-          <Link href="/billing" className="text-[11px] text-accent">+ Купить</Link>
+          <Link href="/billing" className="text-[11px] text-accent">Тарифы</Link>
         </div>
         <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
           <motion.div

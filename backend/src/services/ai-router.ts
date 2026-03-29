@@ -81,19 +81,20 @@ export function route(
     };
   }
 
-  const useDeepSeek = hasDocument
+  // PRO / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
+  const isPremium = plan === 'PRO' || plan === 'ULTRA';
+  const useDeepSeek = preferredModel === 'deepseek'
     ? true
-    : preferredModel === 'deepseek'
-      ? true
-      : preferredModel === 'haiku'
-        ? false
-        : complexity === 'complex';
+    : preferredModel === 'haiku'
+      ? false
+      : isPremium || hasDocument;
+
   const provider: Provider = useDeepSeek ? 'openrouter-deepseek' : 'openrouter-haiku';
   const model = useDeepSeek ? OR_MODELS.deepseek : OR_MODELS.haiku;
   const fallbackModel = useDeepSeek ? OR_MODELS.gpt4oMini : undefined;
   const maxTokens = plan === 'FREE' ? 400 : undefined;
 
-  logger?.debug({ complexity, provider, model, fallbackModel, plan }, '[AIRouter] Routed');
+  logger?.debug({ complexity, provider, model, plan }, '[AIRouter] Routed');
   return { provider, complexity: useDeepSeek ? 'complex' : complexity, model, fallbackModel, maxTokens };
 }
 

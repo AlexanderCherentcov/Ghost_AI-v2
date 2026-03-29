@@ -266,10 +266,7 @@ export default function ChatConversationPage({ params }: Props) {
               ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 }
               : m
           ));
-          if (user) {
-            const { setUser } = useAuthStore.getState();
-            setUser({ ...user, balanceImages: Math.max(0, user.balanceImages - 10) });
-          }
+          // Counter updated on backend; no local balance update needed
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -453,16 +450,18 @@ export default function ChatConversationPage({ params }: Props) {
         updateChat(id, { title: newTitle });
       }
 
-      if (user) {
-        const { setUser } = useAuthStore.getState();
-        setUser({ ...user, balanceMessages: Math.max(0, user.balanceMessages - tokensCost) });
-      }
     } catch (err: any) {
       setStreaming(false);
-      if (err.code === 'LIMIT_MESSAGES') {
-        setLimitType('messages');
+      if (err.code === 'LIMIT_MESSAGES_DAILY') {
+        setLimitType('LIMIT_MESSAGES_DAILY');
+      } else if (err.code === 'LIMIT_MESSAGES') {
+        setLimitType('LIMIT_MESSAGES');
       } else if (err.code === 'LIMIT_IMAGES') {
-        setLimitType('images');
+        setLimitType('LIMIT_IMAGES');
+      } else if (err.code === 'LIMIT_FILES') {
+        setLimitType('LIMIT_FILES');
+      } else if (err.code === 'FREE_LOCKED') {
+        setLimitType('FREE_LOCKED');
       } else if (err.code === 'PLAN_RESTRICTED') {
         showToast('Эта функция доступна только на платных тарифах', 'error');
         router.push('/billing');
@@ -490,7 +489,7 @@ export default function ChatConversationPage({ params }: Props) {
         preferredModel={preferredModel}
         setPreferredModel={setPreferredModel}
         userPlan={user?.plan}
-        onUpgradeRequired={() => setLimitType('pro')}
+        onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
       />
     </div>
   );

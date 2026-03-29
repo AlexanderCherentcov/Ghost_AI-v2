@@ -9,10 +9,11 @@ interface UserInfo {
   id: string;
   name: string | null;
   plan: string;
-  balanceMessages: number;
-  addonMessages: number;
-  balanceImages: number;
-  addonImages: number;
+  messagesUsed:  number;
+  imagesUsed:    number;
+  messagesToday: number;
+  messagesLimit: number;
+  imagesLimit:   number;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -34,8 +35,9 @@ function AccountApp() {
       .finally(() => setLoading(false));
   }, []);
 
-  const totalMsgs = (user?.balanceMessages ?? 0) + (user?.addonMessages ?? 0);
-  const totalImgs = (user?.balanceImages ?? 0) + (user?.addonImages ?? 0);
+  const isDaily = user?.plan === 'FREE' || user?.plan === 'PRO' || user?.plan === 'ULTRA';
+  const totalMsgs = isDaily ? user?.messagesToday ?? 0 : user?.messagesUsed ?? 0;
+  const totalImgs = user?.imagesUsed ?? 0;
 
   return (
     <div className="flex flex-col h-screen pb-[60px]" style={{ background: '#06060B', color: 'white' }}>
@@ -92,7 +94,7 @@ function AccountApp() {
                   style={{ background: 'rgba(123,92,240,0.08)' }}
                 >
                   <p className="text-xl font-medium" style={{ color: '#7B5CF0' }}>{totalMsgs}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>сообщений</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{isDaily ? 'сегодня' : 'использовано'}</p>
                 </div>
                 <div
                   className="p-3 rounded-xl text-center"
@@ -111,10 +113,10 @@ function AccountApp() {
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
               >
                 <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                  Пробный план
+                  Бесплатный план
                 </p>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                  5 сообщений в день · 3 картинки в месяц
+                  10 сообщений в день · 3 картинки в месяц
                 </p>
                 <a
                   href="/balance"

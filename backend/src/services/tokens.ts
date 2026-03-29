@@ -1,53 +1,11 @@
 import { prisma } from '../lib/prisma.js';
 
-export type BalanceType = 'messages' | 'images';
+export type RequestType = 'message' | 'message_with_file' | 'image_generate' | 'image_edit';
 
-// Cost per model (in balance units)
-export const MODEL_COSTS: Record<string, { type: BalanceType; cost: number }> = {
-  'anthropic/claude-haiku-4-5':      { type: 'messages', cost: 1 },
-  'deepseek/deepseek-v3.2':          { type: 'messages', cost: 2 },
-  'openai/gpt-4o-mini':              { type: 'messages', cost: 2 },
-  'black-forest-labs/flux-1.1-pro':  { type: 'images',   cost: 1 },
-  'black-forest-labs/flux.2-pro':    { type: 'images',   cost: 1 },
-  'black-forest-labs/flux-fill-pro': { type: 'images',   cost: 1 },
-};
+const DAILY_PLANS = ['FREE', 'PRO', 'ULTRA'] as const;
 
-export const LIMIT_CODE: Record<BalanceType, string> = {
-  messages: 'LIMIT_MESSAGES',
-  images:   'LIMIT_IMAGES',
-};
-
-// ─── FREE plan quota refresh (5 msgs/day, 3 images/month) ────────────────────
-
-export async function refreshFreeQuota(userId: string, plan: string): Promise<void> {
-  if (plan !== 'FREE') return;
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { freeDailyMsgsReset: true, freeMonthlyImgsReset: true },
-  });
-  if (!user) return;
-
-  const now = new Date();
-  const updates: Record<string, unknown> = {};
-
-  // Daily messages: reset if last reset was before today (UTC midnight)
-  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  if (!user.freeDailyMsgsReset || user.freeDailyMsgsReset < todayUTC) {
-    updates.balanceMessages = 10;
-    updates.freeDailyMsgsReset = now;
-  }
-
-  // Monthly images: reset if last reset was before this month (UTC)
-  const thisMonthUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  if (!user.freeMonthlyImgsReset || user.freeMonthlyImgsReset < thisMonthUTC) {
-    updates.balanceImages = 3;
-    updates.freeMonthlyImgsReset = now;
-  }
-
-  if (Object.keys(updates).length > 0) {
-    await prisma.user.update({ where: { id: userId }, data: updates });
-  }
+export function getDailyLimit(plan: string): number {
+  return ({ FREE: 10, PRO: 200, ULTRA: 400 } as Record<string, number>)[plan] ?? 0;
 }
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
@@ -61,121 +19,150 @@ export function sanitizeInput(text: string): string {
     .slice(0, 2000);
 }
 
-// ─── Balance check (no deduction) ────────────────────────────────────────────
+// ─── Reset daily/monthly counters if period ended ─────────────────────────────
 
-export async function checkBalance(userId: string, type: BalanceType): Promise<void> {
+export async function checkResets(userId: string): Promise<void> {
+  const now = new Date();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true },
+    select: { plan: true, dayStart: true, periodStart: true },
   });
-  if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
-  const main  = type === 'messages' ? user.balanceMessages : user.balanceImages;
-  const addon = type === 'messages' ? user.addonMessages   : user.addonImages;
-  if (main + addon <= 0) {
-    throw Object.assign(new Error(LIMIT_CODE[type]), { code: LIMIT_CODE[type] });
+  if (!user) return;
+
+  const updates: Record<string, unknown> = {};
+
+  // Daily reset (FREE / PRO / ULTRA)
+  if (DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number])) {
+    const dayEnd = new Date(user.dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    if (now >= dayEnd) {
+      updates.messagesToday = 0;
+      updates.dayStart = now;
+    }
+  }
+
+  // Monthly reset (all plans — images/files)
+  const periodEnd = new Date(user.periodStart);
+  periodEnd.setDate(periodEnd.getDate() + 30);
+  if (now >= periodEnd) {
+    updates.messagesUsed = 0;
+    updates.filesUsed    = 0;
+    updates.imagesUsed   = 0;
+    updates.videoUsed    = 0;
+    updates.periodStart  = now;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data: updates });
   }
 }
 
-// ─── Deduct by model (after streaming, cost depends on actual model used) ─────
+// ─── Check limits & deduct counters (call BEFORE API request) ─────────────────
 
-export async function deductByModel(userId: string, model: string): Promise<number> {
-  const entry = MODEL_COSTS[model];
-  if (!entry) {
-    // Unknown model: default to 1 message
-    return deductBalance(userId, 'messages', 1);
-  }
-  return deductBalance(userId, entry.type, entry.cost);
-}
-
-// ─── Deduct N units — main first, then addon ──────────────────────────────────
-
-export async function deductBalance(userId: string, type: BalanceType, amount = 1): Promise<number> {
-  const mainField  = type === 'messages' ? 'balanceMessages' : 'balanceImages';
-  const addonField = type === 'messages' ? 'addonMessages'   : 'addonImages';
-
+export async function checkAndDeduct(userId: string, requestType: RequestType): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { [mainField]: true, [addonField]: true },
+    select: {
+      plan: true,
+      messagesUsed: true, filesUsed: true, imagesUsed: true,
+      messagesToday: true,
+      messagesLimit: true, filesLimit: true, imagesLimit: true,
+    },
   });
   if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
-  const main  = (user as any)[mainField]  as number;
-  const addon = (user as any)[addonField] as number;
-  if (main + addon < amount) {
-    throw Object.assign(new Error(LIMIT_CODE[type]), { code: LIMIT_CODE[type] });
+  const isImage = requestType === 'image_generate' || requestType === 'image_edit';
+  const isFile  = requestType === 'message_with_file';
+  const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
+
+  // ── Images ──────────────────────────────────────────────────────────────────
+  if (isImage) {
+    if (user.imagesUsed >= user.imagesLimit) {
+      throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
+    }
+    await prisma.user.update({ where: { id: userId }, data: { imagesUsed: { increment: 1 } } });
+    return;
   }
 
-  // Deduct from main first, overflow to addon
-  const fromMain  = Math.min(main, amount);
-  const fromAddon = amount - fromMain;
+  // ── Check message limit ──────────────────────────────────────────────────────
+  if (isDaily) {
+    const dailyLimit = getDailyLimit(user.plan);
+    if (user.messagesToday >= dailyLimit) {
+      throw Object.assign(new Error('LIMIT_MESSAGES_DAILY'), { code: 'LIMIT_MESSAGES_DAILY' });
+    }
+  } else {
+    if (user.messagesUsed >= user.messagesLimit) {
+      throw Object.assign(new Error('LIMIT_MESSAGES'), { code: 'LIMIT_MESSAGES' });
+    }
+  }
 
-  const updates: any = {};
-  if (fromMain  > 0) updates[mainField]  = { decrement: fromMain };
-  if (fromAddon > 0) updates[addonField] = { decrement: fromAddon };
+  // ── Check file limit ─────────────────────────────────────────────────────────
+  if (isFile) {
+    if (user.filesUsed >= user.filesLimit) {
+      throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
+    }
+  }
 
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: updates }),
-    prisma.tokenTransaction.create({
-      data: { userId, amount: -amount, type: 'USAGE',
-              meta: { balanceType: type, cost: amount, model: 'unknown' } },
-    }),
-  ]);
-  return amount;
+  // ── Deduct ───────────────────────────────────────────────────────────────────
+  const updates: Record<string, unknown> = {};
+  if (isDaily) updates.messagesToday = { increment: 1 };
+  else         updates.messagesUsed  = { increment: 1 };
+  if (isFile)  updates.filesUsed     = { increment: 1 };
+
+  await prisma.user.update({ where: { id: userId }, data: updates });
 }
 
-// ─── Grant addon balance ──────────────────────────────────────────────────────
+// ─── Refund on API error ──────────────────────────────────────────────────────
 
-export async function grantAddon(
-  userId: string,
-  type: BalanceType,
-  amount: number,
-  meta?: object
-): Promise<void> {
-  const field = type === 'messages' ? 'addonMessages' : 'addonImages';
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { [field]: { increment: amount } } }),
-    prisma.tokenTransaction.create({
-      data: { userId, amount, type: 'PURCHASE', meta: { balanceType: type, isAddon: true, ...meta } },
-    }),
-  ]);
-}
-
-// ─── Set plan balances (replaces main balance on subscription) ────────────────
-
-export interface PlanBalances { messages: number; images: number; }
-
-export async function setPlanBalances(
-  userId: string,
-  balances: PlanBalances,
-  txType: 'SUBSCRIPTION' | 'BONUS' = 'SUBSCRIPTION',
-  meta?: object
-): Promise<void> {
-  await prisma.$transaction([
-    prisma.user.update({
+export async function refundCounter(userId: string, requestType: RequestType): Promise<void> {
+  try {
+    const user = await prisma.user.findUnique({
       where: { id: userId },
-      data: { balanceMessages: balances.messages, balanceImages: balances.images },
-    }),
-    prisma.tokenTransaction.create({
-      data: {
-        userId,
-        amount: balances.messages + balances.images,
-        type: txType,
-        meta: { balances: balances as unknown as Record<string, number>, ...(meta as Record<string, unknown> ?? {}) },
-      },
-    }),
-  ]);
+      select: { plan: true },
+    });
+    if (!user) return;
+
+    const isImage = requestType === 'image_generate' || requestType === 'image_edit';
+    const isFile  = requestType === 'message_with_file';
+    const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
+
+    const updates: Record<string, unknown> = {};
+    if (isImage) {
+      updates.imagesUsed = { decrement: 1 };
+    } else {
+      if (isDaily) updates.messagesToday = { decrement: 1 };
+      else         updates.messagesUsed  = { decrement: 1 };
+      if (isFile)  updates.filesUsed     = { decrement: 1 };
+    }
+    await prisma.user.update({ where: { id: userId }, data: updates });
+  } catch {
+    // Refund is best-effort
+  }
 }
 
-// ─── Legacy compat ────────────────────────────────────────────────────────────
+// ─── Apply plan limits (call on subscription webhook) ────────────────────────
 
-export async function grantTokens(
-  userId: string,
-  amount: number,
-  type: 'PURCHASE' | 'SUBSCRIPTION' | 'BONUS' | 'REFUND',
-  meta?: object
-): Promise<void> {
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { balanceMessages: { increment: amount } } }),
-    prisma.tokenTransaction.create({ data: { userId, amount, type, meta: { legacy: true, ...meta } } }),
-  ]);
+export interface PlanLimits {
+  messagesLimit: number;
+  filesLimit:    number;
+  imagesLimit:   number;
+}
+
+export async function applyPlanLimits(userId: string, limits: PlanLimits, planName: string): Promise<void> {
+  const now = new Date();
+  const isDaily = DAILY_PLANS.includes(planName as typeof DAILY_PLANS[number]);
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      messagesLimit: limits.messagesLimit,
+      filesLimit:    limits.filesLimit,
+      imagesLimit:   limits.imagesLimit,
+      // Reset counters on plan change
+      messagesUsed:  0,
+      filesUsed:     0,
+      imagesUsed:    0,
+      periodStart:   now,
+      ...(isDaily ? { messagesToday: 0, dayStart: now } : {}),
+    },
+  });
 }

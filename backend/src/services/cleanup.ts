@@ -49,49 +49,8 @@ export async function runCleanup(): Promise<void> {
       },
     });
 
-    // 4. Истекаем пробные токены
-    // Если trialExpiresAt < now И нет ни одной PURCHASE/SUBSCRIPTION транзакции →
-    // обнуляем баланс (пробный период истёк, ничего не купил)
-    let expiredTrials = 0;
-    try {
-      const expiredUsers = await prisma.user.findMany({
-        where: {
-          trialExpiresAt: { lt: new Date() },
-          balanceMessages: { gt: 0 },
-        },
-        select: {
-          id: true,
-          balanceMessages: true,
-          transactions: {
-            where: { type: { in: ['PURCHASE', 'SUBSCRIPTION'] } },
-            take: 1,
-            select: { id: true },
-          },
-        },
-      });
-
-      for (const u of expiredUsers) {
-        // Skip users who already bought tokens
-        if (u.transactions.length > 0) continue;
-        await prisma.$transaction([
-          prisma.user.update({
-            where: { id: u.id },
-            data: { balanceMessages: 0, trialExpiresAt: null },
-          }),
-          prisma.tokenTransaction.create({
-            data: {
-              userId: u.id,
-              amount: -u.balanceMessages,
-              type: 'USAGE',
-              meta: { reason: 'trial_expired' },
-            },
-          }),
-        ]);
-        expiredTrials++;
-      }
-    } catch (trialErr: any) {
-      console.error('[Cleanup] Trial expiry error:', trialErr.message);
-    }
+    // 4. Expired plan cleanup (plan expiry handled by webhook / future cron)
+    const expiredTrials = 0;
 
     // 5. Удаляем старые записи вектор-кэша (если таблица существует)
     let deletedVectors = 0;

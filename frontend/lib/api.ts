@@ -79,14 +79,14 @@ export const api = {
 
   payments: {
     plans: () => request<PlansResponse>('/plans'),
-    create: (data: { type: 'SUBSCRIPTION' | 'ADDON' | 'TOKEN_PACK'; key: string }) =>
+    create: (data: { plan: string }) =>
       request<{ paymentId: string; paymentUrl: string }>('/payments/create', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
     status: (yokassaId: string) =>
-      request<{ status: string; type: string; plan: string | null; addonType: string | null; addonAmount: number | null }>(
+      request<{ status: string; plan: string | null }>(
         `/payments/status/${yokassaId}`
       ),
   },
@@ -141,14 +141,20 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  // Per-type main balances (plan allocation)
-  balanceMessages: number;
-  balanceImages:   number;
-  // Addons (never expire)
-  addonMessages:   number;
-  addonImages:     number;
   plan: 'FREE' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;
+  // Monthly counters (BASIC/STANDARD)
+  messagesUsed:  number;
+  filesUsed:     number;
+  imagesUsed:    number;
+  // Daily counters (FREE/PRO/ULTRA)
+  messagesToday: number;
+  // Limits
+  messagesLimit: number;  // -1 = daily mode
+  filesLimit:    number;
+  imagesLimit:   number;
+  periodStart:   string;
+  dayStart:      string;
   purposes: string[];
   responseStyle: string;
   onboardingDone: boolean;
@@ -219,15 +225,10 @@ export interface PaymentsResponse {
 export interface PlanInfo {
   price: number;
   label: string;
-  balances: { messages: number; images: number };
-}
-export interface AddonInfo {
-  price: number;
-  label: string;
-  type: 'messages' | 'images';
-  amount: number;
+  messagesLimit: number;
+  imagesLimit: number;
+  filesLimit: number;
 }
 export interface PlansResponse {
-  plans:  Record<string, PlanInfo>;
-  addons: Record<string, AddonInfo>;
+  plans: Record<string, PlanInfo>;
 }

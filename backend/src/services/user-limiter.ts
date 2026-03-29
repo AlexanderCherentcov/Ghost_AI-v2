@@ -11,8 +11,8 @@
 
 import { redis } from '../lib/redis.js';
 
-const CHAT_RPM = parseInt(process.env.CHAT_RPM ?? '20');  // сообщений чата в минуту
-const GEN_RPM  = parseInt(process.env.GEN_RPM  ?? '5');   // генераций в минуту
+const CHAT_RPM = parseInt(process.env.CHAT_RPM ?? '10');  // 10 сообщений чата в минуту
+const GEN_RPM  = parseInt(process.env.GEN_RPM  ?? '3');   // 3 генерации в минуту
 const LOCK_TTL = 120; // секунд — max время удержания лока (страховка от вечного лока)
 
 // ─── Chat rate limit ──────────────────────────────────────────────────────────

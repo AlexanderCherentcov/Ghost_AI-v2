@@ -2,23 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { grantTokens } from '../services/tokens.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
-// FREE plan: 5 messages/day + 3 images/month — set initial quota on registration
-async function setupTrialForNewUser(userId: string): Promise<void> {
-  const now = new Date();
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      balanceMessages: 5,
-      balanceImages: 3,
-      freeDailyMsgsReset: now,
-      freeMonthlyImgsReset: now,
-    },
-  });
-  await grantTokens(userId, 5, 'BONUS', { freeDaily: true });
+async function setupTrialForNewUser(_userId: string): Promise<void> {
+  // New user starts on FREE plan — defaults from schema are correct:
+  // messagesLimit=-1 (daily), filesLimit=0, imagesLimit=3, messagesToday=0, dayStart=now, periodStart=now
+  // No extra setup needed; defaults handle it.
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -407,9 +397,18 @@ export default async function authRoutes(fastify: FastifyInstance) {
           name: true,
           email: true,
           avatarUrl: true,
-          balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true,
+          birthDate: true,
           plan: true,
           planExpiresAt: true,
+          messagesUsed: true,
+          filesUsed: true,
+          imagesUsed: true,
+          messagesToday: true,
+          messagesLimit: true,
+          filesLimit: true,
+          imagesLimit: true,
+          periodStart: true,
+          dayStart: true,
           purposes: true,
           responseStyle: true,
           onboardingDone: true,
@@ -441,7 +440,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
           id: true,
           name: true,
           email: true,
-          balanceMessages: true, balanceImages: true, addonMessages: true, addonImages: true,
           plan: true,
           onboardingDone: true,
           purposes: true,
@@ -455,23 +453,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   fastify.get('/me/transactions', {
     preHandler: [fastify.authenticate],
-    handler: async (request) => {
-      const { userId } = request.user;
-      const query = request.query as { page?: string; limit?: string };
-      const page = parseInt(query.page ?? '1');
-      const limit = Math.min(parseInt(query.limit ?? '20'), 50);
-
-      const [transactions, total] = await prisma.$transaction([
-        prisma.tokenTransaction.findMany({
-          where: { userId },
-          orderBy: { createdAt: 'desc' },
-          skip: (page - 1) * limit,
-          take: limit,
-        }),
-        prisma.tokenTransaction.count({ where: { userId } }),
-      ]);
-
-      return { transactions, total, page, limit };
+    handler: async () => {
+      // Token transaction history removed in billing refactor
+      return { transactions: [], total: 0, page: 1, limit: 20 };
     },
   });
 }

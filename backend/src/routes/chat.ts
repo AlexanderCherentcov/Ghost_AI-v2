@@ -4,7 +4,8 @@ import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
-import { deductByModel, checkBalance, sanitizeInput, refreshFreeQuota } from '../services/tokens.js';
+import { checkResets, checkAndDeduct, refundCounter, sanitizeInput } from '../services/tokens.js';
+import type { RequestType } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
 import { OR_MODELS } from '../services/providers/openrouter.js';
@@ -202,29 +203,36 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       const prompt = sanitizeInput(parsed.prompt);
 
       try {
-        // Verify chat ownership + load user response style + plan
+        // Verify chat ownership + load user profile
         const [chat, userProfile] = await Promise.all([
           prisma.chat.findFirst({ where: { id: chatId, userId } }),
-          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true, filesLimit: true } }),
         ]);
         if (!chat) {
           send({ type: 'error', code: 'CHAT_NOT_FOUND' });
           return;
         }
         const responseStyle = userProfile?.responseStyle ?? null;
+        const plan = userProfile?.plan ?? 'FREE';
 
-        // FREE plan: only block think mode (image/file attachments allowed — balance is checked below)
-        if (userProfile?.plan === 'FREE' && mode !== 'chat') {
+        // FREE plan: only chat mode allowed
+        if (plan === 'FREE' && mode !== 'chat') {
           send({ type: 'error', code: 'PLAN_RESTRICTED', message: 'Обновите тариф для использования этой функции.' });
           return;
         }
 
-        // Effective prompt for AI (fall back to placeholder if only image/file sent)
+        // FREE plan: no file attachments (filesLimit = 0)
+        if (fileContent && (userProfile?.filesLimit ?? 0) === 0) {
+          send({ type: 'error', code: 'FREE_LOCKED', message: 'Файлы доступны с платного тарифа.' });
+          return;
+        }
+
+        // Effective prompt for AI
         const effectivePrompt = prompt
           || (imageUrl ? 'Опиши что изображено на картинке.' : '')
           || (fileContent ? 'Проанализируй содержимое прикреплённого файла.' : '');
 
-        // Build file context block to inject before the user prompt
+        // Build file context block
         let fileBlock = '';
         if (fileContent && fileName) {
           const lang = fileLang ?? 'text';
@@ -233,21 +241,23 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request: FREE gets maxTokens cap
+        // Route request
         const { provider, complexity, model, fallbackModel, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
           fastify.log,
           !!imageUrl,
-          userProfile?.plan,
+          plan,
           preferredModel
         );
 
-        const hasImage = !!imageUrl;
-        // FREE plan: refresh daily/monthly quota before checking balance
-        await refreshFreeQuota(userId, userProfile?.plan ?? 'FREE');
-        // Fast fail: check balance before doing any work
-        await checkBalance(userId, hasImage ? 'images' : 'messages');
+        // Determine request type
+        const requestType: RequestType = fileContent ? 'message_with_file' : 'message';
+
+        // Reset daily/monthly counters if period ended
+        await checkResets(userId);
+        // Check limits and deduct BEFORE calling AI (with refund on 5xx)
+        await checkAndDeduct(userId, requestType);
 
         // History context for cache key: последние user-сообщения (без текущего)
         const userHistoryContext = history
@@ -272,8 +282,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         if (cacheHit.hit) {
           const response = cacheHit.response as { content: string };
 
-          // Charge tokens even on cache hit (our margin)
-          const tokensCost = await deductByModel(userId, model);
+          // No token deduction on cache hits
+          const tokensCost = 0;
 
           // Save messages
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
@@ -307,7 +317,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Build messages array for AI
         // When imageUrl present: build multimodal content array (Sonnet vision)
-        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle) };
+        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle, plan) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;
@@ -335,20 +345,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Stream from provider (maxTokens is set for FREE plan)
         let fullResponse = '';
-        let usedModel = model;
         const stream = streamOpenRouter(messages, model, maxTokens, fallbackModel);
 
         for await (const chunk of stream) {
           if (chunk.type === 'token' && chunk.data) {
             fullResponse += chunk.data;
             send({ type: 'token', data: chunk.data });
-          } else if (chunk.type === 'used_model') {
-            usedModel = chunk.model;
           }
         }
 
-        // Deduct based on actual model used
-        const tokensCost = await deductByModel(userId, usedModel);
+        // No token deduction — counters already deducted before API call
+        const tokensCost = 0;
 
         // Cache the response (skip if any attachment present)
         if (!hasAttachment) {
@@ -386,6 +393,12 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         send({ type: 'done', tokensCost, cacheHit: false, title: newTitle });
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
+        // If it's a server error (not a limit error), refund the counter
+        const limitCodes = ['LIMIT_MESSAGES', 'LIMIT_MESSAGES_DAILY', 'LIMIT_FILES', 'LIMIT_IMAGES', 'FREE_LOCKED', 'PLAN_RESTRICTED'];
+        if (userId && !limitCodes.includes(err.code)) {
+          const rt: RequestType = parsed?.fileContent ? 'message_with_file' : 'message';
+          await refundCounter(userId, rt).catch(() => {});
+        }
         send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: err.message });
       } finally {
         // Всегда освобождаем лок — даже при ошибке или стриминге кэша

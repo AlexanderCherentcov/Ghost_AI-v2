@@ -17,6 +17,14 @@ export const SYSTEM_PROMPTS: Record<string, string> = {
 Режим: Chat — обычный диалог. Отвечай чётко и по делу.
 Если составляешь промт для генерации изображения — оберни его в блок кода (\`\`\`).`,
 
+  free: `${BASE_IDENTITY}
+
+Режим: Chat — обычный диалог. Отвечай чётко и по делу.
+Длина ответа: 100-200 слов, не больше.
+Не используй вступления типа "Конечно!", "Отличный вопрос!".
+Если тема требует подробного ответа — дай краткое резюме и предложи перейти на платный тариф.
+Если составляешь промт для генерации изображения — оберни его в блок кода (\`\`\`).`,
+
   think: `${BASE_IDENTITY}
 
 Режим: Think — глубокий анализ.
@@ -48,8 +56,9 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
   creative: 'Стиль ответа: с метафорами, образами и нестандартными углами зрения. Вдохновляй.',
 };
 
-export function getSystemPrompt(mode: string, responseStyle?: string | null): string {
-  const base = SYSTEM_PROMPTS[mode] ?? SYSTEM_PROMPTS.chat;
+export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string): string {
+  const baseKey = plan === 'FREE' ? 'free' : (mode in SYSTEM_PROMPTS ? mode : 'chat');
+  const base = SYSTEM_PROMPTS[baseKey] ?? SYSTEM_PROMPTS.chat;
   const styleHint = responseStyle ? STYLE_INSTRUCTIONS[responseStyle] : null;
   return styleHint ? `${base}\n\n${styleHint}` : base;
 }

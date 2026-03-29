@@ -665,11 +665,11 @@ function ChatApp() {
                 key={msg.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start gap-2'}`}
+                className={`mb-4 flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start gap-2'}`}
               >
                 {msg.role === 'assistant' && <span className="text-base flex-shrink-0 mt-1">👻</span>}
                 <div
-                  className={`max-w-[85%] text-sm rounded-2xl px-4 py-3 break-words ${
+                  className={`min-w-0 max-w-[85%] text-sm rounded-2xl px-4 py-3 break-words overflow-hidden ${
                     msg.role === 'user'
                       ? 'bg-[#13131F] text-[rgba(255,255,255,0.88)] rounded-tr-sm'
                       : 'prose-ghost'
@@ -710,10 +710,10 @@ function ChatApp() {
         )}
 
         {streaming && streamContent && (
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 min-w-0">
             <span className="text-base flex-shrink-0">👻</span>
-            <div className="max-w-[85%] text-sm prose-ghost break-words min-w-0">
-              <span style={{ whiteSpace: 'pre-wrap' }}>{streamContent}</span>
+            <div className="min-w-0 max-w-[85%] text-sm prose-ghost break-words overflow-hidden">
+              <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{streamContent}</span>
               <span className="ghost-cursor" />
             </div>
           </div>
@@ -741,7 +741,7 @@ function ChatApp() {
       <div
         className="flex-shrink-0"
         style={{
-          padding: '8px 12px',
+          padding: '8px 12px 4px',
           background: '#0A0A12',
         }}
       >
@@ -874,6 +874,11 @@ function ChatApp() {
             </button>
           </div>
         </div>
+
+        {/* Disclaimer */}
+        <p className="text-center text-[10px] mt-2 mb-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          GhostLine может ошибаться. Проверяйте важную информацию.
+        </p>
       </div>
 
       <BottomNav />

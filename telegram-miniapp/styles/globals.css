@@ -74,6 +74,7 @@ input:focus, textarea:focus {
   line-height: 1.7;
   word-break: break-word;
   overflow-wrap: break-word;
+  min-width: 0;
 }
 .prose-ghost p { margin-bottom: 10px; }
 .prose-ghost p:last-child { margin-bottom: 0; }
@@ -85,4 +86,24 @@ input:focus, textarea:focus {
   font-size: 12px;
   font-family: monospace;
   word-break: break-all;
+  white-space: pre-wrap;
 }
+.prose-ghost pre {
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 10px;
+}
+.prose-ghost pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  white-space: pre-wrap;
+}
+.prose-ghost ul, .prose-ghost ol { padding-left: 18px; margin-bottom: 10px; }
+.prose-ghost li { margin-bottom: 4px; }

@@ -13,14 +13,25 @@ import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
 
 const IMAGE_VERBS = [
-  'нарисуй', 'нарисовать', 'создай', 'создать', 'сгенерируй', 'сгенерировать',
-  'сделай', 'сделать', 'покажи', 'draw', 'generate', 'create', 'make',
+  // imperative
+  'нарисуй', 'создай', 'сгенерируй', 'сделай', 'покажи',
+  // 1st-person future (mobile dictation / typos)
+  'нарисую', 'сгенерирую',
+  // infinitive
+  'нарисовать', 'создать', 'сгенерировать', 'сделать',
+  // english
+  'draw', 'generate', 'create', 'make',
 ];
 const IMAGE_NOUNS = [
   'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
   'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
 ];
 const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
+
+// Keywords that mean user is REFERENCING a previous message/prompt
+const REF_KEYWORDS = [
+  'по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата',
+];
 
 // Edit-intent keywords — used when user has attached an image and wants to modify it
 const EDIT_VERBS = [
@@ -40,6 +51,15 @@ function isImageRequest(text: string): boolean {
 function isImageEditRequest(text: string): boolean {
   const lower = text.toLowerCase();
   return EDIT_VERBS.some((v) => lower.includes(v));
+}
+
+// Returns true if user wants AI to WRITE/COMPOSE a prompt — NOT generate an image.
+// e.g. "создай мне промт для изображения битвы", "напиши промт 9:18"
+// Exception: "сгенерируй по этому промту" — user is USING a previously written prompt.
+function isPromptComposeRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (REF_KEYWORDS.some((ref) => lower.includes(ref))) return false;
+  return lower.includes('промт') || lower.includes('prompt') || lower.includes('промпт');
 }
 
 // Extract clean image prompt from markdown (strips headers, bold markers, bullet points etc.)
@@ -275,19 +295,19 @@ export default function ChatConversationPage({ params }: Props) {
   const handleSend = useCallback(async (prompt: string, file?: File) => {
     if ((isStreaming || generatingImage) || !accessToken || !messagesReady) return;
 
-    // Verb-only generation command ("сгенерируй", "нарисуй", "create" etc. without a noun)
-    // → use last assistant message as the image prompt
+    // ── Image intent routing ─────────────────────────────────────────────────
     if (!file && prompt) {
-      const lowerPrompt = prompt.toLowerCase().trim();
-      const PROMPT_REF = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'из чата'];
+      const lower = prompt.toLowerCase().trim();
+
+      // 1. Verb-only: bare verb OR verb + pronoun/ref keyword (no image noun needed)
+      //    "сгенерируй", "нарисуй его", "создай по этому промту"
       const verbOnly = IMAGE_VERBS.some(v =>
-        lowerPrompt === v ||
-        lowerPrompt.startsWith(v + ' это') ||
-        lowerPrompt.startsWith(v + ' его') ||
-        lowerPrompt.startsWith(v + ' её') ||
-        lowerPrompt.startsWith(v + ' пожалуйста') ||
-        // Verb + reference to previous prompt, no image noun needed ("нарисуй по этому промту")
-        (lowerPrompt.startsWith(v) && PROMPT_REF.some(ref => lowerPrompt.includes(ref)))
+        lower === v ||
+        lower.startsWith(v + ' это') ||
+        lower.startsWith(v + ' его') ||
+        lower.startsWith(v + ' её') ||
+        lower.startsWith(v + ' пожалуйста') ||
+        (lower.startsWith(v) && REF_KEYWORDS.some(ref => lower.includes(ref)))
       );
       if (verbOnly) {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
@@ -295,21 +315,25 @@ export default function ChatConversationPage({ params }: Props) {
           return handleGenerateImage(extractImagePrompt(lastAssistant.content));
         }
       }
-    }
 
-    // Auto-detect image intent → generate inline
-    if (!file && prompt && isImageRequest(prompt)) {
-      // If user refers to previous message ("по этому промту", "по нему" etc.)
-      // use the last assistant message as the actual image prompt
-      const REF_KEYWORDS = ['по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата'];
-      const isRef = REF_KEYWORDS.some((kw) => prompt.toLowerCase().includes(kw));
-      if (isRef) {
-        const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
-        if (lastAssistant) {
-          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
+      // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.
+      //    "создай промт для изображения битвы", "напиши промт изображений 9:18"
+      //    → route to AI, skip image generation entirely
+      if (isPromptComposeRequest(prompt)) {
+        // fall through to regular AI chat below
+      } else if (isImageRequest(prompt)) {
+        // 3. Has reference keyword → extract prompt from last assistant message
+        //    "сгенерируй изображение по этому промту", "нарисуй картинку по нему"
+        const isRef = REF_KEYWORDS.some((kw) => lower.includes(kw));
+        if (isRef) {
+          const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
+          if (lastAssistant) {
+            return handleGenerateImage(extractImagePrompt(lastAssistant.content));
+          }
         }
+        // 4. Direct image generation with user's own description
+        return handleGenerateImage(prompt);
       }
-      return handleGenerateImage(prompt);
     }
 
     let imageUrl: string | undefined;

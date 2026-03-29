@@ -11,19 +11,30 @@ import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
 const IMAGE_VERBS = [
-  'нарисуй', 'нарисовать', 'создай', 'создать', 'сгенерируй', 'сгенерировать',
-  'сделай', 'сделать', 'покажи', 'draw', 'generate', 'create', 'make',
+  'нарисуй', 'создай', 'сгенерируй', 'сделай', 'покажи',
+  'нарисую', 'сгенерирую',
+  'нарисовать', 'создать', 'сгенерировать', 'сделать',
+  'draw', 'generate', 'create', 'make',
 ];
 const IMAGE_NOUNS = [
   'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
   'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
 ];
 const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
+const REF_KEYWORDS = [
+  'по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата',
+];
 
 function isImageRequest(text: string): boolean {
   const lower = text.toLowerCase();
   if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
   return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
+}
+
+function isPromptComposeRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (REF_KEYWORDS.some((ref) => lower.includes(ref))) return false;
+  return lower.includes('промт') || lower.includes('prompt') || lower.includes('промпт');
 }
 
 async function resizeImageToBase64(file: File): Promise<string> {
@@ -74,8 +85,9 @@ export default function ChatPage() {
     const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
 
-    // Direct image generation request (no history yet in new chat)
-    if (!file && isImageRequest(prompt)) {
+    // Direct image generation request (no history yet in new chat).
+    // Skip if user wants AI to WRITE a prompt ("создай промт для изображения X").
+    if (!file && !isPromptComposeRequest(prompt) && isImageRequest(prompt)) {
       sessionStorage.setItem('initialImagePrompt', prompt);
       router.push(`/chat/${chat.id}`);
       return;

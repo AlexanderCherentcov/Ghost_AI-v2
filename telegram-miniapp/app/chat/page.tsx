@@ -437,6 +437,7 @@ function ChatApp() {
     setSelectedFile(null);
 
     // ── Image intent routing ─────────────────────────────────────────────────
+    let isWritingPrompt = false;
     if (!fileToSend && prompt) {
       const lower = prompt.toLowerCase().trim();
 
@@ -461,7 +462,7 @@ function ChatApp() {
       //    "создай промт для изображения битвы", "напиши промт изображений 9:18"
       //    → route to AI, skip image generation entirely
       if (isPromptComposeRequest(prompt)) {
-        // fall through to regular AI chat below
+        isWritingPrompt = true; // fall through to regular AI chat below
       } else if (isImageRequest(prompt)) {
         // 3. Has reference keyword → extract prompt from last assistant message
         const isRef = REF_KEYWORDS.some((kw) => lower.includes(kw));
@@ -557,12 +558,28 @@ function ChatApp() {
     ]);
     setStreaming(true);
 
+    const IMAGE_PROMPT_GUIDE = [
+      {
+        role: 'user' as const,
+        content: 'Когда я прошу написать промт — имею в виду промт для AI-генерации изображений (DALL-E / Stable Diffusion). Пиши на английском, с деталями стиля, освещения, композиции, качества. Оформляй промт в блоке кода ```.',
+      },
+      {
+        role: 'assistant' as const,
+        content: 'Понял! Буду писать детальные промты для AI-генерации изображений на английском в блоке кода — с визуальным стилем, освещением, деталями сцены и тегами качества.',
+      },
+    ];
+
+    const historyBase = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }));
+    const history = isWritingPrompt
+      ? [...IMAGE_PROMPT_GUIDE, ...historyBase]
+      : historyBase;
+
     const token = getToken() ?? '';
     wsRef.current?.send(JSON.stringify({
       chatId: activeChatId,
       mode: 'chat',
       prompt: prompt || (fileName ? `[Файл: ${fileName}]` : ''),
-      history: messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+      history,
       jwt: token,
       ...(model ? { preferredModel: model } : {}),
       ...(imageUrl ? { imageUrl } : {}),

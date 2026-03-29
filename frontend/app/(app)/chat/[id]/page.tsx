@@ -296,6 +296,9 @@ export default function ChatConversationPage({ params }: Props) {
     if ((isStreaming || generatingImage) || !accessToken || !messagesReady) return;
 
     // ── Image intent routing ─────────────────────────────────────────────────
+    // Flag: user wants AI to WRITE an image prompt (not generate an image directly)
+    let isWritingPrompt = false;
+
     if (!file && prompt) {
       const lower = prompt.toLowerCase().trim();
 
@@ -317,9 +320,10 @@ export default function ChatConversationPage({ params }: Props) {
       }
 
       // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.
-      //    "создай промт для изображения битвы", "напиши промт изображений 9:18"
-      //    → route to AI, skip image generation entirely
+      //    "напиши промт битва ангелов", "создай промт для изображения 9:18"
+      //    → route to AI with image-prompt guidance injected into history
       if (isPromptComposeRequest(prompt)) {
+        isWritingPrompt = true;
         // fall through to regular AI chat below
       } else if (isImageRequest(prompt)) {
         // 3. Has reference keyword → extract prompt from last assistant message
@@ -398,10 +402,25 @@ export default function ChatConversationPage({ params }: Props) {
     try {
       const { sendMessage: send } = await import('@/lib/socket');
 
-      const history = messages
+      const historyBase = messages
         .filter((m) => m.id !== tempUserMsg.id)
         .slice(-10)
         .map((m) => ({ role: m.role, content: m.content }));
+
+      const IMAGE_PROMPT_GUIDE = [
+        {
+          role: 'user' as const,
+          content: 'Когда я прошу написать промт — имею в виду промт для AI-генерации изображений (DALL-E / Stable Diffusion). Пиши на английском, с деталями стиля, освещения, композиции, качества. Оформляй промт в блоке кода ```.',
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Понял! Буду писать детальные промты для AI-генерации изображений на английском в блоке кода — с визуальным стилем, освещением, деталями сцены и тегами качества.',
+        },
+      ];
+
+      const history = isWritingPrompt
+        ? [...IMAGE_PROMPT_GUIDE, ...historyBase]
+        : historyBase;
 
       const { tokensCost, cacheHit, title: newTitle } = await send({
         chatId: id,

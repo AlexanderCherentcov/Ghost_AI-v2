@@ -69,7 +69,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // ── New generation — check limits and deduct ──────────────────────────
-      const requestType = (sourceImageUrl ? 'image_edit' : 'image_generate') as const;
+      const requestType: import('../services/tokens.js').RequestType = sourceImageUrl ? 'image_edit' : 'image_generate';
       await checkAndDeduct(userId, requestType);
 
       // Save user message to chat history

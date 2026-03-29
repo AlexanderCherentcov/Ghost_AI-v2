@@ -1131,7 +1131,7 @@ function ChatApp() {
               </button>
 
               {/* Model selector — only in chat mode */}
-              {chatMode === 'chat' && <div className="relative" ref={modelRef}>
+              {chatMode === 'chat' && (<div className="relative" ref={modelRef}>
                 <button
                   type="button"
                   onClick={() => setModelOpen(v => !v)}
@@ -1170,7 +1170,7 @@ function ChatApp() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
+              </div>)}
             </div>
 
             {/* Send button */}

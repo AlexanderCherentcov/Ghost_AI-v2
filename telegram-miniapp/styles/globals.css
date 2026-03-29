@@ -69,7 +69,12 @@ input:focus, textarea:focus {
   color: var(--accent);
 }
 
-.prose-ghost { color: var(--text-primary); line-height: 1.7; }
+.prose-ghost {
+  color: var(--text-primary);
+  line-height: 1.7;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
 .prose-ghost p { margin-bottom: 10px; }
 .prose-ghost p:last-child { margin-bottom: 0; }
 .prose-ghost strong { color: white; font-weight: 600; }
@@ -79,4 +84,5 @@ input:focus, textarea:focus {
   padding: 2px 5px;
   font-size: 12px;
   font-family: monospace;
+  word-break: break-all;
 }

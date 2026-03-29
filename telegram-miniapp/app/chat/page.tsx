@@ -566,7 +566,14 @@ function ChatApp() {
   ];
 
   return (
-    <div className="flex flex-col bg-[#0A0A12]" style={{ height: vpHeight }}>
+    <div
+      className="flex flex-col bg-[#0A0A12]"
+      style={{
+        height: vpHeight,
+        // Reserve space for fixed BottomNav so input never goes behind it
+        paddingBottom: 'calc(68px + env(safe-area-inset-bottom))',
+      }}
+    >
       {/* Image lightbox */}
       <AnimatePresence>
         {viewerUrl && (
@@ -641,11 +648,8 @@ function ChatApp() {
         </button>
       </div>
 
-      {/* Messages — flex-1, scrollable, padding-bottom accounts for fixed input + bottom nav */}
-      <div
-        className="flex-1 min-h-0 overflow-y-auto px-4 pt-4"
-        style={{ paddingBottom: 'calc(200px + env(safe-area-inset-bottom))' }}
-      >
+      {/* Messages — flex-1, scrollable */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-4">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="text-5xl mb-4 animate-float">👻</div>
@@ -665,7 +669,7 @@ function ChatApp() {
               >
                 {msg.role === 'assistant' && <span className="text-base flex-shrink-0 mt-1">👻</span>}
                 <div
-                  className={`max-w-[85%] text-sm rounded-2xl px-4 py-3 ${
+                  className={`max-w-[85%] text-sm rounded-2xl px-4 py-3 break-words ${
                     msg.role === 'user'
                       ? 'bg-[#13131F] text-[rgba(255,255,255,0.88)] rounded-tr-sm'
                       : 'prose-ghost'
@@ -708,8 +712,8 @@ function ChatApp() {
         {streaming && streamContent && (
           <div className="flex gap-2 mb-4">
             <span className="text-base flex-shrink-0">👻</span>
-            <div className="max-w-[85%] text-sm prose-ghost">
-              <span>{streamContent}</span>
+            <div className="max-w-[85%] text-sm prose-ghost break-words min-w-0">
+              <span style={{ whiteSpace: 'pre-wrap' }}>{streamContent}</span>
               <span className="ghost-cursor" />
             </div>
           </div>
@@ -733,14 +737,10 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — fixed above BottomNav, doesn't move when keyboard opens */}
+      {/* Input — flex-shrink-0, sits in normal flow above the padded-out space for BottomNav */}
       <div
+        className="flex-shrink-0"
         style={{
-          position: 'fixed',
-          bottom: 'calc(60px + env(safe-area-inset-bottom))',
-          left: 0,
-          right: 0,
-          zIndex: 40,
           padding: '8px 12px',
           background: '#0A0A12',
         }}

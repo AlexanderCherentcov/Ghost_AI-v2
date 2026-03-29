@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
-import { InputBar } from '@/components/chat/InputBar';
+import { InputBar, type ChatMode } from '@/components/chat/InputBar';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
@@ -59,19 +59,14 @@ async function resizeImageToBase64(file: File): Promise<string> {
   });
 }
 
-const SUGGESTIONS = [
-  { icon: '✍️', text: 'Напиши краткое резюме' },
-  { icon: '🌍', text: 'Переведи текст на английский' },
-  { icon: '💡', text: 'Придумай идеи для проекта' },
-  { icon: '🔍', text: 'Объясни простыми словами' },
-];
-
 export default function ChatPage() {
   const router = useRouter();
-  const { addChat, preferredModel, setPreferredModel, chats } = useChatStore();
+  const { addChat, preferredModel, setPreferredModel } = useChatStore();
   const { user } = useAuthStore();
+  const [chatMode, setChatMode] = useState<ChatMode>('chat');
 
-  const firstName = user?.name?.split(' ')[0] ?? 'Ghost';
+  const name = user?.name?.split(' ')[0] ?? 'Ghost';
+  const firstName = name.charAt(0).toUpperCase() + name.slice(1);
 
   // Redirect to last opened chat unless user intentionally navigated here (New Chat)
   useEffect(() => {
@@ -85,8 +80,21 @@ export default function ChatPage() {
     const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
 
-    // Direct image generation request (no history yet in new chat).
-    // Skip if user wants AI to WRITE a prompt ("создай промт для изображения X").
+    // Video mode — store prompt and navigate
+    if (chatMode === 'video') {
+      sessionStorage.setItem('initialVideoPrompt', prompt);
+      router.push(`/chat/${chat.id}`);
+      return;
+    }
+
+    // Images mode — always generate image
+    if (chatMode === 'images' && !file) {
+      sessionStorage.setItem('initialImagePrompt', prompt || 'beautiful landscape');
+      router.push(`/chat/${chat.id}`);
+      return;
+    }
+
+    // Chat mode — direct image generation request (no history yet in new chat)
     if (!file && !isPromptComposeRequest(prompt) && isImageRequest(prompt)) {
       sessionStorage.setItem('initialImagePrompt', prompt);
       router.push(`/chat/${chat.id}`);
@@ -121,9 +129,14 @@ export default function ChatPage() {
     router.push(`/chat/${chat.id}`);
   }
 
+  const placeholder = chatMode === 'images'
+    ? 'Опишите изображение...'
+    : chatMode === 'video'
+      ? 'Опишите видео...'
+      : 'Спросите что-нибудь у GhostLine...';
+
   return (
     <div className="flex flex-col h-full">
-      {/* Empty state */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -136,30 +149,19 @@ export default function ChatPage() {
           <h1 className="text-[clamp(22px,5vw,36px)] font-normal tracking-tight text-white mb-1">
             Здравствуйте, {firstName}!
           </h1>
-          <p className="text-lg text-[rgba(255,255,255,0.4)] mb-10">
+          <p className="text-lg text-[rgba(255,255,255,0.4)]">
             С чего начнём?
           </p>
-
-          <div className="flex flex-wrap gap-2 justify-center mb-8">
-            {SUGGESTIONS.map(({ icon, text }) => (
-              <button
-                key={text}
-                onClick={() => handleSend(text)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white hover:border-[rgba(255,255,255,0.2)] transition-all"
-              >
-                <span>{icon}</span>
-                {text}
-              </button>
-            ))}
-          </div>
         </motion.div>
       </div>
 
       <InputBar
         onSend={handleSend}
-        placeholder="Спросите что-нибудь у GhostLine..."
+        placeholder={placeholder}
         preferredModel={preferredModel}
         setPreferredModel={setPreferredModel}
+        chatMode={chatMode}
+        setChatMode={setChatMode}
       />
     </div>
   );

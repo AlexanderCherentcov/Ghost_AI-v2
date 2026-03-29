@@ -59,7 +59,7 @@ export async function checkResets(userId: string): Promise<void> {
 
 // ─── Check limits & deduct counters (call BEFORE API request) ─────────────────
 
-export async function checkAndDeduct(userId: string, requestType: RequestType): Promise<void> {
+export async function checkAndDeduct(userId: string, requestType: RequestType, videoCount = 1): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -81,10 +81,10 @@ export async function checkAndDeduct(userId: string, requestType: RequestType): 
     if ((user.videoLimit ?? 0) === 0) {
       throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
     }
-    if (user.videoUsed >= (user.videoLimit ?? 0)) {
+    if (user.videoUsed + videoCount > (user.videoLimit ?? 0)) {
       throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
     }
-    await prisma.user.update({ where: { id: userId }, data: { videoUsed: { increment: 1 } } });
+    await prisma.user.update({ where: { id: userId }, data: { videoUsed: { increment: videoCount } } });
     return;
   }
 
@@ -127,7 +127,7 @@ export async function checkAndDeduct(userId: string, requestType: RequestType): 
 
 // ─── Refund on API error ──────────────────────────────────────────────────────
 
-export async function refundCounter(userId: string, requestType: RequestType): Promise<void> {
+export async function refundCounter(userId: string, requestType: RequestType, videoCount = 1): Promise<void> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -142,7 +142,7 @@ export async function refundCounter(userId: string, requestType: RequestType): P
 
     const updates: Record<string, unknown> = {};
     if (isVideo) {
-      updates.videoUsed = { decrement: 1 };
+      updates.videoUsed = { decrement: videoCount };
     } else if (isImage) {
       updates.imagesUsed = { decrement: 1 };
     } else {

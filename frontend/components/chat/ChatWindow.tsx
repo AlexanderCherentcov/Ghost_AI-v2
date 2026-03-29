@@ -8,13 +8,6 @@ import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { greetingByHour } from '@/lib/utils';
 
-const SUGGESTIONS = [
-  'Напиши слоган для стартапа',
-  'Объясни квантовую физику',
-  'Придумай идею для бизнеса',
-  'Переведи на английский',
-];
-
 interface ChatWindowProps {
   onSuggestion?: (text: string) => void;
 }
@@ -41,21 +34,9 @@ export function ChatWindow({ onSuggestion }: ChatWindowProps) {
           >
             <GhostIcon size={64} className="text-accent animate-float mx-auto mb-6" animated />
             <h1 className="text-3xl font-medium text-white mb-2">Чем займёмся?</h1>
-            <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">
-              {greetingByHour()}{user?.name ? `, ${user.name}` : ''}.
+            <p className="text-sm text-[rgba(255,255,255,0.3)]">
+              {greetingByHour()}{user?.name ? `, ${user.name.charAt(0).toUpperCase() + user.name.slice(1)}` : ''}.
             </p>
-
-            <div className="grid grid-cols-2 gap-3 max-w-lg">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => onSuggestion?.(s)}
-                  className="text-left px-4 py-3 rounded-xl border border-[var(--border)] text-sm text-[rgba(255,255,255,0.5)] hover:border-[var(--accent-border)] hover:text-[rgba(255,255,255,0.8)] transition-all"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
           </motion.div>
         </div>
       ) : (

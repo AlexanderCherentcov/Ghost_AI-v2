@@ -4,6 +4,7 @@ import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SendIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { VideoSettingsMenu } from './VideoSettingsMenu';
 
 // ─── Accepted file types ──────────────────────────────────────────────────────
 
@@ -75,6 +76,19 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ─── Video options ────────────────────────────────────────────────────────────
+
+export type CameraPreset = 'static' | 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'tilt_up' | 'tilt_down' | 'orbit';
+
+export interface VideoOptions {
+  duration: 5 | 10;
+  aspectRatio: '16:9' | '9:16' | '1:1';
+  enableAudio: boolean;
+  cameraPreset: CameraPreset;
+  negativePrompt: string;
+  cfgScale: number;
 }
 
 // ─── Model selector (inline in toolbar) ───────────────────────────────────────
@@ -175,7 +189,7 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
 ];
 
 interface InputBarProps {
-  onSend: (prompt: string, file?: File) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -195,13 +209,22 @@ export function InputBar({
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [videoOptions, setVideoOptions] = useState<VideoOptions>({
+    duration: 5,
+    aspectRatio: '16:9',
+    enableAudio: false,
+    cameraPreset: 'static',
+    negativePrompt: '',
+    cfgScale: 0.5,
+  });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleSend() {
     const trimmed = value.trim();
     if ((!trimmed && !attachedFile) || disabled) return;
-    onSend(trimmed, attachedFile ?? undefined);
+    const opts = chatMode === 'video' ? videoOptions : undefined;
+    onSend(trimmed, attachedFile ?? undefined, opts);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -235,6 +258,78 @@ export function InputBar({
   return (
     <div className="px-4 pb-4 pt-2">
       <div className="max-w-[720px] mx-auto">
+
+        {/* Video options panel */}
+        {chatMode === 'video' && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-wrap items-center gap-2 mb-2"
+          >
+            {/* Duration */}
+            <div className="flex items-center gap-1">
+              {([5, 10] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setVideoOptions(o => ({ ...o, duration: d }))}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                    videoOptions.duration === d
+                      ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                      : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                  )}
+                >
+                  {d}с
+                </button>
+              ))}
+            </div>
+
+            <span className="text-[rgba(255,255,255,0.15)] text-[11px]">|</span>
+
+            {/* Aspect ratio */}
+            <div className="flex items-center gap-1">
+              {(['16:9', '9:16', '1:1'] as const).map((ar) => (
+                <button
+                  key={ar}
+                  type="button"
+                  onClick={() => setVideoOptions(o => ({ ...o, aspectRatio: ar }))}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                    videoOptions.aspectRatio === ar
+                      ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                      : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                  )}
+                >
+                  {ar}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-[rgba(255,255,255,0.15)] text-[11px]">|</span>
+
+            {/* Audio toggle */}
+            <button
+              type="button"
+              onClick={() => setVideoOptions(o => ({ ...o, enableAudio: !o.enableAudio }))}
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                videoOptions.enableAudio
+                  ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                  : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+              )}
+            >
+              {videoOptions.enableAudio ? '🔊' : '🔇'} Звук
+            </button>
+
+            {/* 10s warning */}
+            {videoOptions.duration === 10 && (
+              <span className="text-[10px] text-[rgba(255,200,80,0.7)]">
+                10с = 2 генерации видео
+              </span>
+            )}
+          </motion.div>
+        )}
 
         {/* Attached file preview */}
         {attachedFile && (
@@ -281,7 +376,7 @@ export function InputBar({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ACCEPT}
+            accept={chatMode === 'video' ? 'image/*' : ACCEPT}
             className="hidden"
             onChange={handleFileChange}
           />
@@ -345,6 +440,14 @@ export function InputBar({
                   setPreferredModel={setPreferredModel}
                   userPlan={userPlan}
                   onUpgradeRequired={onUpgradeRequired}
+                />
+              )}
+
+              {/* Video settings — only in video mode */}
+              {chatMode === 'video' && (
+                <VideoSettingsMenu
+                  options={videoOptions}
+                  onChange={setVideoOptions}
                 />
               )}
             </div>

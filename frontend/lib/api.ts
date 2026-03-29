@@ -122,7 +122,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; duration?: number }) =>
+    reel: (data: { prompt: string; videoDuration?: 5 | 10; videoAspectRatio?: '16:9' | '9:16' | '1:1'; videoEnableAudio?: boolean; videoImageUrl?: string; cameraPreset?: string; negativePrompt?: string; cfgScale?: number }) =>
       request<{ jobId: string }>('/generate/reel', {
         method: 'POST',
         body: JSON.stringify(data),

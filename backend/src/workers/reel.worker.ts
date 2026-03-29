@@ -1,35 +1,46 @@
 import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoKling } from '../services/providers/kling.js';
+import { generateVideoKling, type KlingVideoOptions } from '../services/providers/kling.js';
 import { setMediaCached } from '../services/cache.js';
 
 interface ReelJob {
   jobId: string;
   userId: string;
   prompt: string;
+  duration?: 5 | 10;
+  aspectRatio?: '16:9' | '9:16' | '1:1';
+  enableAudio?: boolean;
+  imageUrl?: string;
+  cameraPreset?: string;
+  negativePrompt?: string;
+  cfgScale?: number;
 }
 
 export function startReelWorker() {
   const worker = new Worker<ReelJob>(
     'reel',
     async (job: Job<ReelJob>) => {
-      const { jobId, prompt } = job.data;
+      const { jobId, prompt, duration, aspectRatio, enableAudio, imageUrl, cameraPreset, negativePrompt, cfgScale } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      const mediaUrl = await generateVideoKling(prompt);
+      const options: KlingVideoOptions = { duration, aspectRatio, enableAudio, imageUrl, cameraPreset, negativePrompt, cfgScale };
+      const mediaUrl = await generateVideoKling(prompt, options);
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
 
-      // Cache for future identical prompts (7-day TTL — GoAPI video expiry)
-      setMediaCached('reel', prompt, mediaUrl).catch(() => {});
+      // Cache for future identical text-to-video prompts (7-day TTL — GoAPI video expiry)
+      // Skip cache for image-to-video (unique per image)
+      if (!imageUrl) {
+        setMediaCached('reel', prompt, mediaUrl).catch(() => {});
+      }
 
       return { mediaUrl };
     },

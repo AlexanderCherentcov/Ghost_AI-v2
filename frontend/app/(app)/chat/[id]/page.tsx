@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
-import { InputBar, type ChatMode } from '@/components/chat/InputBar';
+import { InputBar, type ChatMode, type VideoOptions } from '@/components/chat/InputBar';
 import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
@@ -182,6 +182,7 @@ export default function ChatConversationPage({ params }: Props) {
 
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
+    const initialVideoPrompt = sessionStorage.getItem('initialVideoPrompt');
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
     const initialFileContent = sessionStorage.getItem('initialFileContent');
     const initialFileName    = sessionStorage.getItem('initialFileName');
@@ -189,15 +190,17 @@ export default function ChatConversationPage({ params }: Props) {
     const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
 
-    const hasAny = initialPrompt || initialImagePrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    ['initialPrompt','initialImagePrompt','initialImageUrl','initialFileContent',
+    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
-      if (initialImagePrompt) {
+      if (initialVideoPrompt) {
+        handleGenerateVideo(initialVideoPrompt);
+      } else if (initialImagePrompt) {
         handleGenerateImage(initialImagePrompt);
       } else if (initialImageUrl) {
         const res = await fetch(initialImageUrl);
@@ -291,7 +294,7 @@ export default function ChatConversationPage({ params }: Props) {
   }, [accessToken, user, messagesReady]);
 
   // ── Video generation ─────────────────────────────────────────────────────────
-  const handleGenerateVideo = useCallback(async (prompt: string) => {
+  const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions, imageUrl?: string) => {
     if (!accessToken || !messagesReady) return;
     setGeneratingVideo(true);
 
@@ -302,15 +305,16 @@ export default function ChatConversationPage({ params }: Props) {
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: imageUrl ?? null,
       createdAt: new Date().toISOString(),
     });
 
     const placeholderId = `gen-${Date.now()}`;
+    const durationLabel = options?.duration === 10 ? '10 секунд' : '5 секунд';
     addMessage({
       id: placeholderId,
       role: 'assistant',
-      content: '⏳ Генерирую видео... Это займёт 1-2 минуты.',
+      content: `⏳ Генерирую видео (${durationLabel})... Это займёт 1-2 минуты.`,
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
@@ -319,7 +323,16 @@ export default function ChatConversationPage({ params }: Props) {
     });
 
     try {
-      const { jobId } = await api.generate.reel({ prompt });
+      const { jobId } = await api.generate.reel({
+        prompt,
+        videoDuration: options?.duration,
+        videoAspectRatio: options?.aspectRatio,
+        videoEnableAudio: options?.enableAudio,
+        videoImageUrl: imageUrl,
+        cameraPreset: options?.cameraPreset,
+        negativePrompt: options?.negativePrompt || undefined,
+        cfgScale: options?.cfgScale,
+      });
 
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);
@@ -360,7 +373,7 @@ export default function ChatConversationPage({ params }: Props) {
   }, [accessToken, messagesReady]);
 
   // ── Main send handler ────────────────────────────────────────────────────────
-  const handleSend = useCallback(async (prompt: string, file?: File) => {
+  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions) => {
     if ((isStreaming || generatingImage || generatingVideo) || !accessToken || !messagesReady) return;
 
     // ── Mode-based routing ───────────────────────────────────────────────────
@@ -368,8 +381,18 @@ export default function ChatConversationPage({ params }: Props) {
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
-      if (!prompt.trim()) return;
-      return handleGenerateVideo(prompt);
+      if (!prompt.trim() && !file) return;
+      // If image attached, use as source frame (image-to-video)
+      if (file && getFileCategory(file) === 'image') {
+        try {
+          const imgUrl = await resizeImageToBase64(file);
+          return handleGenerateVideo(prompt || 'animate this image', videoOptions, imgUrl);
+        } catch {
+          showToast('Не удалось обработать изображение', 'error');
+          return;
+        }
+      }
+      return handleGenerateVideo(prompt, videoOptions);
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────
@@ -551,7 +574,7 @@ export default function ChatConversationPage({ params }: Props) {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, showToast]);
 
   const busy = isStreaming || generatingImage || generatingVideo || !messagesReady;
 

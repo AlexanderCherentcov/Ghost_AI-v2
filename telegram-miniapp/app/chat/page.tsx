@@ -19,7 +19,8 @@ interface Message {
   fileName?: string | null;
 }
 
-type ModelChoice = 'haiku' | 'deepseek' | undefined;
+type ModelChoice = 'haiku' | undefined;
+type ChatMode = 'chat' | 'images' | 'video';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -219,6 +220,16 @@ function ChatApp() {
   const [chatId, setChatId] = useState<string | null>(null);
   const [model, setModel] = useState<ModelChoice>(undefined);
   const [modelOpen, setModelOpen] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoDuration, setVideoDuration] = useState<5 | 10>(5);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
+  const [videoEnableAudio, setVideoEnableAudio] = useState(false);
+  const [videoSettingsOpen, setVideoSettingsOpen] = useState(false);
+  const [videoCameraPreset, setVideoCameraPreset] = useState('static');
+  const [videoNegativePrompt, setVideoNegativePrompt] = useState('');
+  const [videoCfgScale, setVideoCfgScale] = useState(50); // 0-100, maps to 0-1
+  const videoSettingsRef = useRef<HTMLDivElement>(null);
   const [vpHeight, setVpHeight] = useState('100dvh');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -260,6 +271,9 @@ function ChatApp() {
     function handleClick(e: MouseEvent) {
       if (modelRef.current && !modelRef.current.contains(e.target as Node)) {
         setModelOpen(false);
+      }
+      if (videoSettingsRef.current && !videoSettingsRef.current.contains(e.target as Node)) {
+        setVideoSettingsOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -421,6 +435,71 @@ function ChatApp() {
     }
   }, [tg, router, chatId]);
 
+  // ── Video generation ─────────────────────────────────────────────────────────
+  const handleGenerateVideo = useCallback(async (prompt: string, imageUrl?: string) => {
+    if (!prompt.trim() && !imageUrl) return;
+    setGeneratingVideo(true);
+
+    const placeholderId = `gen-video-${Date.now()}`;
+    const durationLabel = videoDuration === 10 ? '10 секунд' : '5 секунд';
+    setMessages((msgs) => [
+      ...msgs,
+      { id: `u-${Date.now()}`, role: 'user', content: prompt, mediaUrl: imageUrl },
+      { id: placeholderId, role: 'assistant', content: `⏳ Генерирую видео (${durationLabel})... Это займёт 1-2 минуты.` },
+    ]);
+
+    try {
+      const { jobId } = await apiRequest<{ jobId: string }>('/generate/reel', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: prompt || 'animate this image',
+          ...(chatId ? { chatId } : {}),
+          videoDuration,
+          videoAspectRatio,
+          videoEnableAudio,
+          ...(imageUrl ? { videoImageUrl: imageUrl } : {}),
+          cameraPreset: videoCameraPreset,
+          ...(videoNegativePrompt.trim() ? { negativePrompt: videoNegativePrompt.trim() } : {}),
+          cfgScale: videoCfgScale / 100,
+        }),
+      });
+
+      const poll = async (): Promise<void> => {
+        const job = await apiRequest<{ status: string; mediaUrl?: string; error?: string }>(`/generate/${jobId}`);
+        if (job.status === 'done' && job.mediaUrl) {
+          setMessages((msgs) => msgs.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: prompt, mediaUrl: job.mediaUrl }
+              : m
+          ));
+          tg?.HapticFeedback.notificationOccurred('success');
+        } else if (job.status === 'failed') {
+          setMessages((msgs) => msgs.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать видео'}` }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 3000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      setMessages((msgs) => msgs.filter((m) => m.id !== placeholderId));
+      if (err.code === 'LIMIT_VIDEOS' || err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {
+        tg?.showAlert('Лимит видео исчерпан! Обновите тариф.', () => router.push('/balance'));
+      } else if (err.code === 'PLAN_RESTRICTED') {
+        tg?.showAlert('Генерация видео доступна с тарифа STANDARD.', () => router.push('/balance'));
+      } else {
+        tg?.showAlert(err.message ?? 'Ошибка генерации видео');
+      }
+    } finally {
+      setGeneratingVideo(false);
+    }
+  }, [tg, router, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoCameraPreset, videoNegativePrompt, videoCfgScale]);
+
   // ── File selection ────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -431,10 +510,28 @@ function ChatApp() {
   // ── Chat send ─────────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
-    if ((!prompt && !selectedFile) || streaming) return;
+    if ((!prompt && !selectedFile) || streaming || generatingVideo) return;
     setInput('');
     const fileToSend = selectedFile;
     setSelectedFile(null);
+
+    // ── Mode-based routing ───────────────────────────────────────────────────
+    if (chatMode === 'images' && !fileToSend) {
+      return handleGenerateImage(prompt || 'beautiful landscape');
+    }
+    if (chatMode === 'video') {
+      if (!prompt && !fileToSend) return;
+      if (fileToSend && fileToSend.type.startsWith('image/')) {
+        try {
+          const imgUrl = await resizeImageToBase64(fileToSend);
+          return handleGenerateVideo(prompt, imgUrl);
+        } catch {
+          tg?.showAlert('Не удалось обработать изображение');
+          return;
+        }
+      }
+      return handleGenerateVideo(prompt);
+    }
 
     // ── Image intent routing ─────────────────────────────────────────────────
     let isWritingPrompt = false;
@@ -587,19 +684,23 @@ function ChatApp() {
       ...(fileName ? { fileName } : {}),
       ...(fileLang ? { fileLang } : {}),
     }));
-  }, [input, streaming, chatId, messages, tg, model, handleGenerateImage, selectedFile]);
+  }, [input, streaming, generatingVideo, chatId, messages, tg, model, chatMode, handleGenerateImage, handleGenerateVideo, selectedFile]);
 
   const isEmpty = !messages.length && !streaming;
 
   const MODEL_LABEL: Record<string, string> = {
     haiku: 'Стандарт',
-    deepseek: 'Про',
   };
 
   const modelOptions: { key: ModelChoice; label: string }[] = [
-    { key: undefined,   label: 'Авто' },
-    { key: 'haiku',     label: 'Стандарт' },
-    { key: 'deepseek',  label: 'Про' },
+    { key: undefined, label: 'Авто' },
+    { key: 'haiku',   label: 'Стандарт' },
+  ];
+
+  const CHAT_MODES: { key: ChatMode; label: string }[] = [
+    { key: 'chat',   label: 'Чат' },
+    { key: 'images', label: 'Картинки' },
+    { key: 'video',  label: 'Видео' },
   ];
 
   return (
@@ -812,6 +913,183 @@ function ChatApp() {
           </div>
         )}
 
+        {/* Mode tabs */}
+        <div className="flex items-center gap-1 mb-2">
+          {CHAT_MODES.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setChatMode(key)}
+              className="px-3 py-1 rounded-lg text-[11px] font-medium transition-all"
+              style={{
+                background: chatMode === key ? 'rgba(123,92,240,0.25)' : 'transparent',
+                color: chatMode === key ? '#A78BFA' : 'rgba(255,255,255,0.35)',
+                border: chatMode === key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Video options */}
+        {chatMode === 'video' && (
+          <div className="mb-2">
+            {/* Basic options row */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+              {([5, 10] as const).map((d) => (
+                <button key={d} type="button" onClick={() => setVideoDuration(d)}
+                  className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all"
+                  style={{
+                    background: videoDuration === d ? 'rgba(123,92,240,0.2)' : 'transparent',
+                    color: videoDuration === d ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                    border: videoDuration === d ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >{d}с</button>
+              ))}
+              <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 11 }}>|</span>
+              {(['16:9', '9:16', '1:1'] as const).map((ar) => (
+                <button key={ar} type="button" onClick={() => setVideoAspectRatio(ar)}
+                  className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all"
+                  style={{
+                    background: videoAspectRatio === ar ? 'rgba(123,92,240,0.2)' : 'transparent',
+                    color: videoAspectRatio === ar ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                    border: videoAspectRatio === ar ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >{ar}</button>
+              ))}
+              <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 11 }}>|</span>
+              <button type="button" onClick={() => setVideoEnableAudio(v => !v)}
+                className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all"
+                style={{
+                  background: videoEnableAudio ? 'rgba(123,92,240,0.2)' : 'transparent',
+                  color: videoEnableAudio ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                  border: videoEnableAudio ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                }}
+              >{videoEnableAudio ? '🔊' : '🔇'}</button>
+              {videoDuration === 10 && (
+                <span style={{ color: 'rgba(255,200,80,0.7)', fontSize: 10 }}>10с = 2 генерации</span>
+              )}
+
+              {/* Advanced settings button */}
+              <div className="relative ml-auto" ref={videoSettingsRef}>
+                <button
+                  type="button"
+                  onClick={() => setVideoSettingsOpen(v => !v)}
+                  className="w-6 h-6 flex items-center justify-center rounded-md transition-all relative"
+                  style={{
+                    background: videoSettingsOpen ? 'rgba(123,92,240,0.18)' : 'transparent',
+                    color: videoSettingsOpen ? '#A78BFA' : 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+                    <path d="M1.5 4h12M1.5 7.5h12M1.5 11h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <circle cx="5" cy="4" r="1.6" fill="#0A0A12" stroke="currentColor" strokeWidth="1.2"/>
+                    <circle cx="10" cy="7.5" r="1.6" fill="#0A0A12" stroke="currentColor" strokeWidth="1.2"/>
+                    <circle cx="6" cy="11" r="1.6" fill="#0A0A12" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  {(videoCameraPreset !== 'static' || videoNegativePrompt.trim() || videoCfgScale !== 50) && (
+                    <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full" style={{ background: '#7B5CF0' }} />
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {videoSettingsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                      transition={{ duration: 0.14 }}
+                      className="absolute bottom-full right-0 mb-2 z-50 rounded-2xl overflow-hidden"
+                      style={{
+                        width: 260,
+                        background: '#13131F',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
+                      }}
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
+                        <span className="text-[12px] font-medium text-white">Настройки видео</span>
+                        <button type="button" onClick={() => setVideoSettingsOpen(false)}
+                          className="w-5 h-5 flex items-center justify-center rounded text-[rgba(255,255,255,0.3)]"
+                        >
+                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Camera presets */}
+                      <div className="px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
+                        <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
+                          Движение камеры
+                        </p>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { key: 'static', label: 'Стоп' },
+                            { key: 'zoom_in', label: 'Зум +' },
+                            { key: 'zoom_out', label: 'Зум −' },
+                            { key: 'pan_left', label: 'Влево' },
+                            { key: 'pan_right', label: 'Вправо' },
+                            { key: 'tilt_up', label: 'Вверх' },
+                            { key: 'tilt_down', label: 'Вниз' },
+                            { key: 'orbit', label: 'Облёт' },
+                          ].map((p) => (
+                            <button key={p.key} type="button" onClick={() => setVideoCameraPreset(p.key)}
+                              className="py-2 px-0.5 rounded-lg text-[9px] transition-all text-center"
+                              style={{
+                                background: videoCameraPreset === p.key ? 'rgba(123,92,240,0.22)' : 'rgba(255,255,255,0.04)',
+                                color: videoCameraPreset === p.key ? '#A78BFA' : 'rgba(255,255,255,0.4)',
+                                border: videoCameraPreset === p.key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
+                              }}
+                            >{p.label}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Negative prompt */}
+                      <div className="px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
+                        <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
+                          Исключить
+                        </p>
+                        <textarea
+                          value={videoNegativePrompt}
+                          onChange={(e) => setVideoNegativePrompt(e.target.value)}
+                          placeholder="размытость, плохое качество..."
+                          rows={2}
+                          className="w-full rounded-lg px-2.5 py-1.5 text-[11px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.2)] outline-none resize-none"
+                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                        />
+                      </div>
+
+                      {/* cfg_scale */}
+                      <div className="px-3.5 py-2.5">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest">
+                            Точность
+                          </p>
+                          <span className="text-[10px]" style={{ color: 'rgba(123,92,240,0.9)' }}>{videoCfgScale}%</span>
+                        </div>
+                        <input type="range" min={0} max={100} step={5}
+                          value={videoCfgScale}
+                          onChange={(e) => setVideoCfgScale(parseInt(e.target.value))}
+                          className="w-full cursor-pointer"
+                          style={{ accentColor: '#7B5CF0', height: '4px' }}
+                        />
+                        <div className="flex justify-between mt-0.5">
+                          <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Свободно</span>
+                          <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Точно</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           className="flex flex-col rounded-2xl px-4 pt-3 pb-2.5 transition-all"
           style={{
@@ -828,8 +1106,8 @@ function ChatApp() {
             value={input}
             onChange={(e) => { setInput(e.target.value); handleTextareaInput(); }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder="Сообщение..."
-            disabled={streaming}
+            placeholder={chatMode === 'images' ? 'Опишите изображение...' : chatMode === 'video' ? 'Опишите видео...' : 'Сообщение...'}
+            disabled={streaming || generatingVideo}
             rows={1}
             style={{ fontSize: '16px', minHeight: '36px' }}
             className="w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[160px]"
@@ -852,8 +1130,8 @@ function ChatApp() {
                 </svg>
               </button>
 
-              {/* Model selector */}
-              <div className="relative" ref={modelRef}>
+              {/* Model selector — only in chat mode */}
+              {chatMode === 'chat' && <div className="relative" ref={modelRef}>
                 <button
                   type="button"
                   onClick={() => setModelOpen(v => !v)}
@@ -899,10 +1177,10 @@ function ChatApp() {
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!input.trim() && !selectedFile) || streaming}
+              disabled={(!input.trim() && !selectedFile) || streaming || generatingVideo}
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40"
               style={{
-                background: (input.trim() || selectedFile) && !streaming ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
+                background: (input.trim() || selectedFile) && !streaming && !generatingVideo ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">

@@ -47,7 +47,6 @@ export const api = {
     me: () => request<User>('/me'),
     updateMe: (data: Partial<User>) =>
       request<User>('/me', { method: 'PATCH', body: JSON.stringify(data) }),
-    transactions: (page = 1) => request<TransactionsResponse>(`/me/transactions?page=${page}`),
     refreshToken: (refreshToken: string) =>
       request<TokenPair>('/auth/refresh', {
         method: 'POST',
@@ -192,14 +191,6 @@ export interface GenerateJob {
   updatedAt: string;
 }
 
-export interface TokenTransaction {
-  id: string;
-  amount: number;
-  type: string;
-  meta: Record<string, unknown>;
-  createdAt: string;
-}
-
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -208,12 +199,6 @@ export interface TokenPair {
 export interface AuthResponse extends TokenPair {
   user: User;
   isNew: boolean;
-}
-
-export interface TransactionsResponse {
-  transactions: TokenTransaction[];
-  total: number;
-  page: number;
 }
 
 export interface PaymentsResponse {

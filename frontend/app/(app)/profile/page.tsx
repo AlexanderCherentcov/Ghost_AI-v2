@@ -6,18 +6,12 @@ import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 import { UserIcon } from '@/components/icons';
 import { formatDate } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
 
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore();
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  const { data: txData } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => api.auth.transactions(),
-  });
 
   async function handleSave() {
     if (!name.trim() || saving) return;
@@ -92,26 +86,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-
-        {/* Transaction history */}
-        {txData?.transactions && txData.transactions.length > 0 && (
-          <div className="card">
-            <h2 className="font-medium text-white mb-4">История транзакций</h2>
-            <div className="space-y-2">
-              {txData.transactions.slice(0, 10).map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
-                  <div>
-                    <p className="text-sm text-[rgba(255,255,255,0.6)]">{tx.type}</p>
-                    <p className="text-xs text-[rgba(255,255,255,0.2)]">{formatDate(tx.createdAt)}</p>
-                  </div>
-                  <span className={`text-sm font-medium ${tx.amount > 0 ? 'text-green-400' : 'text-[rgba(255,255,255,0.4)]'}`}>
-                    {tx.amount > 0 ? '+' : ''}{formatTokens(Math.abs(tx.amount))}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

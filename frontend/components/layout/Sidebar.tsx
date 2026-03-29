@@ -45,15 +45,24 @@ export function Sidebar() {
   const [editTitle, setEditTitle] = useState('');
 
   const plan = user?.plan ?? 'FREE';
-  const isDaily = plan === 'FREE' || plan === 'PRO' || plan === 'ULTRA';
-  const todayUsed = user?.messagesToday ?? 0;
-  const todayLimit = plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400;
-  const tokenPercent = isDaily
-    ? Math.min((todayUsed / todayLimit) * 100, 100)
-    : Math.min(((user?.messagesUsed ?? 0) / Math.max(user?.messagesLimit ?? 1, 1)) * 100, 100);
-  const balanceLabel = isDaily
-    ? `${todayUsed}/${todayLimit} сегодня`
-    : `${user?.messagesUsed ?? 0}/${user?.messagesLimit ?? 0} сообщ.`;
+  const isUnlimitedChat = plan === 'PRO' || plan === 'ULTRA';
+  const imagesUsed = user?.imagesUsed ?? 0;
+  const imagesLimit = user?.imagesLimit ?? 0;
+  const videoUsed = user?.videoUsed ?? 0;
+  const videoLimit = user?.videoLimit ?? 0;
+
+  // For unlimited plans: show images progress; for limited plans: show messages
+  const tokenPercent = isUnlimitedChat
+    ? Math.min(imagesLimit > 0 ? (imagesUsed / imagesLimit) * 100 : 0, 100)
+    : plan === 'FREE'
+      ? Math.min(((user?.messagesToday ?? 0) / 10) * 100, 100)
+      : Math.min(((user?.messagesUsed ?? 0) / Math.max(user?.messagesLimit ?? 1, 1)) * 100, 100);
+
+  const balanceLabel = isUnlimitedChat
+    ? `${imagesUsed}/${imagesLimit} картинок`
+    : plan === 'FREE'
+      ? `${user?.messagesToday ?? 0}/10 сегодня`
+      : `${user?.messagesUsed ?? 0}/${user?.messagesLimit ?? 0} сообщ.`;
 
   const grouped = groupChats(chats);
 
@@ -212,24 +221,40 @@ export function Sidebar() {
       <div className="p-3 border-t border-[var(--border)]">
         {/* Token bar — only when expanded */}
         {sidebarOpen && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
-                <TokenIcon size={12} className="text-accent" />
-                <span>{balanceLabel}</span>
+          <div className="mb-3 space-y-2">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
+                  <TokenIcon size={12} className="text-accent" />
+                  <span>{balanceLabel}</span>
+                </div>
+                <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">
+                  + Купить
+                </Link>
               </div>
-              <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">
-                + Купить
-              </Link>
+              <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-accent rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${tokenPercent}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                />
+              </div>
             </div>
-            <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-accent rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${tokenPercent}%` }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-              />
-            </div>
+            {/* Videos for PRO/ULTRA */}
+            {isUnlimitedChat && videoLimit > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{videoUsed}/{videoLimit} видео</span>
+                </div>
+                <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-accent/60 rounded-full"
+                    style={{ width: `${Math.min((videoUsed / videoLimit) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

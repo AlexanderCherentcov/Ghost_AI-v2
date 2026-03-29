@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
-import { InputBar } from '@/components/chat/InputBar';
+import { InputBar, type ChatMode } from '@/components/chat/InputBar';
 import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
@@ -162,7 +162,9 @@ export default function ChatConversationPage({ params }: Props) {
 
   const [limitType, setLimitType] = useState<LimitType>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>('chat');
 
   // Load messages
   useEffect(() => {
@@ -288,9 +290,87 @@ export default function ChatConversationPage({ params }: Props) {
     }
   }, [accessToken, user, messagesReady]);
 
+  // ── Video generation ─────────────────────────────────────────────────────────
+  const handleGenerateVideo = useCallback(async (prompt: string) => {
+    if (!accessToken || !messagesReady) return;
+    setGeneratingVideo(true);
+
+    addMessage({
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: prompt,
+      mode: 'reel',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    const placeholderId = `gen-${Date.now()}`;
+    addMessage({
+      id: placeholderId,
+      role: 'assistant',
+      content: '⏳ Генерирую видео... Это займёт 1-2 минуты.',
+      mode: 'reel',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    try {
+      const { jobId } = await api.generate.reel({ prompt });
+
+      const poll = async (): Promise<void> => {
+        const job = await api.generate.status(jobId);
+        if (job.status === 'done' && job.mediaUrl) {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
+              : m
+          ));
+        } else if (job.status === 'failed') {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать видео'}` }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 3000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      const current = useChatStore.getState().messages;
+      useChatStore.getState().setMessages(current.filter((m) => m.id !== placeholderId));
+      if (err.code === 'LIMIT_VIDEOS') {
+        setLimitType('LIMIT_VIDEOS');
+      } else if (err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {
+        setLimitType('LIMIT_VIDEOS_UNAVAILABLE');
+      } else {
+        showToast(err.message ?? 'Ошибка генерации видео', 'error');
+      }
+    } finally {
+      setGeneratingVideo(false);
+    }
+  }, [accessToken, messagesReady]);
+
   // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File) => {
-    if ((isStreaming || generatingImage) || !accessToken || !messagesReady) return;
+    if ((isStreaming || generatingImage || generatingVideo) || !accessToken || !messagesReady) return;
+
+    // ── Mode-based routing ───────────────────────────────────────────────────
+    if (chatMode === 'images' && !file) {
+      return handleGenerateImage(prompt || 'beautiful landscape');
+    }
+    if (chatMode === 'video') {
+      if (!prompt.trim()) return;
+      return handleGenerateVideo(prompt);
+    }
 
     // ── Image intent routing ─────────────────────────────────────────────────
     // Flag: user wants AI to WRITE an image prompt (not generate an image directly)
@@ -471,9 +551,15 @@ export default function ChatConversationPage({ params }: Props) {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, user, messagesReady]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo]);
 
-  const busy = isStreaming || generatingImage || !messagesReady;
+  const busy = isStreaming || generatingImage || generatingVideo || !messagesReady;
+
+  const placeholder = chatMode === 'images'
+    ? 'Опишите изображение...'
+    : chatMode === 'video'
+      ? 'Опишите видео...'
+      : 'Продолжайте диалог...';
 
   return (
     <div className="flex flex-col h-full">
@@ -485,11 +571,13 @@ export default function ChatConversationPage({ params }: Props) {
         onSend={handleSend}
         onStop={() => { abortStream(); setStreaming(false); }}
         isStreaming={busy}
-        placeholder="Продолжайте диалог..."
+        placeholder={placeholder}
         preferredModel={preferredModel}
         setPreferredModel={setPreferredModel}
         userPlan={user?.plan}
         onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
+        chatMode={chatMode}
+        setChatMode={setChatMode}
       />
     </div>
   );

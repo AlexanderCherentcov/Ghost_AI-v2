@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { GhostIcon } from '@/components/icons/GhostIcon';
@@ -16,6 +16,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
   const isUser = message.role === 'user';
 
   async function handleCopy() {
@@ -27,6 +28,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <>
     <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} />
+    {videoOpen && message.mediaUrl && (
+      <VideoViewer url={message.mediaUrl} onClose={() => setVideoOpen(false)} />
+    )}
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -65,10 +69,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             )}
           </div>
         ) : (
-          /* Ghost response — clean text like Gemini */
+          /* Ghost response */
           <div className="flex-1">
             {message.mediaUrl ? (
-              <MediaContent mediaUrl={message.mediaUrl} mode={message.mode} onOpen={() => setViewerUrl(message.mediaUrl!)} />
+              <MediaContent
+                mediaUrl={message.mediaUrl}
+                mode={message.mode}
+                onOpenImage={() => setViewerUrl(message.mediaUrl!)}
+                onOpenVideo={() => setVideoOpen(true)}
+              />
             ) : (
               <div className="prose-ghost text-sm">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -88,11 +97,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               </button>
               {message.cacheHit && (
                 <span className="text-[11px] text-[rgba(123,92,240,0.5)]">⚡ Кэш</span>
-              )}
-              {message.tokensCost > 0 && (
-                <span className="text-[11px] text-[rgba(255,255,255,0.2)]">
-                  {message.tokensCost.toLocaleString()} токенов
-                </span>
               )}
             </div>
           </div>
@@ -128,11 +132,10 @@ function FileChip({ name }: { name: string }) {
   );
 }
 
-async function downloadImage(url: string) {
+async function downloadFile(url: string, ext = 'mp4') {
   try {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
-    const ext = blob.type.includes('png') ? 'png' : 'jpg';
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -142,12 +145,18 @@ async function downloadImage(url: string) {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   } catch {
-    // Fallback: open in new tab
     window.open(url, '_blank');
   }
 }
 
-function MediaContent({ mediaUrl, mode, onOpen }: { mediaUrl: string; mode: string; onOpen?: () => void }) {
+function MediaContent({
+  mediaUrl, mode, onOpenImage, onOpenVideo,
+}: {
+  mediaUrl: string;
+  mode: string;
+  onOpenImage?: () => void;
+  onOpenVideo?: () => void;
+}) {
   if (mode === 'vision') {
     return (
       <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
@@ -156,12 +165,12 @@ function MediaContent({ mediaUrl, mode, onOpen }: { mediaUrl: string; mode: stri
           alt="Generated"
           className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
           loading="lazy"
-          onClick={onOpen}
+          onClick={onOpenImage}
           title="Нажмите для просмотра"
         />
         <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
           <button
-            onClick={() => downloadImage(mediaUrl)}
+            onClick={() => downloadFile(mediaUrl, 'jpg')}
             className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -183,12 +192,155 @@ function MediaContent({ mediaUrl, mode, onOpen }: { mediaUrl: string; mode: stri
   }
 
   if (mode === 'reel') {
-    return (
-      <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
-        <video controls src={mediaUrl} className="w-full h-auto" />
-      </div>
-    );
+    return <VideoCard mediaUrl={mediaUrl} onOpen={onOpenVideo} />;
   }
 
   return null;
+}
+
+function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(false);
+
+  function toggleMute() {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setMuted(videoRef.current.muted);
+    }
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
+      <div className="relative">
+        <video
+          ref={videoRef}
+          src={mediaUrl}
+          controls
+          className="w-full h-auto"
+          muted={muted}
+        />
+      </div>
+      <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-elevated)]">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleMute}
+            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+          >
+            {muted ? (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1 4.5h2l3-3v9l-3-3H1V4.5zM9 4.5l2 3M11 4.5l-2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1 4.5h2l3-3v9l-3-3H1V4.5zM8 3.5c1 .8 1.5 2 1.5 3s-.5 2.2-1.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            )}
+            {muted ? 'Включить звук' : 'Выключить звук'}
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onOpen}
+            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 2h3M2 2v3M10 10H7M10 10V7M2 10h3M2 10V7M10 2H7M10 2v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            Открыть
+          </button>
+          <button
+            onClick={() => downloadFile(mediaUrl, 'mp4')}
+            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Скачать
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Video Viewer modal ───────────────────────────────────────────────────────
+
+function VideoViewer({ url, onClose }: { url: string; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(false);
+
+  function toggleMute() {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setMuted(videoRef.current.muted);
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        className="fixed inset-0 z-[200] flex flex-col items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)' }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="max-w-[90vw] max-h-[75vh] rounded-2xl overflow-hidden shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <video
+            ref={videoRef}
+            src={url}
+            controls
+            autoPlay
+            muted={muted}
+            className="w-full h-auto max-h-[75vh]"
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 16, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.2, delay: 0.05 }}
+          className="flex items-center gap-3 mt-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={toggleMute}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)' }}
+          >
+            {muted ? '🔇 Включить звук' : '🔊 Выключить звук'}
+          </button>
+          <button
+            onClick={() => downloadFile(url, 'mp4')}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            style={{ background: '#7B5CF0', color: 'white' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Скачать
+          </button>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Закрыть
+          </button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }

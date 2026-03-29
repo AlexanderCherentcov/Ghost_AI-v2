@@ -166,6 +166,14 @@ function ModelPill({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+export type ChatMode = 'chat' | 'images' | 'video';
+
+const CHAT_MODES: { key: ChatMode; label: string }[] = [
+  { key: 'chat',   label: 'Чат' },
+  { key: 'images', label: 'Картинки' },
+  { key: 'video',  label: 'Видео' },
+];
+
 interface InputBarProps {
   onSend: (prompt: string, file?: File) => void;
   onStop?: () => void;
@@ -176,11 +184,14 @@ interface InputBarProps {
   setPreferredModel?: (m: 'haiku' | 'deepseek' | undefined) => void;
   userPlan?: string;
   onUpgradeRequired?: () => void;
+  chatMode?: ChatMode;
+  setChatMode?: (m: ChatMode) => void;
 }
 
 export function InputBar({
   onSend, onStop, disabled = false, isStreaming = false,
   placeholder, preferredModel, setPreferredModel, userPlan, onUpgradeRequired,
+  chatMode, setChatMode,
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -306,8 +317,29 @@ export function InputBar({
                 </svg>
               </button>
 
-              {/* Model selector — shown when props provided */}
-              {setPreferredModel && (
+              {/* Chat mode tabs */}
+              {chatMode !== undefined && setChatMode && (
+                <div className="flex items-center gap-0.5 ml-1">
+                  {CHAT_MODES.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setChatMode(m.key)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-md text-[12px] transition-colors',
+                        chatMode === m.key
+                          ? 'bg-[rgba(123,92,240,0.18)] text-accent font-medium'
+                          : 'text-[rgba(255,255,255,0.32)] hover:text-[rgba(255,255,255,0.65)]'
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Model selector — only in chat mode */}
+              {setPreferredModel && (!chatMode || chatMode === 'chat') && (
                 <ModelPill
                   preferredModel={preferredModel}
                   setPreferredModel={setPreferredModel}

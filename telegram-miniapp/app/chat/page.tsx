@@ -13,6 +13,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  mode?: string;
   tokensCost?: number;
   cacheHit?: boolean;
   mediaUrl?: string | null;
@@ -293,7 +294,45 @@ function ChatApp() {
     if (idParam) {
       setChatId(idParam);
       apiRequest<{ messages: Message[] }>(`/chats/${idParam}/messages`)
-        .then(({ messages: msgs }) => setMessages(msgs))
+        .then(({ messages: msgs }) => {
+          setMessages(msgs);
+          // Resume pending generation job after page refresh
+          const stored = localStorage.getItem(`pending_gen_${idParam}`);
+          if (!stored) return;
+          try {
+            const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: string; prompt: string };
+            const alreadyDone = msgs.some(
+              (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
+            );
+            if (alreadyDone) { localStorage.removeItem(`pending_gen_${idParam}`); return; }
+            const placeholderId = `resumed-${Date.now()}`;
+            setMessages((prev) => [
+              ...prev,
+              { id: placeholderId, role: 'assistant', content: mode === 'reel' ? '⏳ Генерирую видео...' : '⏳ Генерирую изображение...', mode },
+            ]);
+            if (mode === 'reel') setGeneratingVideo(true);
+            const pollResume = async (): Promise<void> => {
+              const job = await apiRequest<{ status: string; mediaUrl?: string; error?: string }>(`/generate/${jobId}`);
+              if (job.status === 'done' && job.mediaUrl) {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === placeholderId ? { ...m, content: prompt, mediaUrl: job.mediaUrl, mode } : m
+                ));
+                localStorage.removeItem(`pending_gen_${idParam}`);
+              } else if (job.status === 'failed') {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === placeholderId ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать'}` } : m
+                ));
+                localStorage.removeItem(`pending_gen_${idParam}`);
+              } else {
+                await new Promise((r) => setTimeout(r, mode === 'reel' ? 3000 : 2000));
+                return pollResume();
+              }
+            };
+            pollResume().finally(() => setGeneratingVideo(false));
+          } catch {
+            localStorage.removeItem(`pending_gen_${idParam}`);
+          }
+        })
         .catch(() => {});
       return;
     }
@@ -463,6 +502,7 @@ function ChatApp() {
           cfgScale: videoCfgScale / 100,
         }),
       });
+      if (chatId) localStorage.setItem(`pending_gen_${chatId}`, JSON.stringify({ jobId, mode: 'reel', prompt: prompt || 'animate this image' }));
 
       const poll = async (): Promise<void> => {
         const job = await apiRequest<{ status: string; mediaUrl?: string; error?: string }>(`/generate/${jobId}`);
@@ -496,6 +536,7 @@ function ChatApp() {
         tg?.showAlert(err.message ?? 'Ошибка генерации видео');
       }
     } finally {
+      if (chatId) localStorage.removeItem(`pending_gen_${chatId}`);
       setGeneratingVideo(false);
     }
   }, [tg, router, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoCameraPreset, videoNegativePrompt, videoCfgScale]);
@@ -815,12 +856,21 @@ function ChatApp() {
                 >
                   {msg.mediaUrl ? (
                     <div>
-                      <img
-                        src={msg.mediaUrl}
-                        alt="generated"
-                        className="rounded-xl max-w-full mb-2 cursor-pointer active:opacity-80"
-                        onClick={() => setViewerUrl(msg.mediaUrl!)}
-                      />
+                      {(msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
+                        <video
+                          src={msg.mediaUrl}
+                          controls
+                          playsInline
+                          className="rounded-xl w-full mb-2"
+                        />
+                      ) : (
+                        <img
+                          src={msg.mediaUrl}
+                          alt="generated"
+                          className="rounded-xl max-w-full mb-2 cursor-pointer active:opacity-80"
+                          onClick={() => setViewerUrl(msg.mediaUrl!)}
+                        />
+                      )}
                       {msg.content && msg.content !== msg.mediaUrl && (
                         <p className="mt-1 text-[rgba(255,255,255,0.6)] text-xs">{msg.content}</p>
                       )}

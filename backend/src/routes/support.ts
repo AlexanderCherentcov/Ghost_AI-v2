@@ -37,7 +37,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     // Optional authentication
     try {
       await request.jwtVerify();
-      const sub = (request.user as { sub: string }).sub;
+      const sub = (request.user as unknown as { userId: string }).userId;
       const user = await prisma.user.findUnique({
         where: { id: sub },
         select: {

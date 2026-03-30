@@ -62,7 +62,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
     if (!user) return reply.code(404).send({ error: 'User not found' });
 
-    const limits = PLANS[user.plan] ?? PLANS['FREE'];
+    const limits = (PLANS as Record<string, typeof PLANS[keyof typeof PLANS]>)[user.plan] ?? PLANS['FREE'];
     const today  = new Date();
 
     await prisma.user.update({

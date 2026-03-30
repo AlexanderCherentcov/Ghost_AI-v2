@@ -166,13 +166,64 @@ export default function ChatConversationPage({ params }: Props) {
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
 
-  // Load messages
+  // Load messages + resume any pending generation job after page refresh
   useEffect(() => {
     localStorage.setItem('lastChatId', id);
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);
     api.chats.messages(id)
-      .then(({ messages }) => { setMessages(messages); setMessagesReady(true); })
+      .then(({ messages }) => {
+        setMessages(messages);
+        setMessagesReady(true);
+
+        // Resume pending generation job if the user refreshed mid-generation
+        const stored = localStorage.getItem(`pending_gen_${id}`);
+        if (!stored) return;
+        try {
+          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel'; prompt: string };
+          // If the result already landed in DB messages, just clean up
+          const alreadyDone = messages.some(
+            (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
+          );
+          if (alreadyDone) { localStorage.removeItem(`pending_gen_${id}`); return; }
+
+          // Add placeholder and resume polling
+          const placeholderId = `resumed-${Date.now()}`;
+          useChatStore.getState().addMessage({
+            id: placeholderId, role: 'assistant', content: '', mode,
+            tokensCost: 0, cacheHit: false, mediaUrl: '__loading__', createdAt: new Date().toISOString(),
+          });
+          if (mode === 'vision') setGeneratingImage(true);
+          else setGeneratingVideo(true);
+
+          const pollResume = async (): Promise<void> => {
+            const job = await api.generate.status(jobId);
+            if (job.status === 'done' && job.mediaUrl) {
+              useChatStore.getState().setMessages(
+                useChatStore.getState().messages.map((m) =>
+                  m.id === placeholderId ? { ...m, content: prompt, mediaUrl: job.mediaUrl!, tokensCost: 0 } : m
+                )
+              );
+              localStorage.removeItem(`pending_gen_${id}`);
+            } else if (job.status === 'failed') {
+              useChatStore.getState().setMessages(
+                useChatStore.getState().messages.map((m) =>
+                  m.id === placeholderId
+                    ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null }
+                    : m
+                )
+              );
+              localStorage.removeItem(`pending_gen_${id}`);
+            } else {
+              await new Promise((r) => setTimeout(r, mode === 'reel' ? 3000 : 2000));
+              return pollResume();
+            }
+          };
+          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); });
+        } catch {
+          localStorage.removeItem(`pending_gen_${id}`);
+        }
+      })
       .catch(() => { localStorage.removeItem('lastChatId'); router.replace('/chat'); });
   }, [id]);
 
@@ -261,6 +312,7 @@ export default function ChatConversationPage({ params }: Props) {
 
     try {
       const { jobId } = await api.generate.vision({ prompt, size: '1024x1024', chatId: id, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
+      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'vision', prompt }));
 
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);
@@ -294,6 +346,7 @@ export default function ChatConversationPage({ params }: Props) {
       );
       showToast(err.message ?? 'Ошибка генерации изображения', 'error');
     } finally {
+      localStorage.removeItem(`pending_gen_${id}`);
       setGeneratingImage(false);
     }
   }, [accessToken, user, messagesReady]);
@@ -329,6 +382,7 @@ export default function ChatConversationPage({ params }: Props) {
     try {
       const { jobId } = await api.generate.reel({
         prompt,
+        chatId: id,
         videoDuration: options?.duration,
         videoAspectRatio: options?.aspectRatio,
         videoEnableAudio: options?.enableAudio,
@@ -337,6 +391,7 @@ export default function ChatConversationPage({ params }: Props) {
         negativePrompt: options?.negativePrompt || undefined,
         cfgScale: options?.cfgScale,
       });
+      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));
 
       const poll = async (): Promise<void> => {
         const job = await api.generate.status(jobId);
@@ -374,6 +429,7 @@ export default function ChatConversationPage({ params }: Props) {
         showToast(err.message ?? 'Ошибка генерации видео', 'error');
       }
     } finally {
+      localStorage.removeItem(`pending_gen_${id}`);
       setGeneratingVideo(false);
     }
   }, [accessToken, messagesReady]);

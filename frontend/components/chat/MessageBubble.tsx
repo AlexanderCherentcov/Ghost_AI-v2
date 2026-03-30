@@ -155,7 +155,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
   return (
     <div
-      className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-3 ${isVideo ? 'aspect-video max-w-sm' : 'w-[200px] h-[200px]'}`}
+      className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-3 ${isVideo ? 'aspect-video w-full max-w-lg' : 'w-[260px] h-[260px]'}`}
     >
       {/* Shimmer overlay */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
@@ -261,7 +261,7 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
   }
 
   return (
-    <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
+    <div className="rounded-xl overflow-hidden border border-[var(--border)] w-full max-w-lg">
       <div className="relative">
         <video
           ref={videoRef}

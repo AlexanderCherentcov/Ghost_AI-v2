@@ -10,40 +10,41 @@ const PLANS = [
     key: 'BASIC',
     name: 'Базовый',
     price: 699,
-    features: ['500 сообщ./мес', '20 картинок', '40 файлов'],
+    features: ['Безлимитный чат', '20 картинок/день', '40 файлов/мес'],
   },
   {
     key: 'STANDARD',
     name: 'Стандарт',
     price: 1199,
-    features: ['1 500 сообщ./мес', '30 картинок', '150 файлов', '5 видео'],
+    features: ['Безлимитный чат', '50 про/день', '30 картинок/день', '5 видео/день'],
     popular: true,
   },
   {
     key: 'PRO',
     name: 'Про',
     price: 2490,
-    features: ['Безлимитный чат', '80 картинок', '500 файлов', '15 видео'],
+    features: ['Безлимитный чат', '200 про/день', '80 картинок/день', '15 видео/день'],
   },
   {
     key: 'ULTRA',
     name: 'Ультра',
     price: 5490,
-    features: ['Безлимитный чат', '150 картинок', '1 000 файлов', '40 видео'],
+    features: ['Безлимитный чат', '400 про/день', '150 картинок/день', '40 видео/день'],
   },
 ];
 
 interface User {
   plan: string;
-  messagesUsed:  number;
-  filesUsed:     number;
-  imagesUsed:    number;
-  videoUsed:     number;
-  messagesToday: number;
-  messagesLimit: number;
-  filesLimit:    number;
-  imagesLimit:   number;
-  videoLimit:    number;
+  std_messages_today:       number;
+  pro_messages_today:       number;
+  images_today:             number;
+  videos_today:             number;
+  files_used:               number;
+  std_messages_daily_limit: number;
+  pro_messages_daily_limit: number;
+  images_daily_limit:       number;
+  videos_daily_limit:       number;
+  files_monthly_limit:      number;
 }
 
 function UsageRow({ label, used, limit }: { label: string; used: number; limit: number }) {
@@ -88,8 +89,6 @@ function BalanceApp() {
   }
 
   const plan = user?.plan ?? 'FREE';
-  const isUnlimitedChat = plan === 'PRO' || plan === 'ULTRA';
-  const isMonthlyMessages = plan === 'BASIC' || plan === 'STANDARD';
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0A0A12] pb-[80px]">
@@ -106,21 +105,21 @@ function BalanceApp() {
             <p className="text-xs text-[rgba(255,255,255,0.35)] font-medium uppercase tracking-wider">Использование</p>
 
             {plan === 'FREE' && (
-              <UsageRow label="Сообщения сегодня" used={user.messagesToday} limit={10} />
+              <UsageRow label="Сообщения сегодня" used={user.std_messages_today} limit={user.std_messages_daily_limit} />
             )}
-            {isMonthlyMessages && (
-              <UsageRow label="Сообщения" used={user.messagesUsed} limit={user.messagesLimit} />
+            {user.pro_messages_daily_limit > 0 && (
+              <UsageRow label="Про-сообщения" used={user.pro_messages_today} limit={user.pro_messages_daily_limit} />
             )}
-            {isUnlimitedChat && (
-              <p className="text-xs text-[rgba(255,255,255,0.3)]">Чат безлимитный, сброс каждый день</p>
+            {plan !== 'FREE' && user.std_messages_daily_limit === -1 && (
+              <p className="text-xs text-[rgba(255,255,255,0.3)]">Стандартный чат: безлимитный</p>
             )}
 
-            <UsageRow label="Картинки" used={user.imagesUsed} limit={user.imagesLimit} />
-            {user.filesLimit > 0 && (
-              <UsageRow label="Файлы" used={user.filesUsed} limit={user.filesLimit} />
+            <UsageRow label="Картинки" used={user.images_today} limit={user.images_daily_limit} />
+            {user.videos_daily_limit > 0 && (
+              <UsageRow label="Видео" used={user.videos_today} limit={user.videos_daily_limit} />
             )}
-            {(user.videoLimit ?? 0) > 0 && (
-              <UsageRow label="Видео" used={user.videoUsed ?? 0} limit={user.videoLimit} />
+            {user.files_monthly_limit > 0 && (
+              <UsageRow label="Файлы (месяц)" used={user.files_used} limit={user.files_monthly_limit} />
             )}
           </div>
         )}
@@ -132,15 +131,15 @@ function BalanceApp() {
             {PLANS.map(({ key, name, price, features, popular }) => (
               <div
                 key={key}
-                className={`bg-[#0E0E1A] border rounded-xl p-3 flex flex-col gap-2 ${
+                className={`bg-[#0E0E1A] border rounded-xl p-3 flex flex-col ${
                   popular ? 'border-[#7B5CF0]' : 'border-[rgba(255,255,255,0.06)]'
                 } ${plan === key ? 'border-[#7B5CF0]/50 bg-[#7B5CF0]/5' : ''}`}
               >
                 {popular && (
-                  <span className="text-[10px] text-[#7B5CF0] font-medium">★ Популярный</span>
+                  <span className="text-[10px] text-[#7B5CF0] font-medium mb-1">★ Популярный</span>
                 )}
-                <div>
-                  <p className="text-sm font-medium text-white">{name}</p>
+                <p className="text-sm font-medium text-white mb-1">{name}</p>
+                <div className="flex-1 mb-3 space-y-0.5">
                   {features.map((f) => (
                     <p key={f} className="text-xs text-[rgba(255,255,255,0.35)]">{f}</p>
                   ))}
@@ -148,7 +147,7 @@ function BalanceApp() {
                 <button
                   onClick={() => handleBuy(key)}
                   disabled={loading === key || plan === key}
-                  className="w-full py-2 rounded-lg bg-[#7B5CF0] text-white text-xs font-medium disabled:opacity-50"
+                  className="w-full py-2 rounded-lg bg-[#7B5CF0] text-white text-xs font-medium disabled:opacity-50 mt-auto"
                 >
                   {loading === key ? '...' : plan === key ? 'Активен' : `${price.toLocaleString('ru-RU')} ₽/мес`}
                 </button>

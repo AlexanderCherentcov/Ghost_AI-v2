@@ -43,43 +43,27 @@ const FEATURES = [
 
 const PLANS = [
   {
-    name: 'Пробный',
-    price: 0,
-    tokens: '50',
-    period: '7 дней',
-    features: ['5 сообщений в день', '3 картинки в месяц', 'Без карты'],
-    badge: null,
-  },
-  {
     name: 'Базовый',
-    price: 499,
-    tokens: '500',
-    period: null,
-    features: ['500 сообщений', '10 картинок'],
+    price: 699,
+    features: ['Безлимитный чат', '20 картинок/день', '40 файлов/месяц'],
     badge: null,
   },
   {
     name: 'Стандарт',
-    price: 999,
-    tokens: '1 500',
-    period: null,
-    features: ['1 500 сообщений', '20 картинок'],
+    price: 1199,
+    features: ['Безлимитный чат', '50 про-сообщений/день', '30 картинок/день', '5 видео/день', '150 файлов/месяц'],
     badge: 'Популярный',
   },
   {
     name: 'Про',
-    price: 2190,
-    tokens: '4 000',
-    period: null,
-    features: ['4 000 сообщений', '50 картинок'],
+    price: 2490,
+    features: ['Безлимитный чат', '200 про-сообщений/день', '80 картинок/день', '15 видео/день', '500 файлов/месяц'],
     badge: null,
   },
   {
     name: 'Ультра',
-    price: 4490,
-    tokens: '10 000',
-    period: null,
-    features: ['10 000 сообщений', '120 картинок', 'Приоритетная обработка'],
+    price: 5490,
+    features: ['Безлимитный чат', '400 про-сообщений/день', '150 картинок/день', '40 видео/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
     badge: 'Максимум',
   },
 ];
@@ -265,41 +249,49 @@ export default function LandingPage() {
             <p className="text-[rgba(255,255,255,0.4)]">Начните бесплатно. Прокачайтесь когда нужно.</p>
           </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {PLANS.map(({ name, price, tokens, period, features, badge }, i) => (
+          {/* Free tier note */}
+          <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl px-6 py-4 mb-6">
+            <div>
+              <span className="font-medium text-white">Бесплатный план</span>
+              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">10 сообщений/день · 3 картинки/день · Без карты</span>
+            </div>
+            <Link href="/login" className="btn btn-ghost text-sm h-9 px-5 shrink-0">
+              Начать бесплатно
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {PLANS.map(({ name, price, features, badge }, i) => (
               <motion.div
                 key={name}
-                className={`card relative ${badge ? 'border-accent shadow-accent' : ''}`}
+                className={`card relative flex flex-col ${badge === 'Максимум' ? 'border-accent shadow-accent' : badge === 'Популярный' ? 'border-accent/60' : ''}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.08 }}
               >
                 {badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-xs px-3 py-1 rounded-full">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-black text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
                     {badge}
                   </div>
                 )}
                 <h3 className="font-medium text-white mb-1">{name}</h3>
-                <div className="mb-3">
-                  <span className="text-2xl font-medium">
-                    {price === 0 ? 'Бесплатно' : `${price} ₽`}
-                  </span>
-                  {period && <span className="text-sm text-[rgba(255,255,255,0.3)] ml-1">· {period}</span>}
+                <div className="mb-4">
+                  <span className="text-2xl font-medium">{price.toLocaleString('ru-RU')} ₽</span>
+                  <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
                 </div>
-                <div className="text-sm text-accent mb-3">{tokens} токенов</div>
-                <ul className="space-y-1 mb-6">
+                <ul className="space-y-1.5 flex-1 mb-5">
                   {features.map((f) => (
                     <li key={f} className="text-sm text-[rgba(255,255,255,0.4)] flex items-center gap-2">
-                      <span className="text-accent">✓</span> {f}
+                      <span className="text-accent text-xs">✓</span> {f}
                     </li>
                   ))}
                 </ul>
                 <Link
                   href="/login"
-                  className={`w-full btn text-sm h-10 ${badge ? 'btn-primary' : 'btn-ghost'}`}
+                  className={`w-full btn text-sm h-10 mt-auto ${badge ? 'btn-primary' : 'btn-ghost'}`}
                 >
-                  {price === 0 ? 'Начать бесплатно' : 'Выбрать'}
+                  Выбрать
                 </Link>
               </motion.div>
             ))}

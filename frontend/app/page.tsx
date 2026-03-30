@@ -14,30 +14,35 @@ const FEATURES = [
     label: 'Ghost Chat',
     color: '#7B5CF0',
     desc: 'Умные диалоги, анализ документов, написание кода, переводы и суммаризация. Самые передовые разработки в области AI.',
+    wip: false,
   },
   {
     Icon: VisionIcon,
     label: 'Ghost Vision',
     color: '#5C8CF0',
     desc: 'Генерация изображений по текстовому описанию. Фотореализм, концепт-арт, иллюстрации — на пике качества.',
-  },
-  {
-    Icon: SoundIcon,
-    label: 'Ghost Sound',
-    color: '#5CF0C8',
-    desc: 'Генерация музыкальных треков любого жанра. От атмосферного эмбиента до динамичной электроники.',
+    wip: false,
   },
   {
     Icon: ReelIcon,
     label: 'Ghost Reel',
     color: '#F05C8C',
     desc: 'Генерация коротких видеоклипов по описанию. Передовые технологии AI-видео для ваших идей.',
+    wip: false,
   },
   {
     Icon: ThinkIcon,
     label: 'Ghost Think',
     color: '#F0C85C',
     desc: 'Режим глубокого размышления для сложных задач. Рассуждает шаг за шагом, как лучший эксперт.',
+    wip: false,
+  },
+  {
+    Icon: SoundIcon,
+    label: 'Ghost Music',
+    color: '#5CF0C8',
+    desc: 'Генерация музыкальных треков любого жанра. От атмосферного эмбиента до динамичной электроники.',
+    wip: true,
   },
 ];
 
@@ -70,7 +75,7 @@ const PLANS = [
 
 const THESIS = [
   { Icon: SparkleIcon, title: 'Интеллектуальный роутинг', desc: 'Каждый запрос автоматически направляется к оптимальному AI-движку. Скорость там, где нужно — мощь там, где требуется.' },
-  { Icon: TokenIcon,   title: 'Мгновенный кэш',           desc: 'Популярные запросы обрабатываются мгновенно из умного кэша. Без ожидания, без лишних затрат токенов.' },
+  { Icon: TokenIcon,   title: 'Мгновенная скорость',      desc: 'Оптимизированная инфраструктура доставляет ответы быстрее, чем вы ожидаете. Каждый запрос обрабатывается с максимальной эффективностью.' },
   { Icon: GhostIcon,   title: 'Всегда топ',               desc: 'Мы постоянно интегрируем новейшие AI-разработки. Вы автоматически получаете доступ к лучшему на рынке.' },
 ];
 
@@ -151,7 +156,7 @@ export default function LandingPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.4 }}
           >
-            Не нужна карта · 50 токенов бесплатно на 7 дней
+            Без карты · 10 сообщений/день · 3 картинки/день бесплатно
           </motion.p>
         </motion.div>
 
@@ -171,25 +176,30 @@ export default function LandingPage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-4xl font-medium tracking-tight mb-3">Четыре духа.</h2>
+            <h2 className="text-4xl font-medium tracking-tight mb-3">Наши духи.</h2>
             <p className="text-[rgba(255,255,255,0.4)]">Один аккаунт. Бесконечные возможности.</p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {FEATURES.map(({ Icon, label, desc, color }, i) => (
+            {FEATURES.map(({ Icon, label, desc, color, wip }, i) => (
               <motion.div
                 key={label}
-                className="card card-interactive cursor-default"
+                className={`card card-interactive cursor-default relative ${wip ? 'opacity-60' : ''}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.08 }}
               >
+                {wip && (
+                  <span className="absolute top-4 right-4 text-[10px] font-medium px-2 py-0.5 rounded-full border border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)]">
+                    В разработке
+                  </span>
+                )}
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
                   style={{ background: `${color}20` }}
                 >
-                  <Icon size={20} className="text-current" style={{ color }} />
+                  <Icon size={20} className="text-current" style={{ color: wip ? 'rgba(255,255,255,0.3)' : color }} />
                 </div>
                 <h3 className="font-medium text-white mb-2">{label}</h3>
                 <p className="text-sm text-[rgba(255,255,255,0.4)] leading-relaxed">{desc}</p>
@@ -314,7 +324,7 @@ export default function LandingPage() {
             Начать бесплатно
           </Link>
           <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">
-            Не нужна карта · 50 токенов бесплатно на 7 дней
+            Без карты · 10 сообщений/день · 3 картинки/день бесплатно
           </p>
         </motion.div>
       </section>

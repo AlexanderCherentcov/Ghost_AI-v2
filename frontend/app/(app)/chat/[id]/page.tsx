@@ -251,11 +251,11 @@ export default function ChatConversationPage({ params }: Props) {
     addMessage({
       id: placeholderId,
       role: 'assistant',
-      content: '⏳ Генерирую изображение...',
+      content: '',
       mode: 'vision',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
     });
 
@@ -276,7 +276,7 @@ export default function ChatConversationPage({ params }: Props) {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
-              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать изображение'}` }
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null }
               : m
           ));
         } else {
@@ -287,6 +287,11 @@ export default function ChatConversationPage({ params }: Props) {
 
       await poll();
     } catch (err: any) {
+      useChatStore.getState().setMessages(
+        useChatStore.getState().messages.map((m) =>
+          m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации', mediaUrl: null } : m
+        )
+      );
       showToast(err.message ?? 'Ошибка генерации изображения', 'error');
     } finally {
       setGeneratingImage(false);
@@ -310,15 +315,14 @@ export default function ChatConversationPage({ params }: Props) {
     });
 
     const placeholderId = `gen-${Date.now()}`;
-    const durationLabel = options?.duration === 10 ? '10 секунд' : '5 секунд';
     addMessage({
       id: placeholderId,
       role: 'assistant',
-      content: `⏳ Генерирую видео (${durationLabel})... Это займёт 1-2 минуты.`,
+      content: '',
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
     });
 
@@ -347,7 +351,7 @@ export default function ChatConversationPage({ params }: Props) {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
-              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать видео'}` }
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null }
               : m
           ));
         } else {
@@ -359,7 +363,9 @@ export default function ChatConversationPage({ params }: Props) {
       await poll();
     } catch (err: any) {
       const current = useChatStore.getState().messages;
-      useChatStore.getState().setMessages(current.filter((m) => m.id !== placeholderId));
+      useChatStore.getState().setMessages(current.map((m) =>
+        m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации видео', mediaUrl: null } : m
+      ));
       if (err.code === 'LIMIT_VIDEOS') {
         setLimitType('LIMIT_VIDEOS');
       } else if (err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {

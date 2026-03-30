@@ -102,11 +102,15 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
       statusData?.status ?? '';
 
     if (status === 'succeed' || status === 'completed' || status === 'success') {
+      // Try all known GoAPI response shapes
+      const output = statusData?.data?.output ?? statusData?.output;
       const videoUrl: string | undefined =
+        output?.video_url ??                                                   // GoAPI v1 /api/v1/task
+        output?.works?.[0]?.video?.resource_without_watermark ??               // GoAPI works array
+        output?.works?.[0]?.video?.resource ??
         statusData?.data?.task_result?.videos?.[0]?.url ??
-        statusData?.data?.output?.url ??
-        statusData?.output?.url ??
-        statusData?.data?.task_result?.url;
+        statusData?.data?.task_result?.url ??
+        output?.url;
       if (videoUrl) return videoUrl;
       throw new Error(`No video URL in completed task: ${JSON.stringify(statusData).slice(0, 300)}`);
     }

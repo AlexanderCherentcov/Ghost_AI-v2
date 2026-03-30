@@ -44,6 +44,7 @@ const config: Config = {
         'float':   'float 3s ease-in-out infinite',
         'fade-in': 'fadeIn 0.4s ease forwards',
         'bounce-slow': 'bounce 2s infinite',
+        'shimmer': 'shimmer 1.5s infinite',
       },
       keyframes: {
         float: {
@@ -53,6 +54,10 @@ const config: Config = {
         fadeIn: {
           from: { opacity: '0', transform: 'translateY(8px)' },
           to:   { opacity: '1', transform: 'translateY(0)' },
+        },
+        shimmer: {
+          '0%':   { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(200%)' },
         },
       },
       borderRadius: {

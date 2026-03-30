@@ -149,6 +149,53 @@ async function downloadFile(url: string, ext = 'mp4') {
   }
 }
 
+// ─── Generating placeholder ───────────────────────────────────────────────────
+
+function GeneratingPlaceholder({ mode }: { mode: string }) {
+  const isVideo = mode === 'reel';
+  return (
+    <div
+      className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-3 ${isVideo ? 'aspect-video max-w-sm' : 'w-[200px] h-[200px]'}`}
+    >
+      {/* Shimmer overlay */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
+        <div
+          className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite]"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)',
+          }}
+        />
+      </div>
+      {/* Icon */}
+      {isVideo ? (
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-accent/50">
+          <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        </svg>
+      ) : (
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-accent/50">
+          <rect x="3" y="3" width="26" height="26" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+          <circle cx="11" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M3 22l7-7 6 6 4-4 9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
+      {/* Dots loader */}
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+      <span className="text-[11px] text-[rgba(255,255,255,0.3)]">
+        {isVideo ? 'Генерирую видео...' : 'Генерирую картинку...'}
+      </span>
+    </div>
+  );
+}
+
 function MediaContent({
   mediaUrl, mode, onOpenImage, onOpenVideo,
 }: {
@@ -157,6 +204,10 @@ function MediaContent({
   onOpenImage?: () => void;
   onOpenVideo?: () => void;
 }) {
+  if (mediaUrl === '__loading__') {
+    return <GeneratingPlaceholder mode={mode} />;
+  }
+
   if (mode === 'vision') {
     return (
       <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">

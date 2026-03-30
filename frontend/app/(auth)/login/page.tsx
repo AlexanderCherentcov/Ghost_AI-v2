@@ -150,7 +150,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">
-          50 000 токенов бесплатно после регистрации
+          Без карты · 10 сообщений/день · 3 картинки/день бесплатно
         </p>
       </motion.div>
     </div>

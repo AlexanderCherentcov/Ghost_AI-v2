@@ -151,7 +151,7 @@ const jsonLd = {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'RUB',
-        description: '50 000 токенов бесплатно',
+        description: '10 сообщений/день бесплатно',
       },
       featureList: [
         'AI-диалоги',

@@ -98,6 +98,7 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
     const statusData = (await statusRes.json()) as any;
     const status: string =
       statusData?.data?.task_status ??
+      statusData?.data?.status ??       // GoAPI wraps response in { code, data, message }
       statusData?.task_status ??
       statusData?.status ?? '';
 

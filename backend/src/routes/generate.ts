@@ -182,7 +182,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, videoDuration, videoAspectRatio, videoEnableAudio, videoImageUrl, cameraPreset, negativePrompt, cfgScale } = generateSchema.parse(request.body);
+      const { prompt, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoImageUrl, cameraPreset, negativePrompt, cfgScale } = generateSchema.parse(request.body);
 
       const vDuration = videoDuration ?? 5;
       const videoCount = vDuration === 10 ? 2 : 1;
@@ -224,6 +224,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
 
       await checkAndDeduct(userId, 'video_generate', videoCount);
 
+      // Save user message to chat history
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'reel', tokensCost: 0 },
+        }).catch((e) => console.error('[generate/reel] Failed to save user message:', e.message));
+      }
+
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'reel', prompt },
       });
@@ -232,6 +239,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
+        chatId: chatId ?? null,
         duration: vDuration,
         aspectRatio: videoAspectRatio ?? '16:9',
         enableAudio: videoEnableAudio ?? false,

@@ -40,21 +40,21 @@ export const PLANS = {
     label: 'Стандарт',
     show_message_limit: false,
     std_messages_daily: -1, pro_messages_daily: 50,
-    images_daily: 30,  videos_daily: 5,  files_monthly: 150,
+    images_daily: 30,  videos_daily: 1,  files_monthly: 150,
   },
   PRO: {
     price: 2490, price_yearly: 2117,
     label: 'Про',
     show_message_limit: false,
     std_messages_daily: -1, pro_messages_daily: 200,
-    images_daily: 80,  videos_daily: 15, files_monthly: 500,
+    images_daily: 80,  videos_daily: 3,  files_monthly: 500,
   },
   ULTRA: {
     price: 5490, price_yearly: 4667,
     label: 'Ультра',
     show_message_limit: false,
     std_messages_daily: -1, pro_messages_daily: 400,
-    images_daily: 150, videos_daily: 40, files_monthly: 1000,
+    images_daily: 150, videos_daily: 5,  files_monthly: 1000,
   },
 } as const;
 

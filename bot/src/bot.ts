@@ -4,9 +4,14 @@ import axios from 'axios';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
-const API_URL = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
+const API_URL      = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
-const MINIAPP_URL = process.env.MINIAPP_URL ?? 'https://miniapp.ghostlineai.ru';
+const MINIAPP_URL  = process.env.MINIAPP_URL ?? 'https://miniapp.ghostlineai.ru';
+
+// Comma-separated list of admin Telegram user IDs
+const ADMIN_IDS = new Set(
+  (process.env.ADMIN_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+);
 
 const bot = new Bot(BOT_TOKEN);
 
@@ -83,14 +88,13 @@ bot.command('help', async (ctx) => {
     `👻 *GhostLine AI — Помощь*\n\n` +
     `*Команды:*\n` +
     `/start — Главное меню\n` +
-    `/balance — Баланс токенов\n` +
     `/help — Это сообщение\n\n` +
     `*Режимы работы:*\n` +
     `• Chat — текстовый диалог\n` +
-    `• Vision — генерация изображений (DALL-E 3)\n` +
+    `• Vision — генерация изображений\n` +
     `• Sound — генерация музыки\n` +
     `• Reel — генерация видео\n` +
-    `• Think — глубокий анализ (Claude Sonnet)\n\n` +
+    `• Think — глубокий анализ\n\n` +
     `Открой мини-приложение для полного доступа 👇`,
     {
       parse_mode: 'Markdown',
@@ -99,35 +103,68 @@ bot.command('help', async (ctx) => {
   );
 });
 
-// ─── /balance ──────────────────────────────────────────────────────────────────
+// ─── Admin: /setplan ───────────────────────────────────────────────────────────
+// Usage: /setplan <userId> <PLAN>
+// Example: /setplan abc123 PRO
 
-bot.command('balance', async (ctx) => {
-  const telegramId = ctx.from?.id;
-  if (!telegramId) return;
+bot.command('setplan', async (ctx) => {
+  const userId = String(ctx.from?.id ?? '');
+  if (!ADMIN_IDS.has(userId)) {
+    await ctx.reply('⛔ Нет доступа.');
+    return;
+  }
+
+  const [targetUserId, plan] = (ctx.match ?? '').trim().split(/\s+/);
+  const validPlans = ['FREE', 'BASIC', 'STANDARD', 'PRO', 'ULTRA'];
+
+  if (!targetUserId || !plan || !validPlans.includes(plan.toUpperCase())) {
+    await ctx.reply(
+      `❌ Использование: /setplan <userId> <plan>\nПланы: ${validPlans.join(', ')}`
+    );
+    return;
+  }
 
   try {
-    const response = await axios.get(`${API_URL}/api/users/telegram/${telegramId}/balance`);
-    const { tokens, plan } = response.data as { tokens: number; plan: string };
+    await axios.post(
+      `${API_URL}/api/admin/setplan`,
+      { userId: targetUserId, plan: plan.toUpperCase() },
+      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } }
+    );
+    await ctx.reply(`✅ Пользователь <code>${targetUserId}</code> → план <b>${plan.toUpperCase()}</b>`, {
+      parse_mode: 'HTML',
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
+  }
+});
 
-    await ctx.reply(
-      `💎 *Баланс токенов*\n\n` +
-      `• Доступно: *${tokens.toLocaleString('ru')} токенов*\n` +
-      `• Тариф: *${plan}*\n\n` +
-      `Пополнить баланс можно в приложении 👇`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .webApp('💎 Пополнить', MINIAPP_URL)
-          .url('🌐 Биллинг', `${FRONTEND_URL}/billing`),
-      }
+// ─── Admin: /resetlimits ───────────────────────────────────────────────────────
+// Usage: /resetlimits <userId>
+
+bot.command('resetlimits', async (ctx) => {
+  const userId = String(ctx.from?.id ?? '');
+  if (!ADMIN_IDS.has(userId)) {
+    await ctx.reply('⛔ Нет доступа.');
+    return;
+  }
+
+  const targetUserId = (ctx.match ?? '').trim();
+  if (!targetUserId) {
+    await ctx.reply('❌ Использование: /resetlimits <userId>');
+    return;
+  }
+
+  try {
+    await axios.post(
+      `${API_URL}/api/admin/resetlimits`,
+      { userId: targetUserId },
+      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } }
     );
-  } catch {
-    await ctx.reply(
-      `🔐 Для проверки баланса нужно войти в систему.\n\nОткрой приложение и войди через Telegram:`,
-      {
-        reply_markup: new InlineKeyboard().webApp('🤖 Войти', MINIAPP_URL),
-      }
-    );
+    await ctx.reply(`✅ Лимиты сброшены для <code>${targetUserId}</code>`, {
+      parse_mode: 'HTML',
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
   }
 });
 

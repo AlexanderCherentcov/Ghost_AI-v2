@@ -7,6 +7,7 @@ import {
   ChatIcon, VisionIcon, SoundIcon, ReelIcon, ThinkIcon,
   SparkleIcon, TokenIcon, ArrowDownIcon,
 } from '@/components/icons';
+import { SupportWidget } from '@/components/ui/SupportWidget';
 
 const FEATURES = [
   {
@@ -328,6 +329,8 @@ export default function LandingPage() {
           </p>
         </motion.div>
       </section>
+
+      <SupportWidget />
 
       {/* Footer */}
       <footer className="border-t border-[var(--border)] py-8 px-6">

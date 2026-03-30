@@ -111,6 +111,14 @@ export const api = {
     },
   },
 
+  support: {
+    send: (data: { message: string; email?: string }) =>
+      request<{ ok: boolean }>('/support/message', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
   generate: {
     vision: (data: { prompt: string; size?: string; chatId?: string; sourceImageUrl?: string }) =>
       request<{ jobId: string }>('/generate/vision', {

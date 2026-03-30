@@ -14,6 +14,63 @@ const STYLES = [
   { id: 'creative', label: 'Творческий' },
 ];
 
+function SupportInlineForm({ userEmail }: { userEmail: string | null }) {
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent]       = useState(false);
+  const [error, setError]     = useState('');
+
+  async function handleSend() {
+    if (!message.trim()) return;
+    setSending(true);
+    setError('');
+    try {
+      await api.support.send({ message: message.trim() });
+      setSent(true);
+      setMessage('');
+    } catch {
+      setError('Не удалось отправить. Попробуйте позже.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="text-center py-2">
+        <p className="text-accent font-medium mb-1">✓ Сообщение отправлено</p>
+        <p className="text-sm text-[rgba(255,255,255,0.4)]">Ответим на {userEmail ?? 'ваш email'}.</p>
+        <button onClick={() => setSent(false)} className="mt-3 text-sm text-accent hover:opacity-80">
+          Написать ещё
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {userEmail && (
+        <p className="text-xs text-[rgba(255,255,255,0.3)]">Ответ придёт на {userEmail}</p>
+      )}
+      <textarea
+        placeholder="Опишите вашу проблему или вопрос..."
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        rows={4}
+        className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-base)] text-sm text-white placeholder-[rgba(255,255,255,0.3)] focus:outline-none focus:border-accent resize-none"
+      />
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button
+        onClick={handleSend}
+        disabled={sending || !message.trim()}
+        className="btn btn-primary h-10 px-5 text-sm disabled:opacity-40"
+      >
+        {sending ? 'Отправка...' : 'Отправить в поддержку'}
+      </button>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const { user, setUser, clearAuth } = useAuthStore();
@@ -81,6 +138,13 @@ export default function SettingsPage() {
               <span className="text-sm text-accent">{user?.plan ?? 'FREE'}</span>
             </div>
           </div>
+        </div>
+
+        {/* Support */}
+        <div className="card">
+          <h2 className="font-medium text-white mb-1">Поддержка</h2>
+          <p className="text-sm text-[rgba(255,255,255,0.3)] mb-4">Напишите нам — ответим на ваш email</p>
+          <SupportInlineForm userEmail={user?.email ?? null} />
         </div>
 
         {/* Danger zone */}

@@ -27,7 +27,7 @@ function buildCameraControl(preset?: string): { type: string; config: Record<str
 }
 
 // ─── GoAPI Kling V2.5 video generation ────────────────────────────────────────
-// Async: POST creates task, then poll until done (max 5 min).
+// Async: POST creates task, then poll until done (max 10 min).
 
 export async function generateVideoKling(prompt: string, options?: KlingVideoOptions): Promise<string> {
   const {
@@ -81,9 +81,9 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
     throw new Error(`No task_id in GoAPI response: ${JSON.stringify(createData).slice(0, 300)}`);
   }
 
-  // Poll every 5s, up to 5 minutes
+  // Poll every 5s, up to 10 minutes
   const POLL_INTERVAL = 5_000;
-  const MAX_ATTEMPTS  = 60;
+  const MAX_ATTEMPTS  = 120;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     await new Promise<void>((r) => setTimeout(r, POLL_INTERVAL));
@@ -121,5 +121,5 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
     // processing / waiting — continue polling
   }
 
-  throw new Error('GoAPI Kling timed out after 5 minutes');
+  throw new Error('GoAPI Kling timed out after 10 minutes');
 }

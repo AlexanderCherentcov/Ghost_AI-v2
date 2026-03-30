@@ -206,7 +206,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Verify chat ownership + load user profile
         const [chat, userProfile] = await Promise.all([
           prisma.chat.findFirst({ where: { id: chatId, userId } }),
-          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true, filesLimit: true } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true, files_monthly_limit: true } }),
         ]);
         if (!chat) {
           send({ type: 'error', code: 'CHAT_NOT_FOUND' });
@@ -221,8 +221,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // FREE plan: no file attachments (filesLimit = 0)
-        if (fileContent && (userProfile?.filesLimit ?? 0) === 0) {
+        // FREE plan: no file attachments (files_monthly_limit = 0)
+        if (fileContent && (userProfile?.files_monthly_limit ?? 0) === 0) {
           send({ type: 'error', code: 'FREE_LOCKED', message: 'Файлы доступны с платного тарифа.' });
           return;
         }
@@ -251,13 +251,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           preferredModel
         );
 
-        // Determine request type
-        const requestType: RequestType = fileContent ? 'message_with_file' : 'message';
+        // Determine request type based on which model was selected
+        const isProModel = model === OR_MODELS.deepseek;
+        const requestType: RequestType = isProModel ? 'chat_pro' : 'chat_std';
 
-        // Reset daily/monthly counters if period ended
+        // Reset daily counters if period ended
         await checkResets(userId);
         // Check limits and deduct BEFORE calling AI (with refund on 5xx)
-        await checkAndDeduct(userId, requestType);
+        await checkAndDeduct(userId, requestType, 1, !!fileContent);
 
         // History context for cache key: последние user-сообщения (без текущего)
         const userHistoryContext = history
@@ -394,10 +395,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
         // If it's a server error (not a limit error), refund the counter
-        const limitCodes = ['LIMIT_MESSAGES', 'LIMIT_MESSAGES_DAILY', 'LIMIT_FILES', 'LIMIT_IMAGES', 'FREE_LOCKED', 'PLAN_RESTRICTED'];
+        const limitCodes = ['LIMIT_FREE_MESSAGES', 'LIMIT_STD_MESSAGES', 'LIMIT_PRO_MESSAGES', 'LIMIT_PRO_UNAVAILABLE', 'LIMIT_FILES', 'LIMIT_IMAGES', 'FREE_LOCKED', 'PLAN_RESTRICTED'];
         if (userId && !limitCodes.includes(err.code)) {
-          const rt: RequestType = parsed?.fileContent ? 'message_with_file' : 'message';
-          await refundCounter(userId, rt).catch(() => {});
+          const isProModel = parsed ? OR_MODELS.deepseek === route(parsed.prompt || '', !!parsed.fileContent, undefined, !!parsed.imageUrl, undefined, parsed.preferredModel).model : false;
+          const rt: RequestType = isProModel ? 'chat_pro' : 'chat_std';
+          await refundCounter(userId, rt, 1, !!parsed?.fileContent).catch(() => {});
         }
         send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: err.message });
       } finally {

@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 const createPaymentSchema = z.object({
   plan: z.string(),
   returnUrl: z.string().url().optional(),
+  billing: z.enum(['monthly', 'yearly']).default('monthly'),
 });
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
@@ -14,7 +15,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { plan, returnUrl } = createPaymentSchema.parse(request.body);
+      const { plan, returnUrl, billing } = createPaymentSchema.parse(request.body);
 
       const validPlans = Object.keys(PLANS).filter((k) => PLANS[k as keyof typeof PLANS].price > 0);
       if (!validPlans.includes(plan)) {
@@ -24,7 +25,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
       const frontendUrl = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
       const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
-      const result = await createPayment(userId, plan as any, effectiveReturnUrl);
+      const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing);
       return result;
     },
   });

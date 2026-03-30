@@ -1,12 +1,11 @@
 import { prisma } from '../lib/prisma.js';
 
-export type RequestType = 'message' | 'message_with_file' | 'image_generate' | 'image_edit' | 'video_generate';
-
-const DAILY_PLANS = ['FREE', 'PRO', 'ULTRA'] as const;
-
-export function getDailyLimit(plan: string): number {
-  return ({ FREE: 10, PRO: 200, ULTRA: 400 } as Record<string, number>)[plan] ?? 0;
-}
+export type RequestType =
+  | 'chat_std'
+  | 'chat_pro'
+  | 'image_generate'
+  | 'image_edit'
+  | 'video_generate';
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
@@ -25,31 +24,29 @@ export async function checkResets(userId: string): Promise<void> {
   const now = new Date();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true, dayStart: true, periodStart: true },
+    select: { day_start: true, period_start: true },
   });
   if (!user) return;
 
   const updates: Record<string, unknown> = {};
 
-  // Daily reset (FREE / PRO / ULTRA)
-  if (DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number])) {
-    const dayEnd = new Date(user.dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    if (now >= dayEnd) {
-      updates.messagesToday = 0;
-      updates.dayStart = now;
-    }
+  // Daily reset
+  const dayEnd = new Date(user.day_start);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  if (now >= dayEnd) {
+    updates.std_messages_today = 0;
+    updates.pro_messages_today = 0;
+    updates.images_today       = 0;
+    updates.videos_today       = 0;
+    updates.day_start          = now;
   }
 
-  // Monthly reset (all plans — images/files/videos)
-  const periodEnd = new Date(user.periodStart);
+  // Monthly reset (files only)
+  const periodEnd = new Date(user.period_start);
   periodEnd.setDate(periodEnd.getDate() + 30);
   if (now >= periodEnd) {
-    updates.messagesUsed = 0;
-    updates.filesUsed    = 0;
-    updates.imagesUsed   = 0;
-    updates.videoUsed    = 0;
-    updates.periodStart  = now;
+    updates.files_used    = 0;
+    updates.period_start  = now;
   }
 
   if (Object.keys(updates).length > 0) {
@@ -58,97 +55,110 @@ export async function checkResets(userId: string): Promise<void> {
 }
 
 // ─── Check limits & deduct counters (call BEFORE API request) ─────────────────
+// hasFile: also check/deduct files_used when true
 
-export async function checkAndDeduct(userId: string, requestType: RequestType, videoCount = 1): Promise<void> {
+export async function checkAndDeduct(
+  userId: string,
+  requestType: RequestType,
+  count = 1,
+  hasFile = false,
+): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       plan: true,
-      messagesUsed: true, filesUsed: true, imagesUsed: true, videoUsed: true,
-      messagesToday: true,
-      messagesLimit: true, filesLimit: true, imagesLimit: true, videoLimit: true,
+      std_messages_today:       true,
+      pro_messages_today:       true,
+      images_today:             true,
+      videos_today:             true,
+      files_used:               true,
+      std_messages_daily_limit: true,
+      pro_messages_daily_limit: true,
+      images_daily_limit:       true,
+      videos_daily_limit:       true,
+      files_monthly_limit:      true,
     },
   });
   if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
-  const isImage = requestType === 'image_generate' || requestType === 'image_edit';
-  const isVideo = requestType === 'video_generate';
-  const isFile  = requestType === 'message_with_file';
-  const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
+  const updates: Record<string, unknown> = {};
 
   // ── Videos ──────────────────────────────────────────────────────────────────
-  if (isVideo) {
-    if ((user.videoLimit ?? 0) === 0) {
+  if (requestType === 'video_generate') {
+    if (user.videos_daily_limit === 0) {
       throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
     }
-    if (user.videoUsed + videoCount > (user.videoLimit ?? 0)) {
+    if (user.videos_daily_limit !== -1 && user.videos_today + count > user.videos_daily_limit) {
       throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
     }
-    await prisma.user.update({ where: { id: userId }, data: { videoUsed: { increment: videoCount } } });
+    await prisma.user.update({ where: { id: userId }, data: { videos_today: { increment: count } } });
     return;
   }
 
   // ── Images ──────────────────────────────────────────────────────────────────
-  if (isImage) {
-    if (user.imagesUsed >= user.imagesLimit) {
+  if (requestType === 'image_generate' || requestType === 'image_edit') {
+    if (user.images_daily_limit === 0) {
       throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
     }
-    await prisma.user.update({ where: { id: userId }, data: { imagesUsed: { increment: 1 } } });
+    if (user.images_daily_limit !== -1 && user.images_today >= user.images_daily_limit) {
+      throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
+    }
+    await prisma.user.update({ where: { id: userId }, data: { images_today: { increment: 1 } } });
     return;
   }
 
-  // ── Check message limit ──────────────────────────────────────────────────────
-  if (isDaily) {
-    const dailyLimit = getDailyLimit(user.plan);
-    if (user.messagesToday >= dailyLimit) {
-      throw Object.assign(new Error('LIMIT_MESSAGES_DAILY'), { code: 'LIMIT_MESSAGES_DAILY' });
+  // ── Pro messages ─────────────────────────────────────────────────────────────
+  if (requestType === 'chat_pro') {
+    if (user.pro_messages_daily_limit === 0) {
+      throw Object.assign(new Error('LIMIT_PRO_UNAVAILABLE'), { code: 'LIMIT_PRO_UNAVAILABLE' });
     }
-  } else {
-    if (user.messagesUsed >= user.messagesLimit) {
-      throw Object.assign(new Error('LIMIT_MESSAGES'), { code: 'LIMIT_MESSAGES' });
+    if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today >= user.pro_messages_daily_limit) {
+      throw Object.assign(new Error('LIMIT_PRO_MESSAGES'), { code: 'LIMIT_PRO_MESSAGES' });
     }
+    updates.pro_messages_today = { increment: 1 };
   }
 
-  // ── Check file limit ─────────────────────────────────────────────────────────
-  if (isFile) {
-    if (user.filesUsed >= user.filesLimit) {
+  // ── Std messages ─────────────────────────────────────────────────────────────
+  if (requestType === 'chat_std') {
+    const stdLimit = user.std_messages_daily_limit;
+    if (stdLimit !== -1 && user.std_messages_today >= stdLimit) {
+      const code = user.plan === 'FREE' ? 'LIMIT_FREE_MESSAGES' : 'LIMIT_STD_MESSAGES';
+      throw Object.assign(new Error(code), { code });
+    }
+    updates.std_messages_today = { increment: 1 };
+  }
+
+  // ── File attachment check ─────────────────────────────────────────────────────
+  if (hasFile) {
+    if (user.files_monthly_limit === 0 || user.files_used >= user.files_monthly_limit) {
       throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
     }
+    updates.files_used = { increment: 1 };
   }
-
-  // ── Deduct ───────────────────────────────────────────────────────────────────
-  const updates: Record<string, unknown> = {};
-  if (isDaily) updates.messagesToday = { increment: 1 };
-  else         updates.messagesUsed  = { increment: 1 };
-  if (isFile)  updates.filesUsed     = { increment: 1 };
 
   await prisma.user.update({ where: { id: userId }, data: updates });
 }
 
 // ─── Refund on API error ──────────────────────────────────────────────────────
 
-export async function refundCounter(userId: string, requestType: RequestType, videoCount = 1): Promise<void> {
+export async function refundCounter(
+  userId: string,
+  requestType: RequestType,
+  count = 1,
+  hasFile = false,
+): Promise<void> {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { plan: true },
-    });
-    if (!user) return;
-
-    const isImage = requestType === 'image_generate' || requestType === 'image_edit';
-    const isVideo = requestType === 'video_generate';
-    const isFile  = requestType === 'message_with_file';
-    const isDaily = DAILY_PLANS.includes(user.plan as typeof DAILY_PLANS[number]);
-
     const updates: Record<string, unknown> = {};
-    if (isVideo) {
-      updates.videoUsed = { decrement: videoCount };
-    } else if (isImage) {
-      updates.imagesUsed = { decrement: 1 };
+    if (requestType === 'video_generate') {
+      updates.videos_today = { decrement: count };
+    } else if (requestType === 'image_generate' || requestType === 'image_edit') {
+      updates.images_today = { decrement: 1 };
+    } else if (requestType === 'chat_pro') {
+      updates.pro_messages_today = { decrement: 1 };
+      if (hasFile) updates.files_used = { decrement: 1 };
     } else {
-      if (isDaily) updates.messagesToday = { decrement: 1 };
-      else         updates.messagesUsed  = { decrement: 1 };
-      if (isFile)  updates.filesUsed     = { decrement: 1 };
+      updates.std_messages_today = { decrement: 1 };
+      if (hasFile) updates.files_used = { decrement: 1 };
     }
     await prisma.user.update({ where: { id: userId }, data: updates });
   } catch {
@@ -159,29 +169,35 @@ export async function refundCounter(userId: string, requestType: RequestType, vi
 // ─── Apply plan limits (call on subscription webhook) ────────────────────────
 
 export interface PlanLimits {
-  messagesLimit: number;
-  filesLimit:    number;
-  imagesLimit:   number;
-  videoLimit:    number;
+  std_messages_daily: number;
+  pro_messages_daily: number;
+  images_daily:       number;
+  videos_daily:       number;
+  files_monthly:      number;
 }
 
-export async function applyPlanLimits(userId: string, limits: PlanLimits, planName: string): Promise<void> {
+export async function applyPlanLimits(
+  userId: string,
+  limits: PlanLimits,
+  _planName: string,
+): Promise<void> {
   const now = new Date();
-  const isDaily = DAILY_PLANS.includes(planName as typeof DAILY_PLANS[number]);
   await prisma.user.update({
     where: { id: userId },
     data: {
-      messagesLimit: limits.messagesLimit,
-      filesLimit:    limits.filesLimit,
-      imagesLimit:   limits.imagesLimit,
-      videoLimit:    limits.videoLimit,
+      std_messages_daily_limit: limits.std_messages_daily,
+      pro_messages_daily_limit: limits.pro_messages_daily,
+      images_daily_limit:       limits.images_daily,
+      videos_daily_limit:       limits.videos_daily,
+      files_monthly_limit:      limits.files_monthly,
       // Reset counters on plan change
-      messagesUsed:  0,
-      filesUsed:     0,
-      imagesUsed:    0,
-      videoUsed:     0,
-      periodStart:   now,
-      ...(isDaily ? { messagesToday: 0, dayStart: now } : {}),
+      std_messages_today: 0,
+      pro_messages_today: 0,
+      images_today:       0,
+      videos_today:       0,
+      files_used:         0,
+      day_start:          now,
+      period_start:       now,
     },
   });
 }

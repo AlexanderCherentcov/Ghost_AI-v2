@@ -17,14 +17,45 @@ function yokassaHeaders(idempotencyKey: string) {
 }
 
 // ─── Plans ─────────────────────────────────────────────────────────────────────
-// messages: monthly cap (-1 = daily mode), images: monthly cap, files: monthly cap
+// std_messages_daily / pro_messages_daily: -1 = unlimited
+// All image/video limits are daily; files is monthly.
 
 export const PLANS = {
-  FREE:     { price: 0,    label: 'Бесплатный', messagesLimit: -1,   imagesLimit: 3,   filesLimit: 0,    videoLimit: 0  },
-  BASIC:    { price: 699,  label: 'Базовый',    messagesLimit: 500,  imagesLimit: 20,  filesLimit: 40,   videoLimit: 0  },
-  STANDARD: { price: 1199, label: 'Стандарт',   messagesLimit: 1500, imagesLimit: 30,  filesLimit: 150,  videoLimit: 5  },
-  PRO:      { price: 2490, label: 'Про',        messagesLimit: -1,   imagesLimit: 80,  filesLimit: 500,  videoLimit: 15 },
-  ULTRA:    { price: 5490, label: 'Ультра',     messagesLimit: -1,   imagesLimit: 150, filesLimit: 1000, videoLimit: 40 },
+  FREE: {
+    price: 0, price_yearly: 0,
+    label: 'Бесплатный',
+    show_message_limit: true,
+    std_messages_daily: 10, pro_messages_daily: 0,
+    images_daily: 3,   videos_daily: 0,  files_monthly: 0,
+  },
+  BASIC: {
+    price: 999, price_yearly: 849,
+    label: 'Базовый',
+    show_message_limit: false,
+    std_messages_daily: -1, pro_messages_daily: 0,
+    images_daily: 20,  videos_daily: 0,  files_monthly: 40,
+  },
+  STANDARD: {
+    price: 1990, price_yearly: 1692,
+    label: 'Стандарт',
+    show_message_limit: false,
+    std_messages_daily: -1, pro_messages_daily: 50,
+    images_daily: 30,  videos_daily: 5,  files_monthly: 150,
+  },
+  PRO: {
+    price: 4990, price_yearly: 4241,
+    label: 'Про',
+    show_message_limit: false,
+    std_messages_daily: -1, pro_messages_daily: 200,
+    images_daily: 80,  videos_daily: 15, files_monthly: 500,
+  },
+  ULTRA: {
+    price: 7990, price_yearly: 6791,
+    label: 'Ультра',
+    show_message_limit: false,
+    std_messages_daily: -1, pro_messages_daily: 400,
+    images_daily: 150, videos_daily: 40, files_monthly: 1000,
+  },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
@@ -34,21 +65,24 @@ export type PlanKey = keyof typeof PLANS;
 export async function createPayment(
   userId: string,
   planKey: PlanKey,
-  returnUrl: string
+  returnUrl: string,
+  billing: 'monthly' | 'yearly' = 'monthly',
 ) {
   const info = PLANS[planKey];
   if (!info || info.price === 0) throw new Error('Invalid plan');
+  const monthlyPrice = billing === 'yearly' ? info.price_yearly : info.price;
+  const totalPrice = billing === 'yearly' ? monthlyPrice * 12 : monthlyPrice;
 
   const idempotencyKey = crypto.randomUUID();
 
   const { data } = await axios.post(
     `${YOKASSA_BASE}/payments`,
     {
-      amount: { value: info.price.toFixed(2), currency: 'RUB' },
+      amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
       confirmation: { type: 'redirect', return_url: returnUrl },
       capture: true,
-      description: `Подписка ${info.label} — GhostLine`,
-      metadata: { userId, plan: planKey },
+      description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''} — GhostLine`,
+      metadata: { userId, plan: planKey, billing },
     },
     { headers: yokassaHeaders(idempotencyKey) }
   );
@@ -57,7 +91,7 @@ export async function createPayment(
     data: {
       userId,
       yokassaId: data.id,
-      amount: info.price,
+      amount: totalPrice,
       status: 'PENDING',
       plan: planKey as any,
     },
@@ -87,21 +121,27 @@ export async function processWebhook(body: unknown): Promise<void> {
   if (payment.plan) {
     const planInfo = PLANS[payment.plan as PlanKey];
     if (planInfo) {
+      const billing = (event.object.metadata?.billing === 'yearly' ? 'YEARLY' : 'MONTHLY') as 'MONTHLY' | 'YEARLY';
       const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      if (billing === 'YEARLY') {
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      } else {
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+      }
       await prisma.user.update({
         where: { id: payment.userId },
-        data: { plan: payment.plan, planExpiresAt: expiresAt },
+        data: { plan: payment.plan, planExpiresAt: expiresAt, billing },
       });
       await applyPlanLimits(
         payment.userId,
         {
-          messagesLimit: planInfo.messagesLimit,
-          filesLimit:    planInfo.filesLimit,
-          imagesLimit:   planInfo.imagesLimit,
-          videoLimit:    planInfo.videoLimit,
+          std_messages_daily: planInfo.std_messages_daily,
+          pro_messages_daily: planInfo.pro_messages_daily,
+          images_daily:       planInfo.images_daily,
+          videos_daily:       planInfo.videos_daily,
+          files_monthly:      planInfo.files_monthly,
         },
-        payment.plan
+        payment.plan,
       );
     }
   }

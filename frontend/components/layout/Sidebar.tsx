@@ -46,23 +46,21 @@ export function Sidebar() {
 
   const plan = user?.plan ?? 'FREE';
   const isUnlimitedChat = plan === 'PRO' || plan === 'ULTRA';
-  const imagesUsed = user?.imagesUsed ?? 0;
-  const imagesLimit = user?.imagesLimit ?? 0;
-  const videoUsed = user?.videoUsed ?? 0;
-  const videoLimit = user?.videoLimit ?? 0;
+  const imagesUsed  = user?.images_today ?? 0;
+  const imagesLimit = user?.images_daily_limit ?? 0;
+  const videoUsed   = user?.videos_today ?? 0;
+  const videoLimit  = user?.videos_daily_limit ?? 0;
+  const stdToday    = user?.std_messages_today ?? 0;
+  const stdLimit    = user?.std_messages_daily_limit ?? 10;
 
-  // For unlimited plans: show images progress; for limited plans: show messages
-  const tokenPercent = isUnlimitedChat
-    ? Math.min(imagesLimit > 0 ? (imagesUsed / imagesLimit) * 100 : 0, 100)
-    : plan === 'FREE'
-      ? Math.min(((user?.messagesToday ?? 0) / 10) * 100, 100)
-      : Math.min(((user?.messagesUsed ?? 0) / Math.max(user?.messagesLimit ?? 1, 1)) * 100, 100);
+  // FREE: show std message progress; paid: show images progress
+  const tokenPercent = plan === 'FREE'
+    ? Math.min(stdLimit > 0 ? (stdToday / stdLimit) * 100 : 0, 100)
+    : Math.min(imagesLimit > 0 ? (imagesUsed / imagesLimit) * 100 : 0, 100);
 
-  const balanceLabel = isUnlimitedChat
-    ? `${imagesUsed}/${imagesLimit} картинок`
-    : plan === 'FREE'
-      ? `${user?.messagesToday ?? 0}/10 сегодня`
-      : `${user?.messagesUsed ?? 0}/${user?.messagesLimit ?? 0} сообщ.`;
+  const balanceLabel = plan === 'FREE'
+    ? `${stdToday}/${stdLimit} сегодня`
+    : `${imagesUsed}/${imagesLimit} картинок`;
 
   const grouped = groupChats(chats);
 

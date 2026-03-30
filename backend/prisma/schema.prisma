@@ -19,6 +19,11 @@ enum Plan {
   TEAM
 }
 
+enum Billing {
+  MONTHLY
+  YEARLY
+}
+
 enum PaymentStatus {
   PENDING
   SUCCEEDED
@@ -40,26 +45,26 @@ model User {
 
   plan          Plan      @default(FREE)
   planExpiresAt DateTime?
+  billing       Billing   @default(MONTHLY)
 
-  // ── Monthly counters (BASIC / STANDARD) ───────────────────────────────────
-  messagesUsed  Int       @default(0)
-  filesUsed     Int       @default(0)
-  imagesUsed    Int       @default(0)
-  videoUsed     Int       @default(0)   // reserved = 0
+  // ── Daily counters (reset at day_start + 1 day) ───────────────────────────
+  std_messages_today      Int      @default(0)
+  pro_messages_today      Int      @default(0)
+  images_today            Int      @default(0)
+  videos_today            Int      @default(0)
+  files_used              Int      @default(0)   // monthly
 
-  // ── Daily counters (FREE / PRO / ULTRA) ───────────────────────────────────
-  messagesToday Int       @default(0)
-  dayStart      DateTime  @default(now())
-
-  // ── Limits (copied from PLANS on subscribe) ───────────────────────────────
-  // messagesLimit = -1 means "daily mode" (FREE/PRO/ULTRA)
-  messagesLimit Int       @default(-1)  // FREE default: daily mode
-  filesLimit    Int       @default(0)   // FREE default: no files
-  imagesLimit   Int       @default(3)   // FREE default: 3/month
-  videoLimit    Int       @default(0)   // reserved
+  // ── Daily / monthly limits (copied from PLANS on subscribe) ───────────────
+  // -1 = unlimited
+  std_messages_daily_limit Int     @default(10)
+  pro_messages_daily_limit Int     @default(0)
+  images_daily_limit       Int     @default(3)
+  videos_daily_limit       Int     @default(0)
+  files_monthly_limit      Int     @default(0)
 
   // ── Billing period ────────────────────────────────────────────────────────
-  periodStart   DateTime  @default(now())
+  day_start    DateTime  @default(now())
+  period_start DateTime  @default(now())
 
   // ── Onboarding ────────────────────────────────────────────────────────────
   purposes      String[]  @default([])

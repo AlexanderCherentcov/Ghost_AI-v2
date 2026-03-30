@@ -7,7 +7,7 @@ import { prisma } from '../lib/prisma.js';
 
 async function setupTrialForNewUser(_userId: string): Promise<void> {
   // New user starts on FREE plan — defaults from schema are correct:
-  // messagesLimit=-1 (daily), filesLimit=0, imagesLimit=3, messagesToday=0, dayStart=now, periodStart=now
+  // std_messages_daily_limit=10, pro_messages_daily_limit=0, images_daily_limit=3
   // No extra setup needed; defaults handle it.
 }
 
@@ -400,17 +400,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
           birthDate: true,
           plan: true,
           planExpiresAt: true,
-          messagesUsed: true,
-          filesUsed: true,
-          imagesUsed: true,
-          videoUsed: true,
-          messagesToday: true,
-          messagesLimit: true,
-          filesLimit: true,
-          imagesLimit: true,
-          videoLimit: true,
-          periodStart: true,
-          dayStart: true,
+          billing: true,
+          std_messages_today: true,
+          pro_messages_today: true,
+          images_today: true,
+          videos_today: true,
+          files_used: true,
+          std_messages_daily_limit: true,
+          pro_messages_daily_limit: true,
+          images_daily_limit: true,
+          videos_daily_limit: true,
+          files_monthly_limit: true,
+          day_start: true,
+          period_start: true,
           purposes: true,
           responseStyle: true,
           onboardingDone: true,

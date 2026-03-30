@@ -78,7 +78,7 @@ export const api = {
 
   payments: {
     plans: () => request<PlansResponse>('/plans'),
-    create: (data: { plan: string }) =>
+    create: (data: { plan: string; billing?: 'monthly' | 'yearly' }) =>
       request<{ paymentId: string; paymentUrl: string }>('/payments/create', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -142,20 +142,21 @@ export interface User {
   birthDate: string | null;
   plan: 'FREE' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;
-  // Monthly counters (BASIC/STANDARD)
-  messagesUsed:  number;
-  filesUsed:     number;
-  imagesUsed:    number;
-  videoUsed:     number;
-  // Daily counters (FREE/PRO/ULTRA)
-  messagesToday: number;
-  // Limits
-  messagesLimit: number;  // -1 = daily mode
-  filesLimit:    number;
-  imagesLimit:   number;
-  videoLimit:    number;
-  periodStart:   string;
-  dayStart:      string;
+  billing: 'MONTHLY' | 'YEARLY';
+  // Daily counters
+  std_messages_today:       number;
+  pro_messages_today:       number;
+  images_today:             number;
+  videos_today:             number;
+  files_used:               number;
+  // Limits (-1 = unlimited)
+  std_messages_daily_limit: number;
+  pro_messages_daily_limit: number;
+  images_daily_limit:       number;
+  videos_daily_limit:       number;
+  files_monthly_limit:      number;
+  day_start:    string;
+  period_start: string;
   purposes: string[];
   responseStyle: string;
   onboardingDone: boolean;
@@ -211,10 +212,14 @@ export interface PaymentsResponse {
 
 export interface PlanInfo {
   price: number;
+  price_yearly: number;
   label: string;
-  messagesLimit: number;
-  imagesLimit: number;
-  filesLimit: number;
+  show_message_limit: boolean;
+  std_messages_daily: number;
+  pro_messages_daily: number;
+  images_daily: number;
+  videos_daily: number;
+  files_monthly: number;
 }
 export interface PlansResponse {
   plans: Record<string, PlanInfo>;

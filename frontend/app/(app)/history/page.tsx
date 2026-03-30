@@ -33,10 +33,10 @@ export default function HistoryPage() {
   const [editTitle, setEditTitle] = useState('');
 
   const plan = user?.plan ?? 'FREE';
-  const isDaily = plan === 'FREE' || plan === 'PRO' || plan === 'ULTRA';
-  const todayUsed = user?.messagesToday ?? 0;
-  const todayLimit = plan === 'FREE' ? 10 : plan === 'PRO' ? 200 : 400;
-  const tokenPercent = isDaily ? Math.min((todayUsed / todayLimit) * 100, 100) : Math.min(((user?.messagesUsed ?? 0) / Math.max(user?.messagesLimit ?? 1, 1)) * 100, 100);
+  const stdToday = user?.std_messages_today ?? 0;
+  const stdLimit = user?.std_messages_daily_limit ?? 10;
+  const showMsgBar = plan === 'FREE' && stdLimit !== -1;
+  const tokenPercent = showMsgBar ? Math.min((stdToday / stdLimit) * 100, 100) : 0;
   const grouped = groupChats(chats);
 
   function handleNewChat() {
@@ -134,7 +134,7 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
             <TokenIcon size={12} className="text-accent" />
-            <span>{isDaily ? `${todayUsed}/${todayLimit} сегодня` : `${user?.messagesUsed ?? 0}/${user?.messagesLimit ?? 0} сообщ.`}</span>
+            <span>{showMsgBar ? `${stdToday}/${stdLimit} сегодня` : 'Безлимитный'}</span>
           </div>
           <Link href="/billing" className="text-[11px] text-accent">Тарифы</Link>
         </div>

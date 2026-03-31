@@ -185,7 +185,7 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'w-7 h-7 flex items-center justify-center rounded-md transition-all relative',
+          'flex items-center gap-1 px-2 h-7 rounded-md transition-all relative',
           open
             ? 'bg-[rgba(123,92,240,0.18)] text-accent'
             : 'text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.65)] hover:bg-[rgba(255,255,255,0.06)]'
@@ -199,6 +199,7 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
           <circle cx="10" cy="7.5" r="1.6" fill="var(--bg-input, #0D0D1A)" stroke="currentColor" strokeWidth="1.2"/>
           <circle cx="6" cy="11" r="1.6" fill="var(--bg-input, #0D0D1A)" stroke="currentColor" strokeWidth="1.2"/>
         </svg>
+        <span className="text-[11px] font-medium">Настройки</span>
         {/* Active indicator dot */}
         {hasCustomSettings && (
           <span

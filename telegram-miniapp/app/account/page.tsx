@@ -5,6 +5,21 @@ import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';
 import { apiRequest } from '@/lib/auth';
 
+type Theme = 'dark' | 'light';
+type FontSize = 'small' | 'medium' | 'large';
+
+function applyTheme(t: Theme) {
+  const cl = document.documentElement.classList;
+  cl.remove('dark', 'light'); cl.add(t);
+  localStorage.setItem('theme', t);
+}
+function applyFontSize(f: FontSize) {
+  const cl = document.documentElement.classList;
+  cl.remove('font-small', 'font-medium', 'font-large');
+  if (f !== 'medium') cl.add(`font-${f}`);
+  localStorage.setItem('fontSize', f);
+}
+
 const SUPPORT_GROUP_URL = process.env.NEXT_PUBLIC_SUPPORT_GROUP_URL ?? 'https://t.me/GhostLineSupport_bot';
 
 interface UserInfo {
@@ -29,6 +44,13 @@ function AccountApp() {
   const tg = useTg();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<Theme>('dark');
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
+
+  useEffect(() => {
+    setTheme((localStorage.getItem('theme') as Theme) || 'dark');
+    setFontSize((localStorage.getItem('fontSize') as FontSize) || 'medium');
+  }, []);
 
   useEffect(() => {
     apiRequest<UserInfo>('/me')
@@ -141,6 +163,61 @@ function AccountApp() {
                 </a>
               </div>
             )}
+
+            {/* Appearance */}
+            <div
+              className="p-4 rounded-2xl space-y-4"
+              style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                Внешний вид
+              </p>
+              {/* Theme */}
+              <div>
+                <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Тема</p>
+                <div className="flex gap-2">
+                  {(['dark', 'light'] as Theme[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setTheme(t); applyTheme(t); }}
+                      className="flex-1 py-2 rounded-xl text-xs font-medium transition-all"
+                      style={{
+                        background: theme === t ? 'rgba(123,92,240,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: theme === t ? '#A78BFA' : 'rgba(255,255,255,0.4)',
+                        border: theme === t ? '1px solid rgba(123,92,240,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                      }}
+                    >
+                      {t === 'dark' ? '🌙 Тёмная' : '☀️ Светлая'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Font size */}
+              <div>
+                <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Размер шрифта</p>
+                <div className="flex gap-2">
+                  {([
+                    { key: 'small' as FontSize,  label: 'A', desc: 'Мелкий' },
+                    { key: 'medium' as FontSize, label: 'A', desc: 'Средний' },
+                    { key: 'large' as FontSize,  label: 'A', desc: 'Крупный' },
+                  ]).map(({ key, label, desc }, i) => (
+                    <button
+                      key={key}
+                      onClick={() => { setFontSize(key); applyFontSize(key); }}
+                      className="flex-1 py-2 flex flex-col items-center rounded-xl text-xs transition-all"
+                      style={{
+                        background: fontSize === key ? 'rgba(123,92,240,0.18)' : 'rgba(255,255,255,0.04)',
+                        color: fontSize === key ? '#A78BFA' : 'rgba(255,255,255,0.4)',
+                        border: fontSize === key ? '1px solid rgba(123,92,240,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                      }}
+                    >
+                      <span style={{ fontSize: 11 + i * 2 }}>{label}</span>
+                      <span className="text-[9px] mt-0.5 opacity-60">{desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Support */}
             <div

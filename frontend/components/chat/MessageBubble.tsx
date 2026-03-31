@@ -155,43 +155,52 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
   return (
     <div
-      className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-3 ${isVideo ? 'aspect-video w-full max-w-lg' : 'w-[260px] h-[260px]'}`}
+      className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-4 ${
+        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : 'w-[260px] h-[260px]'
+      }`}
     >
       {/* Shimmer overlay */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
         <div
           className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite]"
           style={{
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%)',
           }}
         />
       </div>
       {/* Icon */}
       {isVideo ? (
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-accent/50">
+        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
           <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
         </svg>
       ) : (
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="text-accent/50">
+        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="3" y="3" width="26" height="26" rx="4" stroke="currentColor" strokeWidth="1.5"/>
           <circle cx="11" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
           <path d="M3 22l7-7 6 6 4-4 9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       )}
       {/* Dots loader */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-bounce"
+            className="w-2 h-2 rounded-full bg-accent/60 animate-bounce"
             style={{ animationDelay: `${i * 0.15}s` }}
           />
         ))}
       </div>
-      <span className="text-[11px] text-[rgba(255,255,255,0.3)]">
-        {isVideo ? 'Генерирую видео...' : 'Генерирую картинку...'}
-      </span>
+      <div className="flex flex-col items-center gap-1 px-4 text-center">
+        <span className="text-[13px] font-medium text-[rgba(255,255,255,0.6)]">
+          {isVideo ? 'Генерирую видео...' : 'Генерирую картинку...'}
+        </span>
+        {isVideo && (
+          <span className="text-[11px] text-[rgba(255,255,255,0.25)]">
+            Обычно занимает 1–3 минуты
+          </span>
+        )}
+      </div>
     </div>
   );
 }

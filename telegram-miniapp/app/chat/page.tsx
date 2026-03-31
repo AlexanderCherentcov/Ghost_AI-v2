@@ -20,7 +20,7 @@ interface Message {
   fileName?: string | null;
 }
 
-type ModelChoice = 'haiku' | undefined;
+type ModelChoice = 'haiku' | 'deepseek' | undefined;
 type ChatMode = 'chat' | 'images' | 'video';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -731,11 +731,13 @@ function ChatApp() {
 
   const MODEL_LABEL: Record<string, string> = {
     haiku: 'Стандарт',
+    deepseek: 'Про',
   };
 
-  const modelOptions: { key: ModelChoice; label: string }[] = [
-    { key: undefined, label: 'Авто' },
-    { key: 'haiku',   label: 'Стандарт' },
+  const modelOptions: { key: ModelChoice; label: string; proOnly?: boolean }[] = [
+    { key: undefined,    label: 'Авто' },
+    { key: 'haiku',      label: 'Стандарт' },
+    { key: 'deepseek',   label: 'Про', proOnly: true },
   ];
 
   const CHAT_MODES: { key: ChatMode; label: string }[] = [
@@ -856,7 +858,42 @@ function ChatApp() {
                 >
                   {msg.mediaUrl ? (
                     <div>
-                      {(msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
+                      {msg.mediaUrl === '__loading__' ? (
+                        /* Generating placeholder */
+                        <div
+                          className="rounded-xl flex flex-col items-center justify-center gap-3 py-8"
+                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', minHeight: msg.mode === 'reel' ? 160 : 200 }}
+                        >
+                          {msg.mode === 'reel' ? (
+                            <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ color: 'rgba(123,92,240,0.5)' }}>
+                              <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+                              <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                            </svg>
+                          ) : (
+                            <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ color: 'rgba(123,92,240,0.5)' }}>
+                              <rect x="3" y="3" width="26" height="26" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+                              <circle cx="11" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+                              <path d="M3 22l7-7 6 6 4-4 9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                          <div className="flex gap-1.5">
+                            {[0,1,2].map((i) => (
+                              <div key={i} className="w-1.5 h-1.5 rounded-full animate-bounce"
+                                style={{ background: 'rgba(123,92,240,0.6)', animationDelay: `${i*0.15}s` }} />
+                            ))}
+                          </div>
+                          <div className="text-center px-4">
+                            <p className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                              {msg.mode === 'reel' ? 'Генерирую видео...' : 'Генерирую картинку...'}
+                            </p>
+                            {msg.mode === 'reel' && (
+                              <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                                Обычно занимает 1–3 минуты
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
                         <video
                           src={msg.mediaUrl}
                           controls
@@ -871,7 +908,7 @@ function ChatApp() {
                           onClick={() => setViewerUrl(msg.mediaUrl!)}
                         />
                       )}
-                      {msg.content && msg.content !== msg.mediaUrl && (
+                      {msg.mediaUrl !== '__loading__' && msg.content && msg.content !== msg.mediaUrl && (
                         <p className="mt-1 text-[rgba(255,255,255,0.6)] text-xs">{msg.content}</p>
                       )}
                     </div>
@@ -1045,94 +1082,110 @@ function ChatApp() {
 
                 <AnimatePresence>
                   {videoSettingsOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                      transition={{ duration: 0.14 }}
-                      className="absolute bottom-full right-0 mb-2 z-50 rounded-2xl overflow-hidden"
-                      style={{
-                        width: 260,
-                        background: '#13131F',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
-                      }}
-                    >
-                      {/* Header */}
-                      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
-                        <span className="text-[12px] font-medium text-white">Настройки видео</span>
-                        <button type="button" onClick={() => setVideoSettingsOpen(false)}
-                          className="w-5 h-5 flex items-center justify-center rounded text-[rgba(255,255,255,0.3)]"
-                        >
-                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                          </svg>
-                        </button>
-                      </div>
-
-                      {/* Camera presets */}
-                      <div className="px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
-                        <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
-                          Движение камеры
-                        </p>
-                        <div className="grid grid-cols-4 gap-1">
-                          {[
-                            { key: 'static', label: 'Стоп' },
-                            { key: 'zoom_in', label: 'Зум +' },
-                            { key: 'zoom_out', label: 'Зум −' },
-                            { key: 'pan_left', label: 'Влево' },
-                            { key: 'pan_right', label: 'Вправо' },
-                            { key: 'tilt_up', label: 'Вверх' },
-                            { key: 'tilt_down', label: 'Вниз' },
-                            { key: 'orbit', label: 'Облёт' },
-                          ].map((p) => (
-                            <button key={p.key} type="button" onClick={() => setVideoCameraPreset(p.key)}
-                              className="py-2 px-0.5 rounded-lg text-[9px] transition-all text-center"
-                              style={{
-                                background: videoCameraPreset === p.key ? 'rgba(123,92,240,0.22)' : 'rgba(255,255,255,0.04)',
-                                color: videoCameraPreset === p.key ? '#A78BFA' : 'rgba(255,255,255,0.4)',
-                                border: videoCameraPreset === p.key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
-                              }}
-                            >{p.label}</button>
-                          ))}
+                    <>
+                      {/* Backdrop */}
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="fixed inset-0 z-40"
+                        style={{ background: 'rgba(0,0,0,0.55)' }}
+                        onClick={() => setVideoSettingsOpen(false)}
+                      />
+                      {/* Bottom sheet */}
+                      <motion.div
+                        initial={{ y: '100%' }}
+                        animate={{ y: 0 }}
+                        exit={{ y: '100%' }}
+                        transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+                        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl overflow-hidden"
+                        style={{
+                          background: '#13131F',
+                          borderTop: '1px solid rgba(255,255,255,0.08)',
+                          paddingBottom: 'env(safe-area-inset-bottom)',
+                        }}
+                      >
+                        {/* Handle */}
+                        <div className="flex justify-center pt-3 pb-1">
+                          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
                         </div>
-                      </div>
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
+                          <span className="text-[13px] font-medium text-white">Настройки видео</span>
+                          <button type="button" onClick={() => setVideoSettingsOpen(false)}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)]"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+                        </div>
 
-                      {/* Negative prompt */}
-                      <div className="px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
-                        <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
-                          Исключить
-                        </p>
-                        <textarea
-                          value={videoNegativePrompt}
-                          onChange={(e) => setVideoNegativePrompt(e.target.value)}
-                          placeholder="размытость, плохое качество..."
-                          rows={2}
-                          className="w-full rounded-lg px-2.5 py-1.5 text-[11px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.2)] outline-none resize-none"
-                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-                        />
-                      </div>
-
-                      {/* cfg_scale */}
-                      <div className="px-3.5 py-2.5">
-                        <div className="flex justify-between items-center mb-2">
-                          <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest">
-                            Точность
+                        {/* Camera presets */}
+                        <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
+                          <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2.5">
+                            Движение камеры
                           </p>
-                          <span className="text-[10px]" style={{ color: 'rgba(123,92,240,0.9)' }}>{videoCfgScale}%</span>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { key: 'static', label: 'Стоп' },
+                              { key: 'zoom_in', label: 'Зум +' },
+                              { key: 'zoom_out', label: 'Зум −' },
+                              { key: 'pan_left', label: 'Влево' },
+                              { key: 'pan_right', label: 'Вправо' },
+                              { key: 'tilt_up', label: 'Вверх' },
+                              { key: 'tilt_down', label: 'Вниз' },
+                              { key: 'orbit', label: 'Облёт' },
+                            ].map((p) => (
+                              <button key={p.key} type="button" onClick={() => setVideoCameraPreset(p.key)}
+                                className="py-2.5 px-1 rounded-xl text-[11px] transition-all text-center"
+                                style={{
+                                  background: videoCameraPreset === p.key ? 'rgba(123,92,240,0.22)' : 'rgba(255,255,255,0.04)',
+                                  color: videoCameraPreset === p.key ? '#A78BFA' : 'rgba(255,255,255,0.4)',
+                                  border: videoCameraPreset === p.key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
+                                }}
+                              >{p.label}</button>
+                            ))}
+                          </div>
                         </div>
-                        <input type="range" min={0} max={100} step={5}
-                          value={videoCfgScale}
-                          onChange={(e) => setVideoCfgScale(parseInt(e.target.value))}
-                          className="w-full cursor-pointer"
-                          style={{ accentColor: '#7B5CF0', height: '4px' }}
-                        />
-                        <div className="flex justify-between mt-0.5">
-                          <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Свободно</span>
-                          <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Точно</span>
+
+                        {/* Negative prompt */}
+                        <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
+                          <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
+                            Исключить из видео
+                          </p>
+                          <textarea
+                            value={videoNegativePrompt}
+                            onChange={(e) => setVideoNegativePrompt(e.target.value)}
+                            placeholder="размытость, плохое качество, водяной знак..."
+                            rows={2}
+                            className="w-full rounded-xl px-3 py-2 text-[12px] text-[rgba(255,255,255,0.7)] placeholder:text-[rgba(255,255,255,0.2)] outline-none resize-none"
+                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                          />
                         </div>
-                      </div>
-                    </motion.div>
+
+                        {/* cfg_scale */}
+                        <div className="px-4 py-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest">
+                              Точность
+                            </p>
+                            <span className="text-[11px]" style={{ color: 'rgba(123,92,240,0.9)' }}>{videoCfgScale}%</span>
+                          </div>
+                          <input type="range" min={0} max={100} step={5}
+                            value={videoCfgScale}
+                            onChange={(e) => setVideoCfgScale(parseInt(e.target.value))}
+                            className="w-full cursor-pointer"
+                            style={{ accentColor: '#7B5CF0', height: '4px' }}
+                          />
+                          <div className="flex justify-between mt-1">
+                            <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Свободно</span>
+                            <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Точно</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
                   )}
                 </AnimatePresence>
               </div>
@@ -1203,18 +1256,24 @@ function ChatApp() {
                       className="absolute bottom-full mb-2 left-0 z-50 rounded-xl overflow-hidden shadow-xl"
                       style={{ background: '#1A1A2E', border: '1px solid rgba(255,255,255,0.08)', minWidth: '130px' }}
                     >
-                      {modelOptions.map(({ key, label }) => (
+                      {modelOptions.map(({ key, label, proOnly }) => (
                         <button
                           key={String(key)}
                           type="button"
                           onClick={() => { setModel(key); setModelOpen(false); }}
-                          className="w-full text-left px-4 py-2.5 text-[12px] transition-all"
+                          className="w-full text-left px-4 py-2.5 text-[12px] transition-all flex items-center justify-between"
                           style={{
                             color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
                             background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
                           }}
                         >
-                          {label}
+                          <span>{label}</span>
+                          {proOnly && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={{ background: 'rgba(123,92,240,0.18)', color: '#A78BFA' }}>
+                              PRO
+                            </span>
+                          )}
                         </button>
                       ))}
                     </motion.div>

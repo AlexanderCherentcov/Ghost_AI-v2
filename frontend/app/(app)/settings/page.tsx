@@ -1,10 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+type Theme = 'dark' | 'light';
+type FontSize = 'small' | 'medium' | 'large';
+
+function applyTheme(theme: Theme) {
+  const cl = document.documentElement.classList;
+  cl.remove('dark', 'light');
+  cl.add(theme);
+  localStorage.setItem('theme', theme);
+}
+
+function applyFontSize(size: FontSize) {
+  const cl = document.documentElement.classList;
+  cl.remove('font-small', 'font-medium', 'font-large');
+  if (size !== 'medium') cl.add(`font-${size}`);
+  localStorage.setItem('fontSize', size);
+}
 
 const STYLES = [
   { id: 'ghost',    label: 'Призрачный' },
@@ -76,6 +93,13 @@ export default function SettingsPage() {
   const { user, setUser, clearAuth } = useAuthStore();
   const [style, setStyle] = useState(user?.responseStyle ?? 'ghost');
   const [saving, setSaving] = useState(false);
+  const [theme, setTheme] = useState<Theme>('dark');
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
+
+  useEffect(() => {
+    setTheme((localStorage.getItem('theme') as Theme) || 'dark');
+    setFontSize((localStorage.getItem('fontSize') as FontSize) || 'medium');
+  }, []);
 
   async function handleSaveStyle() {
     setSaving(true);
@@ -123,6 +147,64 @@ export default function SettingsPage() {
           >
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
+        </div>
+
+        {/* Appearance */}
+        <div className="card">
+          <h2 className="font-medium text-white mb-1">Внешний вид</h2>
+          <p className="text-sm text-[rgba(255,255,255,0.3)] mb-4">Тема и размер шрифта</p>
+
+          <div className="space-y-4">
+            {/* Theme */}
+            <div>
+              <p className="text-xs text-[rgba(255,255,255,0.4)] mb-2 uppercase tracking-wider">Тема</p>
+              <div className="flex gap-2">
+                {([
+                  { key: 'dark' as Theme,  label: '🌙 Тёмная' },
+                  { key: 'light' as Theme, label: '☀️ Светлая' },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setTheme(key); applyTheme(key); }}
+                    className={cn(
+                      'flex-1 py-2 rounded-xl text-sm border transition-all',
+                      theme === key
+                        ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                        : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)]'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Font size */}
+            <div>
+              <p className="text-xs text-[rgba(255,255,255,0.4)] mb-2 uppercase tracking-wider">Размер шрифта</p>
+              <div className="flex gap-2">
+                {([
+                  { key: 'small' as FontSize,  label: 'A', desc: 'Мелкий' },
+                  { key: 'medium' as FontSize, label: 'A', desc: 'Средний' },
+                  { key: 'large' as FontSize,  label: 'A', desc: 'Крупный' },
+                ] as const).map(({ key, label, desc }, i) => (
+                  <button
+                    key={key}
+                    onClick={() => { setFontSize(key); applyFontSize(key); }}
+                    className={cn(
+                      'flex-1 py-2 flex flex-col items-center rounded-xl border transition-all',
+                      fontSize === key
+                        ? 'border-accent bg-[var(--accent-dim)] text-accent'
+                        : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)]'
+                    )}
+                  >
+                    <span style={{ fontSize: 12 + i * 3 }}>{label}</span>
+                    <span className="text-[10px] mt-0.5 opacity-60">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Account */}

@@ -19,6 +19,27 @@
   --border-hover: rgba(255,255,255,0.12);
 }
 
+/* ─── Light theme ────────────────────────────────────────────────────────────── */
+html.light {
+  --bg-void:        #F2F2FA;
+  --bg-primary:     #FFFFFF;
+  --bg-surface:     #F5F5FD;
+  --bg-elevated:    #EBEBF5;
+  --bg-input:       #E8E8F2;
+  --text-primary:   rgba(0,0,0,0.85);
+  --text-secondary: rgba(0,0,0,0.45);
+  --text-muted:     rgba(0,0,0,0.25);
+  --border:         rgba(0,0,0,0.07);
+  --border-hover:   rgba(0,0,0,0.13);
+  color-scheme: light;
+}
+html.light body { background: var(--bg-primary); color: var(--text-primary); }
+
+/* ─── Font sizes ─────────────────────────────────────────────────────────────── */
+html.font-small  { font-size: 13px; }
+html.font-medium { font-size: 15px; }
+html.font-large  { font-size: 17px; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-font-smoothing: antialiased; }
 body {

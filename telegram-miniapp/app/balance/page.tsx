@@ -128,31 +128,45 @@ function BalanceApp() {
         <div>
           <h2 className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-3">Подписки</h2>
           <div className="grid grid-cols-2 gap-2">
-            {PLANS.map(({ key, name, price, features, popular }) => (
-              <div
-                key={key}
-                className={`bg-[#0E0E1A] border rounded-xl p-3 flex flex-col ${
-                  popular ? 'border-[#7B5CF0]' : 'border-[rgba(255,255,255,0.06)]'
-                } ${plan === key ? 'border-[#7B5CF0]/50 bg-[#7B5CF0]/5' : ''}`}
-              >
-                {popular && (
-                  <span className="text-[10px] text-[#7B5CF0] font-medium mb-1">★ Популярный</span>
-                )}
-                <p className="text-sm font-medium text-white mb-1">{name}</p>
-                <div className="flex-1 mb-3 space-y-0.5">
-                  {features.map((f) => (
-                    <p key={f} className="text-xs text-[rgba(255,255,255,0.35)]">{f}</p>
-                  ))}
-                </div>
-                <button
-                  onClick={() => handleBuy(key)}
-                  disabled={loading === key || plan === key}
-                  className="w-full py-2 rounded-lg bg-[#7B5CF0] text-white text-xs font-medium disabled:opacity-50 mt-auto"
+            {PLANS.map(({ key, name, price, features, popular }) => {
+              const isActive = plan === key;
+              return (
+                <div
+                  key={key}
+                  className={`bg-[#0E0E1A] border rounded-xl p-3 flex flex-col ${
+                    isActive ? 'border-[#7B5CF0]/60 bg-[#7B5CF0]/5' :
+                    popular ? 'border-[#7B5CF0]' : 'border-[rgba(255,255,255,0.06)]'
+                  }`}
                 >
-                  {loading === key ? '...' : plan === key ? 'Активен' : `${price.toLocaleString('ru-RU')} ₽/мес`}
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between mb-1">
+                    {popular && !isActive && (
+                      <span className="text-[10px] text-[#7B5CF0] font-medium">★ Популярный</span>
+                    )}
+                    {isActive && (
+                      <span className="text-[10px] text-[#7B5CF0] font-semibold">✓ Активен</span>
+                    )}
+                    {!popular && !isActive && <span />}
+                  </div>
+                  <p className="text-sm font-medium text-white mb-1.5">{name}</p>
+                  <div className="flex-1 mb-3 space-y-0.5">
+                    {features.map((f) => (
+                      <p key={f} className="text-[11px] text-[rgba(255,255,255,0.35)] leading-snug">{f}</p>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => handleBuy(key)}
+                    disabled={loading === key}
+                    className={`w-full py-2 rounded-lg text-xs font-medium mt-auto transition-opacity ${
+                      isActive
+                        ? 'bg-[rgba(123,92,240,0.15)] text-[#A78BFA] border border-[rgba(123,92,240,0.3)]'
+                        : 'bg-[#7B5CF0] text-white'
+                    } disabled:opacity-50`}
+                  >
+                    {loading === key ? '...' : isActive ? 'Продлить' : `${price.toLocaleString('ru-RU')} ₽/мес`}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 

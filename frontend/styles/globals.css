@@ -54,6 +54,43 @@ html.light {
 
 html.light body { background: var(--bg-primary); color: var(--text-primary); }
 
+/* ── Light mode: override hardcoded white text from Tailwind utilities ─────────
+   Components use text-white and text-[rgba(255,255,255,X)] inline classes.
+   Since this CSS comes after @tailwind utilities it wins on equal specificity. */
+html.light [class~="text-white"]             { color: var(--text-primary); }
+html.light [class*="text-[rgba(255,255,255"] { color: var(--text-primary); }
+
+/* Scrollbar adapted for light backgrounds */
+html.light ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.12); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.20); }
+
+/* Text selection on light bg — keep white label since bg is accent */
+html.light ::selection { background: rgba(123,92,240,0.25); color: inherit; }
+
+/* Markdown prose in light mode */
+html.light .prose-ghost strong        { color: var(--text-primary) !important; }
+html.light .prose-ghost em            { color: var(--text-secondary) !important; }
+html.light .prose-ghost h1,
+html.light .prose-ghost h2,
+html.light .prose-ghost h3            { color: var(--text-primary) !important; }
+html.light .prose-ghost blockquote    { color: var(--text-secondary); }
+
+/* Gradient title text on light bg */
+html.light .gradient-text {
+  background: linear-gradient(135deg, #1a1a2e 0%, #7B5CF0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Ghost cursor accent stays as-is */
+
+/* Input placeholder */
+html.light .input-ghost::placeholder { color: var(--text-muted); }
+
+/* card border slightly more visible in light */
+html.light .card { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
 /* ─── Font sizes ─────────────────────────────────────────────────────────────── */
 html.font-small  { font-size: 13px; }
 html.font-medium { font-size: 15px; }

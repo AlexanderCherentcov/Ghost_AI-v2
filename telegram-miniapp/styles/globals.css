@@ -35,6 +35,15 @@ html.light {
 }
 html.light body { background: var(--bg-primary); color: var(--text-primary); }
 
+html.light [class~="text-white"]             { color: var(--text-primary); }
+html.light [class*="text-[rgba(255,255,255"] { color: var(--text-primary); }
+html.light ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.12); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.20); }
+html.light .prose-ghost strong { color: var(--text-primary) !important; }
+html.light .prose-ghost h1,
+html.light .prose-ghost h2,
+html.light .prose-ghost h3     { color: var(--text-primary) !important; }
+
 /* ─── Font sizes ─────────────────────────────────────────────────────────────── */
 html.font-small  { font-size: 13px; }
 html.font-medium { font-size: 15px; }

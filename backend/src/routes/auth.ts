@@ -427,9 +427,15 @@ export default async function authRoutes(fastify: FastifyInstance) {
           createdAt: true,
         },
       });
+      // Auto-heal legacy users: if they have a name they completed onboarding before this field existed
+      let onboardingDone = user.onboardingDone;
+      if (!onboardingDone && user.name) {
+        await prisma.user.update({ where: { id: userId }, data: { onboardingDone: true } });
+        onboardingDone = true;
+      }
       // Computed: whether the UI should show the message limit (hidden cap for PRO/ULTRA)
       const planConfig = PLANS[user.plan as keyof typeof PLANS];
-      return { ...user, show_message_limit: planConfig?.show_message_limit ?? true };
+      return { ...user, onboardingDone, show_message_limit: planConfig?.show_message_limit ?? true };
     },
   });
 

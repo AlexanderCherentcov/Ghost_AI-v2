@@ -1089,7 +1089,7 @@ function ChatApp() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.15 }}
-                        className="fixed inset-0 z-40"
+                        className="fixed inset-0 z-[55]"
                         style={{ background: 'rgba(0,0,0,0.55)' }}
                         onClick={() => setVideoSettingsOpen(false)}
                       />
@@ -1099,7 +1099,7 @@ function ChatApp() {
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', damping: 30, stiffness: 320 }}
-                        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl overflow-hidden"
+                        className="fixed bottom-0 left-0 right-0 z-[60] rounded-t-2xl overflow-hidden"
                         style={{
                           background: '#13131F',
                           borderTop: '1px solid rgba(255,255,255,0.08)',

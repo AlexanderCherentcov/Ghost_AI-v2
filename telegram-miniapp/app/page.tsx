@@ -47,7 +47,7 @@ function TgInit() {
         setProgress(100);
         await tick(150);
 
-        if (isNew || !user.onboardingDone) {
+        if (isNew || (!user.onboardingDone && !user.name)) {
           router.replace('/onboarding/name');
         } else {
           router.replace('/chat');

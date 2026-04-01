@@ -40,7 +40,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isLoading && !user) {
       router.replace('/login');
     }
-    if (user && !user.onboardingDone) {
+    if (user && !user.onboardingDone && !user.name) {
       router.replace('/onboarding/name');
     }
   }, [user, isLoading]);

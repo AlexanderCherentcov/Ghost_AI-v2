@@ -167,12 +167,14 @@ function fmtUser(u: any): string {
 function fmtUserList(data: any, page: number): string {
   const users: any[]   = data.users ?? [];
   const total: number  = data.total ?? 0;
-  const totalPages     = Math.max(1, Math.ceil(total / (data.limit ?? 15)));
+  const limit          = data.limit ?? 8;
+  const totalPages     = Math.max(1, Math.ceil(total / limit));
   let text = `👥 <b>Пользователи</b> (стр. ${page}/${totalPages}, всего: ${total})\n\n`;
   users.forEach((u: any, i: number) => {
-    const n      = (page - 1) * (data.limit ?? 15) + i + 1;
+    const n      = (page - 1) * limit + i + 1;
     const banned = u.isBanned ? ' 🚫' : '';
-    text += `${n}. <b>${esc(u.name ?? 'Без имени')}</b>${banned} — ${PLAN_ICON[u.plan] ?? ''} ${u.plan}\n`;
+    const tg     = u.telegramId ? ` · TG:${u.telegramId}` : '';
+    text += `${n}. <b>${esc(u.name ?? 'Без имени')}</b>${banned} — ${PLAN_ICON[u.plan] ?? ''} ${u.plan}${tg}\n`;
   });
   return text;
 }
@@ -275,23 +277,32 @@ function planKb(userId: string): InlineKeyboard {
 function userListKb(data: any, page: number): InlineKeyboard {
   const users: any[] = data.users ?? [];
   const total        = data.total ?? 0;
-  const limit        = data.limit ?? 15;
+  const limit        = data.limit ?? 8;
   const totalPages   = Math.max(1, Math.ceil(total / limit));
   const kb           = new InlineKeyboard();
 
-  users.forEach((u: any) => {
-    const label = (u.name ?? 'Без имени').slice(0, 28);
-    kb.text(label, `u:${u.id}`).row();
+  // 2-column grid
+  users.forEach((u: any, i: number) => {
+    const banned = u.isBanned ? '🚫 ' : '';
+    const label  = banned + (u.name ?? 'Без имени').slice(0, 13);
+    kb.text(label, `u:${u.id}`);
+    if (i % 2 === 1) kb.row();
   });
+  if (users.length % 2 !== 0) kb.row();
 
+  // Navigation + search hint
   const nav: Array<[string, string]> = [];
-  if (page > 1)          nav.push(['⬅ Назад', `ul:${page - 1}`]);
-  if (page < totalPages) nav.push(['Далее ➡', `ul:${page + 1}`]);
-  if (nav.length) {
-    nav.forEach(([label, data]) => kb.text(label, data));
-    kb.row();
-  }
-  return kb.text('🏠 Меню', 'menu');
+  if (page > 1)          nav.push(['⬅', `ul:${page - 1}`]);
+  nav.push([`${page}/${totalPages}`, `ul:${page}`]);
+  if (page < totalPages) nav.push(['➡', `ul:${page + 1}`]);
+  kb.text(nav[0][0], nav[0][1]);
+  if (nav[1]) kb.text(nav[1][0], nav[1][1]);
+  if (nav[2]) kb.text(nav[2][0], nav[2][1]);
+  kb.row();
+
+  return kb
+    .text('🔍 Найти (/find)', 'search_hint')
+    .text('🏠 Меню', 'menu');
 }
 
 function serverKb(): InlineKeyboard {
@@ -336,7 +347,7 @@ bot.command('start', async (ctx) => {
 
 bot.command('users', async (ctx) => {
   const page     = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
-  const { data } = await api.get(`/users?page=${page}&limit=15`);
+  const { data } = await api.get(`/users?page=${page}&limit=8`);
   await ctx.reply(fmtUserList(data, page), {
     parse_mode: 'HTML',
     reply_markup: userListKb(data, page),
@@ -355,7 +366,20 @@ bot.command('user', async (ctx) => {
 
 bot.command('find', async (ctx) => {
   const q = (ctx.match ?? '').trim();
-  if (!q) { await ctx.reply('❌ /find <имя|email|TG_ID|username>'); return; }
+  if (!q) {
+    await ctx.reply(
+      '🔍 <b>Поиск пользователя</b>\n\n' +
+      '/find <i>&lt;запрос&gt;</i>\n\n' +
+      'Поиск по:\n' +
+      '• <b>Имени</b> — напр. <code>/find Алексей</code>\n' +
+      '• <b>Email</b> — напр. <code>/find user@gmail.com</code>\n' +
+      '• <b>Telegram ID</b> — напр. <code>/find 1800342635</code>\n' +
+      '• <b>UUID пользователя</b> — напр. <code>/find cuid123...</code>\n' +
+      '• <b>Yandex / Google ID</b>\n',
+      { parse_mode: 'HTML' },
+    );
+    return;
+  }
 
   const { data } = await api.get(`/users?search=${encodeURIComponent(q)}&limit=10`);
   const users: any[] = data.users ?? [];
@@ -567,11 +591,23 @@ bot.callbackQuery('sys', async (ctx) => {
 bot.callbackQuery(/^ul:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   const page     = parseInt(ctx.match[1]);
-  const { data } = await api.get(`/users?page=${page}&limit=15`);
+  const { data } = await api.get(`/users?page=${page}&limit=8`);
   await ctx.editMessageText(fmtUserList(data, page), {
     parse_mode: 'HTML',
     reply_markup: userListKb(data, page),
   });
+});
+
+bot.callbackQuery('search_hint', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.reply(
+    '🔍 <b>Поиск пользователя</b>\n\n' +
+    'Используй команду:\n' +
+    '/find <i>&lt;запрос&gt;</i>\n\n' +
+    'Поиск по:\n' +
+    '• Имени\n• Email\n• Telegram ID\n• UUID\n• Yandex / Google ID',
+    { parse_mode: 'HTML' },
+  );
 });
 
 bot.callbackQuery(/^u:(.+)$/, async (ctx) => {

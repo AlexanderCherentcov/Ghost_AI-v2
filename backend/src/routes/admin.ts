@@ -101,6 +101,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             { email:      { contains: search, mode: 'insensitive' as const } },
             { telegramId: { contains: search } },
             { id:         { contains: search } },
+            { yandexId:   { contains: search } },
+            { googleId:   { contains: search } },
           ],
         }
       : {};

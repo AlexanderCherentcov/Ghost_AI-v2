@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { notifyNewUser } from '../services/admin-notify.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       });
       await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'telegram-webapp' }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -171,6 +173,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       });
       await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'yandex' }).catch(() => {});
     } else if (!user.yandexId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -242,6 +245,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       });
       await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'google' }).catch(() => {});
     } else if (!user.googleId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -280,6 +284,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       });
       await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'telegram-bot' }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -310,6 +315,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
+      notifyNewUser({ ...user, source: 'telegram-verify' }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -358,6 +364,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
+      notifyNewUser({ ...user, source: 'telegram-oauth' }).catch(() => {});
     }
 
     const { accessToken, refreshToken } = signTokens(fastify, user.id);

@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { applyPlanLimits } from './tokens.js';
+import { notifyPayment } from './admin-notify.js';
 
 const YOKASSA_BASE = 'https://api.yookassa.ru/v3';
 
@@ -117,6 +118,17 @@ export async function processWebhook(body: unknown): Promise<void> {
   if (!payment || payment.status === 'SUCCEEDED') return;
 
   await prisma.payment.update({ where: { id: payment.id }, data: { status: 'SUCCEEDED' } });
+
+  // Notify admins about successful payment
+  const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } });
+  const billing = event.object.metadata?.billing === 'yearly' ? 'yearly' : 'monthly';
+  notifyPayment({
+    userId:   payment.userId,
+    userName: payer?.name ?? null,
+    amount:   payment.amount,
+    plan:     payment.plan ?? 'unknown',
+    billing,
+  }).catch(() => {});
 
   if (payment.plan) {
     const planInfo = PLANS[payment.plan as PlanKey];

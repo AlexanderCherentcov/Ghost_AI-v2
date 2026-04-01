@@ -328,7 +328,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         where: { createdAt: { gte: todayStart }, status: 'SUCCEEDED' },
         _sum: { amount: true },
       }),
-      prisma.user.groupBy({ by: ['plan'], _count: { _all: true } }),
+      prisma.user.groupBy({ by: ['plan'], _count: { _all: true }, orderBy: { _count: { plan: 'desc' } } }),
     ]);
 
     const planCountsMap = Object.fromEntries(

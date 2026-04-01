@@ -189,10 +189,31 @@ function fmtStats(s: any): string {
     `🖼 Генераций сегодня: <b>${s.genToday}</b>\n\n` +
     `💰 <b>Платежи сегодня:</b>\n` +
     `  Успешных: <b>${s.paymentsToday}</b>\n` +
-    `  Выручка: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
+    `  Выручка сегодня: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
+    `  Выручка всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
     `📦 <b>Распределение планов:</b>\n${planLines}\n\n` +
     `🕐 ${new Date().toLocaleTimeString('ru')}`
   );
+}
+
+async function quickStats(): Promise<string> {
+  try {
+    const { data: s } = await api.get('/stats');
+    const planLines = Object.entries(s.planCounts ?? {})
+      .filter(([, v]) => (v as number) > 0)
+      .map(([k, v]) => `${PLAN_ICON[k] ?? '?'}${k}: ${v}`)
+      .join(' · ');
+    return (
+      `👻 <b>GhostLine Admin Panel</b>\n\n` +
+      `👥 Пользователей: <b>${s.totalUsers}</b>` +
+      (s.newToday > 0 ? ` <i>(+${s.newToday} сегодня)</i>` : '') + '\n' +
+      `💰 Сегодня: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
+      `💵 Всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
+      `<i>${planLines}</i>`
+    );
+  } catch {
+    return '👻 <b>GhostLine Admin Panel</b>';
+  }
 }
 
 function fmtHealth(statuses: Record<string, string>): string {
@@ -213,11 +234,27 @@ function mainKb(): InlineKeyboard {
     .text('🏥 Здоровье', 'health');
 }
 
-function userKb(userId: string): InlineKeyboard {
-  return new InlineKeyboard()
+function userKb(userId: string, u?: any): InlineKeyboard {
+  const kb = new InlineKeyboard()
     .text('📦 Изменить план', `plan_menu:${userId}`)
     .text('🔄 Сбросить лимиты', `rl:${userId}`)
-    .row()
+    .row();
+
+  // Feature on/off toggles based on current limits
+  if (u) {
+    const vidOff = u.videos_daily_limit === 0;
+    const imgOff = u.images_daily_limit === 0;
+    const proOff = u.pro_messages_daily_limit === 0;
+    const chatOff = u.std_messages_daily_limit === 0;
+    kb.text(vidOff  ? '✅ Вкл видео'     : '📵 Откл видео',     vidOff  ? `ena:${userId}:video` : `dis:${userId}:video`)
+      .text(imgOff  ? '✅ Вкл картинки'  : '📵 Откл картинки',  imgOff  ? `ena:${userId}:image` : `dis:${userId}:image`)
+      .row()
+      .text(proOff  ? '✅ Вкл про-чат'   : '📵 Откл про-чат',   proOff  ? `ena:${userId}:pro`   : `dis:${userId}:pro`)
+      .text(chatOff ? '✅ Вкл чат'       : '📵 Откл чат',       chatOff ? `ena:${userId}:chat`  : `dis:${userId}:chat`)
+      .row();
+  }
+
+  return kb
     .text('🚫 Бан', `ban:${userId}`)
     .text('✅ Разбан', `unban:${userId}`)
     .row()
@@ -282,7 +319,7 @@ async function fetchUser(id: string): Promise<any> {
 async function replyUserCard(ctx: any, userId: string, edit = false): Promise<void> {
   const u  = await fetchUser(userId);
   const text = fmtUser(u);
-  const kb   = userKb(u.id);
+  const kb   = userKb(u.id, u);
   if (edit) {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   } else {
@@ -293,10 +330,8 @@ async function replyUserCard(ctx: any, userId: string, edit = false): Promise<vo
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 bot.command('start', async (ctx) => {
-  await ctx.reply(
-    '👻 <b>GhostLine Admin Panel</b>\n\nВыберите раздел:',
-    { parse_mode: 'HTML', reply_markup: mainKb() },
-  );
+  const text = await quickStats();
+  await ctx.reply(text + '\n\nВыберите раздел:', { parse_mode: 'HTML', reply_markup: mainKb() });
 });
 
 bot.command('users', async (ctx) => {
@@ -476,7 +511,8 @@ bot.command('sys', async (ctx) => {
 
 bot.callbackQuery('menu', async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText('👻 <b>GhostLine Admin Panel</b>\n\nВыберите раздел:', {
+  const text = await quickStats();
+  await ctx.editMessageText(text + '\n\nВыберите раздел:', {
     parse_mode: 'HTML', reply_markup: mainKb(),
   });
 });
@@ -590,6 +626,29 @@ bot.callbackQuery(/^unban:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery('Разбаниваю...');
   const userId = ctx.match[1];
   await api.post('/ban', { userId, unban: true });
+  await replyUserCard(ctx, userId, true);
+});
+
+// dis:<userId>:<feature>  — disable a feature (set limit = 0)
+bot.callbackQuery(/^dis:([^:]+):([a-z]+)$/, async (ctx) => {
+  const userId  = ctx.match[1];
+  const feature = ctx.match[2]; // video | image | pro | chat
+  await ctx.answerCallbackQuery(`Отключаю ${feature}...`);
+  const fieldMap: Record<string, string> = {
+    video: 'video', image: 'img', pro: 'pro', chat: 'chat',
+  };
+  const field = fieldMap[feature];
+  if (!field) return;
+  await api.post('/setlimits', { userId, [field]: 0 });
+  await replyUserCard(ctx, userId, true);
+});
+
+// ena:<userId>:<feature>  — re-enable by restoring plan default (full reset)
+bot.callbackQuery(/^ena:([^:]+):([a-z]+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  await ctx.answerCallbackQuery('Восстанавливаю...');
+  // Reset ALL limits to plan defaults — cleanest way to restore one disabled feature
+  await api.post('/resetlimits', { userId });
   await replyUserCard(ctx, userId, true);
 });
 

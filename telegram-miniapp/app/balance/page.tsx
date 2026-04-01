@@ -104,14 +104,18 @@ function BalanceApp() {
           <div className="bg-[#0E0E1A] border border-[rgba(255,255,255,0.06)] rounded-2xl p-4 space-y-3">
             <p className="text-xs text-[rgba(255,255,255,0.35)] font-medium uppercase tracking-wider">Использование</p>
 
+            {/* Message progress — FREE only; all paid plans show ∞ to user */}
             {plan === 'FREE' && (
               <UsageRow label="Сообщения сегодня" used={user.std_messages_today} limit={user.std_messages_daily_limit} />
             )}
-            {user.pro_messages_daily_limit > 0 && (
+            {/* Pro messages — show only for STANDARD; PRO/ULTRA have hidden cap */}
+            {user.pro_messages_daily_limit > 0 && plan === 'STANDARD' && (
               <UsageRow label="Про-сообщения" used={user.pro_messages_today} limit={user.pro_messages_daily_limit} />
             )}
-            {plan !== 'FREE' && user.std_messages_daily_limit === -1 && (
-              <p className="text-xs text-[rgba(255,255,255,0.3)]">Стандартный чат: безлимитный</p>
+            {plan !== 'FREE' && (
+              <p className="text-xs text-[rgba(255,255,255,0.3)]">
+                {plan === 'PRO' || plan === 'ULTRA' ? '✨ Чат: безлимитный' : 'Стандартный чат: безлимитный'}
+              </p>
             )}
 
             <UsageRow label="Картинки" used={user.images_today} limit={user.images_daily_limit} />

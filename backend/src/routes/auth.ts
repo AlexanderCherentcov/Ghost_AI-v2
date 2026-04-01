@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { notifyNewUser } from '../services/admin-notify.js';
+import { PLANS } from '../services/yokassa.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
@@ -426,7 +427,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
           createdAt: true,
         },
       });
-      return user;
+      // Computed: whether the UI should show the message limit (hidden cap for PRO/ULTRA)
+      const planConfig = PLANS[user.plan as keyof typeof PLANS];
+      return { ...user, show_message_limit: planConfig?.show_message_limit ?? true };
     },
   });
 

@@ -31,7 +31,7 @@ const PLANS = [
     price: 2490,
     price_yearly: 2117,
     badge: undefined,
-    features: ['Безлимитный чат', '200 про-сообщений/день', '80 картинок/день', '3 видео/день', '500 файлов/месяц'],
+    features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '80 картинок/день', '3 видео/день', '500 файлов/месяц'],
   },
   {
     key: 'ULTRA',
@@ -39,7 +39,7 @@ const PLANS = [
     price: 5490,
     price_yearly: 4667,
     badge: 'Максимум',
-    features: ['Безлимитный чат', '400 про-сообщений/день', '150 картинок/день', '5 видео/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
+    features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '150 картинок/день', '5 видео/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
   },
 ];
 
@@ -96,11 +96,19 @@ export default function BillingPage() {
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider">Использование сегодня</p>
 
+            {/* Message progress — only for FREE (all paid plans show ∞ to user) */}
             {plan === 'FREE' && (
               <UsageBar used={user.std_messages_today} limit={user.std_messages_daily_limit} label="Сообщений сегодня" />
             )}
-            {user.pro_messages_daily_limit !== 0 && (
+            {/* Pro messages — show only for STANDARD (PRO/ULTRA have hidden cap) */}
+            {user.pro_messages_daily_limit !== 0 && plan === 'STANDARD' && (
               <UsageBar used={user.pro_messages_today} limit={user.pro_messages_daily_limit} label="Про-сообщений" />
+            )}
+            {/* Unlimited chat label for all paid plans */}
+            {plan !== 'FREE' && (
+              <p className="text-xs text-[rgba(255,255,255,0.3)]">
+                {plan === 'PRO' || plan === 'ULTRA' ? '✨ Чат: безлимитный' : 'Стандартный чат: безлимитный'}
+              </p>
             )}
 
             <UsageBar used={user.images_today} limit={user.images_daily_limit} label="Картинок" />
@@ -109,9 +117,6 @@ export default function BillingPage() {
             )}
             {user.files_monthly_limit > 0 && (
               <UsageBar used={user.files_used} limit={user.files_monthly_limit} label="Файлов (месяц)" />
-            )}
-            {plan !== 'FREE' && user.std_messages_daily_limit === -1 && (
-              <p className="text-xs text-[rgba(255,255,255,0.3)]">Стандартный чат: безлимитный</p>
             )}
           </div>
         )}
@@ -155,17 +160,20 @@ export default function BillingPage() {
                     plan === key && 'border-accent/40 bg-accent/5'
                   )}
                 >
+                  {/* Badge row — badge on top, active pill below to avoid overlap */}
                   {badge && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-black text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
                       {badge}
                     </div>
                   )}
-                  {plan === key && (
-                    <div className="absolute -top-3 right-3 bg-[var(--bg-elevated)] border border-accent/40 text-accent text-[10px] font-medium px-2 py-0.5 rounded-full">
-                      Активен
-                    </div>
-                  )}
-                  <h3 className="font-medium text-white mb-1">{name}</h3>
+                  <div className="flex items-center justify-between mb-1 min-h-[18px]">
+                    <h3 className="font-medium text-white">{name}</h3>
+                    {plan === key && (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-2">
+                        ✓ Активен
+                      </span>
+                    )}
+                  </div>
                   <div className="text-2xl font-medium mb-1">
                     {displayPrice.toLocaleString('ru-RU')} ₽
                     <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
@@ -185,14 +193,15 @@ export default function BillingPage() {
                   </ul>
                   <button
                     onClick={() => handleBuy(key)}
-                    disabled={loading === key || plan === key}
+                    disabled={loading === key}
                     className={cn(
                       'w-full btn h-9 text-sm',
-                      (badge === 'Максимум' || badge === 'Популярный') ? 'btn-primary' : 'btn-ghost',
-                      plan === key && 'opacity-50 cursor-default'
+                      plan === key
+                        ? 'btn-accent-outline'
+                        : (badge === 'Максимум' || badge === 'Популярный') ? 'btn-primary' : 'btn-ghost'
                     )}
                   >
-                    {loading === key ? 'Загрузка...' : plan === key ? 'Текущий план' : 'Подключить'}
+                    {loading === key ? 'Загрузка...' : plan === key ? 'Продлить' : 'Подключить'}
                   </button>
                 </motion.div>
               );

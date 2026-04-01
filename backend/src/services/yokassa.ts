@@ -46,15 +46,15 @@ export const PLANS = {
   PRO: {
     price: 2490, price_yearly: 2117,
     label: 'Про',
-    show_message_limit: false,
-    std_messages_daily: -1, pro_messages_daily: 200,
+    show_message_limit: false, // UI always shows ∞ — real cap enforced silently
+    std_messages_daily: 200, pro_messages_daily: 200,
     images_daily: 80,  videos_daily: 3,  files_monthly: 500,
   },
   ULTRA: {
     price: 5490, price_yearly: 4667,
     label: 'Ультра',
-    show_message_limit: false,
-    std_messages_daily: -1, pro_messages_daily: 400,
+    show_message_limit: false, // UI always shows ∞ — real cap enforced silently
+    std_messages_daily: 400, pro_messages_daily: 400,
     images_daily: 150, videos_daily: 5,  files_monthly: 1000,
   },
 } as const;

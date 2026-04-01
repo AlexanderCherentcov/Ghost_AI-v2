@@ -64,7 +64,8 @@ function AccountApp() {
     tg?.openLink(SUPPORT_GROUP_URL);
   }
 
-  const msgLimit = user?.std_messages_daily_limit === -1 ? '∞' : (user?.std_messages_daily_limit ?? 10);
+  // Paid plans show ∞ regardless of hidden backend cap
+  const msgLimit = user?.plan !== 'FREE' ? '∞' : (user?.std_messages_daily_limit ?? 10);
   const imgLimit = user?.images_daily_limit ?? 3;
 
   return (

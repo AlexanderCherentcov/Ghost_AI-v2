@@ -317,6 +317,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       genToday,
       paymentsToday,
       revenueToday,
+      revenueTotal,
       planCounts,
     ] = await prisma.$transaction([
       prisma.user.count(),
@@ -326,6 +327,10 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.payment.count({ where: { createdAt: { gte: todayStart }, status: 'SUCCEEDED' } }),
       prisma.payment.aggregate({
         where: { createdAt: { gte: todayStart }, status: 'SUCCEEDED' },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { status: 'SUCCEEDED' },
         _sum: { amount: true },
       }),
       prisma.user.groupBy({ by: ['plan'], _count: { _all: true }, orderBy: { _count: { plan: 'desc' } } }),
@@ -342,6 +347,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       genToday,
       paymentsToday,
       revenueToday: revenueToday._sum.amount ?? 0,
+      revenueTotal:  revenueTotal._sum.amount ?? 0,
       planCounts: planCountsMap,
     };
   });

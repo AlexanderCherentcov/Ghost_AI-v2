@@ -57,10 +57,7 @@ const bot = new Bot(BOT_TOKEN);
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 
 bot.use(async (ctx, next) => {
-  const fromId = String(ctx.from?.id ?? '');
-  console.log(`[AdminBot] Update from=${fromId} text=${(ctx.message as any)?.text ?? ''}`);
-  if (!ADMIN_IDS.has(fromId)) {
-    console.log(`[AdminBot] Rejected non-admin: ${fromId}`);
+  if (!ADMIN_IDS.has(String(ctx.from?.id ?? ''))) {
     await ctx.reply('⛔ Нет доступа.');
     return;
   }
@@ -333,11 +330,8 @@ async function replyUserCard(ctx: any, userId: string, edit = false): Promise<vo
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 bot.command('start', async (ctx) => {
-  console.log('[AdminBot] /start handler entered');
   const text = await quickStats();
-  console.log('[AdminBot] quickStats done, sending reply');
   await ctx.reply(text + '\n\nВыберите раздел:', { parse_mode: 'HTML', reply_markup: mainKb() });
-  console.log('[AdminBot] /start reply sent');
 });
 
 bot.command('users', async (ctx) => {

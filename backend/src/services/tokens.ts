@@ -100,7 +100,7 @@ export async function checkAndDeduct(
     if (user.images_daily_limit === 0) {
       throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
     }
-    if (user.images_daily_limit !== -1 && user.images_today >= user.images_daily_limit) {
+    if (user.images_daily_limit !== -1 && user.images_today + 1 > user.images_daily_limit) {
       throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
     }
     await prisma.user.update({ where: { id: userId }, data: { images_today: { increment: 1 } } });

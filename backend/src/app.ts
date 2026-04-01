@@ -76,9 +76,9 @@ export async function buildApp() {
 
   await fastify.register(cookie);
 
-  await fastify.register(jwt, {
-    secret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
-  });
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('JWT_SECRET env var is required — server refuses to start with a weak default');
+  await fastify.register(jwt, { secret: jwtSecret });
 
   await fastify.register(rateLimit, {
     max: 100,

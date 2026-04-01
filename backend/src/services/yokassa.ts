@@ -114,7 +114,14 @@ export async function processWebhook(body: unknown): Promise<void> {
 
   if (event.type !== 'payment.succeeded') return;
 
-  const payment = await prisma.payment.findUnique({ where: { yokassaId: event.object.id } });
+  // Re-verify payment status directly with YooKassa API (prevents forged webhooks)
+  const paymentId = event.object.id;
+  const verifyRes = await axios.get(`${YOKASSA_BASE}/payments/${paymentId}`, {
+    headers: yokassaHeaders(crypto.randomUUID()),
+  }).catch(() => null);
+  if (!verifyRes || verifyRes.data?.status !== 'succeeded') return;
+
+  const payment = await prisma.payment.findUnique({ where: { yokassaId: paymentId } });
   if (!payment || payment.status === 'SUCCEEDED') return;
 
   await prisma.payment.update({ where: { id: payment.id }, data: { status: 'SUCCEEDED' } });

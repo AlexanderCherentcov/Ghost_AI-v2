@@ -35,45 +35,78 @@
 
 /* ─── Light theme ────────────────────────────────────────────────────────────── */
 html.light {
-  --bg-void:        #F2F2FA;
-  --bg-primary:     #FFFFFF;
-  --bg-surface:     #F5F5FD;
-  --bg-elevated:    #EBEBF5;
-  --bg-input:       #E8E8F2;
+  /* Soft off-white — not blinding pure white */
+  --bg-void:        #ECEDF5;
+  --bg-primary:     #F6F6FC;
+  --bg-surface:     #EFEFF8;
+  --bg-elevated:    #E8E8F2;
+  --bg-input:       #E0E0EC;
 
-  --text-primary:   rgba(0, 0, 0, 0.85);
-  --text-secondary: rgba(0, 0, 0, 0.45);
-  --text-muted:     rgba(0, 0, 0, 0.25);
+  --text-primary:   rgba(0, 0, 0, 0.82);
+  --text-secondary: rgba(0, 0, 0, 0.48);
+  --text-muted:     rgba(0, 0, 0, 0.28);
   --text-ghost:     rgba(0, 0, 0, 0.06);
 
-  --border:         rgba(0, 0, 0, 0.07);
-  --border-hover:   rgba(0, 0, 0, 0.13);
+  --border:         rgba(0, 0, 0, 0.08);
+  --border-hover:   rgba(0, 0, 0, 0.15);
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.06);
+  --shadow-xl:  0 16px 40px rgba(0,0,0,0.12), 0 6px 16px rgba(0,0,0,0.06);
 
   color-scheme: light;
 }
 
+/* Dark mode shadows */
+:root {
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.5);
+  --shadow-xl:  0 16px 40px rgba(0,0,0,0.6);
+}
+
 html.light body { background: var(--bg-primary); color: var(--text-primary); }
 
-/* ── Light mode: override hardcoded white text from Tailwind utilities ─────────
-   Components use text-white and text-[rgba(255,255,255,X)] inline classes.
+/* ── Light mode: override hardcoded white/rgba(255) from Tailwind classes ─────
    Since this CSS comes after @tailwind utilities it wins on equal specificity. */
-html.light [class~="text-white"]             { color: var(--text-primary); }
-html.light [class*="text-[rgba(255,255,255"] { color: var(--text-primary); }
 
-/* Scrollbar adapted for light backgrounds */
-html.light ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.12); }
-html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.20); }
+/* Text overrides */
+html.light [class~="text-white"]                  { color: var(--text-primary); }
+html.light [class*="text-[rgba(255,255,255"]       { color: var(--text-primary); }
+html.light [class*="hover:text-white"]:hover       { color: var(--text-primary); }
+html.light [class*="hover:text-[rgba(255"]:hover   { color: var(--text-secondary); }
 
-/* Text selection on light bg — keep white label since bg is accent */
-html.light ::selection { background: rgba(123,92,240,0.25); color: inherit; }
+/* Background overrides — white-alpha → dark-alpha equivalents */
+html.light [class*="bg-[rgba(255,255,255"]         { background-color: rgba(0,0,0,0.04); }
+html.light [class*="hover:bg-[rgba(255,255,255"]:hover { background-color: rgba(0,0,0,0.05); }
 
-/* Markdown prose in light mode */
-html.light .prose-ghost strong        { color: var(--text-primary) !important; }
-html.light .prose-ghost em            { color: var(--text-secondary) !important; }
+/* Border overrides */
+html.light [class*="border-[rgba(255,255,255"]     { border-color: var(--border); }
+
+/* Scrollbar */
+html.light ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.15); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+/* Selection */
+html.light ::selection { background: rgba(123,92,240,0.18); color: inherit; }
+
+/* Markdown prose */
+html.light .prose-ghost                      { color: var(--text-primary); }
+html.light .prose-ghost strong               { color: var(--text-primary) !important; }
+html.light .prose-ghost em                   { color: var(--text-secondary) !important; }
 html.light .prose-ghost h1,
 html.light .prose-ghost h2,
-html.light .prose-ghost h3            { color: var(--text-primary) !important; }
-html.light .prose-ghost blockquote    { color: var(--text-secondary); }
+html.light .prose-ghost h3                   { color: var(--text-primary) !important; }
+html.light .prose-ghost blockquote           { color: var(--text-secondary); }
+html.light .prose-ghost th                   { background: var(--bg-elevated); }
+
+/* Cards get subtle shadow for depth */
+html.light .card {
+  box-shadow: var(--shadow-sm);
+  border-color: rgba(0,0,0,0.07);
+}
 
 /* Gradient title text on light bg */
 html.light .gradient-text {
@@ -83,13 +116,8 @@ html.light .gradient-text {
   -webkit-text-fill-color: transparent;
 }
 
-/* Ghost cursor accent stays as-is */
-
 /* Input placeholder */
 html.light .input-ghost::placeholder { color: var(--text-muted); }
-
-/* card border slightly more visible in light */
-html.light .card { box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* ─── Font sizes ─────────────────────────────────────────────────────────────── */
 html.font-small  { font-size: 13px; }

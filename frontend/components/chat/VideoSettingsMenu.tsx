@@ -35,8 +35,13 @@ function Tip({ text }: { text: string }) {
             style={{ width: 200 }}
           >
             <div
-              className="px-3 py-2 rounded-xl text-[11px] leading-relaxed text-[rgba(255,255,255,0.75)]"
-              style={{ background: '#1C1C2E', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}
+              className="px-3 py-2 rounded-xl text-[11px] leading-relaxed"
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                boxShadow: 'var(--shadow-lg)',
+                color: 'var(--text-secondary)',
+              }}
             >
               {text}
             </div>
@@ -47,7 +52,7 @@ function Tip({ text }: { text: string }) {
                 width: 0, height: 0,
                 borderLeft: '5px solid transparent',
                 borderRight: '5px solid transparent',
-                borderTop: '5px solid #1C1C2E',
+                borderTop: '5px solid var(--bg-elevated)',
               }}
             />
           </motion.div>
@@ -195,9 +200,9 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
         {/* Sliders / tune icon */}
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
           <path d="M1.5 4h12M1.5 7.5h12M1.5 11h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-          <circle cx="5" cy="4" r="1.6" fill="var(--bg-input, #0D0D1A)" stroke="currentColor" strokeWidth="1.2"/>
-          <circle cx="10" cy="7.5" r="1.6" fill="var(--bg-input, #0D0D1A)" stroke="currentColor" strokeWidth="1.2"/>
-          <circle cx="6" cy="11" r="1.6" fill="var(--bg-input, #0D0D1A)" stroke="currentColor" strokeWidth="1.2"/>
+          <circle cx="5" cy="4" r="1.6" fill="var(--bg-input)" stroke="currentColor" strokeWidth="1.2"/>
+          <circle cx="10" cy="7.5" r="1.6" fill="var(--bg-input)" stroke="currentColor" strokeWidth="1.2"/>
+          <circle cx="6" cy="11" r="1.6" fill="var(--bg-input)" stroke="currentColor" strokeWidth="1.2"/>
         </svg>
         <span className="text-[11px] font-medium">Настройки</span>
         {/* Active indicator dot */}
@@ -220,9 +225,9 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
             className="absolute bottom-full right-0 mb-2 z-50 rounded-2xl overflow-hidden"
             style={{
               width: 280,
-              background: '#13131F',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow-xl)',
             }}
           >
             {/* Header */}
@@ -282,11 +287,12 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
                 rows={2}
                 className="w-full rounded-xl px-3 py-2 text-[12px] text-[rgba(255,255,255,0.75)] placeholder:text-[rgba(255,255,255,0.18)] outline-none resize-none transition-colors"
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
                 }}
                 onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(123,92,240,0.4)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
               />
             </div>
 

@@ -386,7 +386,7 @@ bot.command('addlimits', async (ctx) => {
 
   const { data } = await api.post('/addlimits', body);
   const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
-  await ctx.reply(`✅ Лимиты добавлены для <code>${userId}</code>\n${changed || data.note ?? ''}`, { parse_mode: 'HTML' });
+  await ctx.reply(`✅ Лимиты добавлены для <code>${userId}</code>\n${changed || (data.note ?? '')}`, { parse_mode: 'HTML' });
 });
 
 bot.command('resetlimits', async (ctx) => {

@@ -58,7 +58,7 @@ const bot = new Bot(BOT_TOKEN);
 
 bot.use(async (ctx, next) => {
   const fromId = String(ctx.from?.id ?? '');
-  console.log(`[AdminBot] Update type=${ctx.updateType} from=${fromId} text=${(ctx.message as any)?.text ?? ''}`);
+  console.log(`[AdminBot] Update from=${fromId} text=${(ctx.message as any)?.text ?? ''}`);
   if (!ADMIN_IDS.has(fromId)) {
     console.log(`[AdminBot] Rejected non-admin: ${fromId}`);
     await ctx.reply('⛔ Нет доступа.');

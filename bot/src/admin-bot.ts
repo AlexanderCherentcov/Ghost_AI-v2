@@ -683,6 +683,8 @@ bot.callbackQuery(/^logs:([^:]+):(\d+)$/, async (ctx) => {
 // ─── Error handler ────────────────────────────────────────────────────────────
 
 bot.catch(async (err) => {
+  // Ignore expired / already-answered callback query errors — harmless race condition
+  if (err.message.includes('query is too old') || err.message.includes('query ID is invalid')) return;
   console.error('[AdminBot] Error:', err.message);
   try {
     await err.ctx.reply(`❌ Ошибка: ${err.message.slice(0, 200)}`);

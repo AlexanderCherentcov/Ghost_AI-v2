@@ -71,8 +71,7 @@ export async function createPayment(
 ) {
   const info = PLANS[planKey];
   if (!info || info.price === 0) throw new Error('Invalid plan');
-  const monthlyPrice = billing === 'yearly' ? info.price_yearly : info.price;
-  const totalPrice = billing === 'yearly' ? monthlyPrice * 12 : monthlyPrice;
+  const totalPrice = billing === 'yearly' ? info.price_yearly : info.price;
 
   const idempotencyKey = crypto.randomUUID();
 

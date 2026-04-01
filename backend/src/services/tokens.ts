@@ -112,7 +112,7 @@ export async function checkAndDeduct(
     if (user.pro_messages_daily_limit === 0) {
       throw Object.assign(new Error('LIMIT_PRO_UNAVAILABLE'), { code: 'LIMIT_PRO_UNAVAILABLE' });
     }
-    if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today >= user.pro_messages_daily_limit) {
+    if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today + 1 > user.pro_messages_daily_limit) {
       throw Object.assign(new Error('LIMIT_PRO_MESSAGES'), { code: 'LIMIT_PRO_MESSAGES' });
     }
     updates.pro_messages_today = { increment: 1 };

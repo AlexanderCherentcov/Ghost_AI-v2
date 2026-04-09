@@ -1,9 +1,6 @@
-const { setupDevPlatform } = process.env.NODE_ENV === 'development'
-  ? require('@cloudflare/next-on-pages/next-config-util')
-  : { setupDevPlatform: () => {} };
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
   reactStrictMode: true,
   images: {
     remotePatterns: [
@@ -14,9 +11,5 @@ const nextConfig = {
     unoptimized: true,
   },
 };
-
-if (process.env.NODE_ENV === 'development') {
-  setupDevPlatform();
-}
 
 module.exports = nextConfig;

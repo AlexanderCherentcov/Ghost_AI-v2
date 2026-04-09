@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useEffect, useState } from 'react';
 import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';

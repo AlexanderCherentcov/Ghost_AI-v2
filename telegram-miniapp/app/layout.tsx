@@ -1,3 +1,5 @@
+export const runtime = 'edge';
+
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import '@/styles/globals.css';

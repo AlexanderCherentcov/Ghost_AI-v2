@@ -74,7 +74,12 @@ export function Sidebar() {
     e.stopPropagation();
     await api.chats.delete(chatId);
     removeChat(chatId);
-    if (pathname === `/chat/${chatId}`) router.push('/chat');
+    if (pathname === `/chat/${chatId}`) {
+      // Clear lastChatId so /chat doesn't redirect back to the deleted chat
+      localStorage.removeItem('lastChatId');
+      sessionStorage.setItem('newChat', '1');
+      router.push('/chat');
+    }
   }
 
   async function handleRenameChat(chatId: string) {

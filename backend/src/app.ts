@@ -81,9 +81,17 @@ export async function buildApp() {
   await fastify.register(jwt, { secret: jwtSecret });
 
   await fastify.register(rateLimit, {
-    max: 100,
+    max: 200,
     timeWindow: '1 minute',
     skipOnError: true,
+    // Use real client IP from nginx X-Real-IP header.
+    // Without this, all users appear as the Docker bridge IP (172.18.0.x)
+    // and share one rate-limit bucket, causing innocent users to get 429.
+    keyGenerator: (req) => (req.headers['x-real-ip'] as string) || req.ip,
+    errorResponseBuilder: (_req, context) => ({
+      error: `Слишком много запросов — повторите через ${context.after}`,
+      code: 'RATE_LIMITED',
+    }),
   });
 
   await fastify.register(websocket, {

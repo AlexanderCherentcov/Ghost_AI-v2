@@ -16,26 +16,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { setChats } = useChatStore();
   const { sidebarOpen } = useUIStore();
 
-  // Silently refresh access token in background — only logout on 401, not network errors
-  useEffect(() => {
-    const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
-    if (!refreshToken) {
-      if (!user) clearAuth();
-      return;
-    }
-    api.auth.refreshToken(refreshToken)
-      .then(async ({ accessToken, refreshToken: newRT }) => {
-        setAccessToken(accessToken);
-        const me = await api.auth.me();
-        setAuth(me, accessToken, newRT);
-      })
-      .catch((err) => {
-        // Only logout if server explicitly rejected the token (401)
-        // Network errors / CORS / 5xx should NOT log the user out
-        if (err?.status === 401) clearAuth();
-      });
-  }, []);
-
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/login');

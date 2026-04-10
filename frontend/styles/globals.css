@@ -276,6 +276,11 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
   to   { background-position: 200% center; }
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
 .animate-float   { animation: float 3s ease-in-out infinite; }
 .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
 

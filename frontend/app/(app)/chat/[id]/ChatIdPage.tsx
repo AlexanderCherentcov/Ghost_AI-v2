@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useCallback, use, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useCallback, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
@@ -145,12 +145,12 @@ async function readFileAsText(file: File): Promise<string> {
   });
 }
 
-interface Props {
-  params: Promise<{ id: string }>;
-}
-
-export default function ChatConversationPage({ params }: Props) {
-  const { id } = use(params);
+export default function ChatConversationPage() {
+  const pathname = usePathname();
+  // In static export all /chat/* routes are served from /chat/index/index.html,
+  // so params.id is always 'index'. Read the real chat ID from the browser URL instead.
+  const segments = pathname.split('/').filter(Boolean);
+  const id = segments[segments.length - 1] || 'index';
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
   const { show: showToast } = useToast();

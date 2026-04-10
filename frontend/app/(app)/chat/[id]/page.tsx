@@ -6,6 +6,6 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
-export default function Page({ params }: { params: Promise<{ id: string }> }) {
-  return <ChatIdPage params={params} />;
+export default function Page() {
+  return <ChatIdPage />;
 }

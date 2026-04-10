@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
@@ -153,6 +153,7 @@ export default function ChatConversationPage() {
   const id = segments[segments.length - 1] || 'index';
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
+  const messagesLoadedRef = useRef(false);
   const { show: showToast } = useToast();
   const {
     messages, setMessages, addMessage, appendStreamToken,
@@ -168,6 +169,13 @@ export default function ChatConversationPage() {
 
   // Load messages + resume any pending generation job after page refresh
   useEffect(() => {
+    // Wait for accessToken — it lives only in memory and is restored async
+    // via refreshToken call in providers.tsx. Without this guard the request
+    // fires before the token is ready and gets a 401.
+    if (!accessToken) return;
+    // Prevent double-fetch if token silently refreshes mid-session
+    if (messagesLoadedRef.current) return;
+    messagesLoadedRef.current = true;
     localStorage.setItem('lastChatId', id);
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);
@@ -225,7 +233,8 @@ export default function ChatConversationPage() {
         }
       })
       .catch(() => { localStorage.removeItem('lastChatId'); router.replace('/chat'); });
-  }, [id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, accessToken]);
 
   // Auto-send initial prompt — waits until history is loaded (messagesReady) to avoid race condition
   useEffect(() => {

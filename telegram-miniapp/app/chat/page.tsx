@@ -338,21 +338,12 @@ function ChatApp() {
       return;
     }
 
-    apiRequest<{ chats: Array<{ id: string }> }>('/chats')
-      .then(async ({ chats }) => {
-        if (chats.length > 0) {
-          const id = chats[0].id;
-          setChatId(id);
-          const { messages: msgs } = await apiRequest<{ messages: Message[] }>(`/chats/${id}/messages`);
-          setMessages(msgs);
-        } else {
-          const chat = await apiRequest<{ id: string }>('/chats', {
-            method: 'POST',
-            body: JSON.stringify({ mode: 'chat' }),
-          });
-          setChatId(chat.id);
-        }
-      })
+    // Always start a fresh chat when opening the app without a specific ?id
+    apiRequest<{ id: string }>('/chats', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'chat' }),
+    })
+      .then((chat) => setChatId(chat.id))
       .catch(() => {});
   }, []);
 

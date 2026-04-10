@@ -1,9 +1,20 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const TOKEN_KEY = 'tg_access_token';
 
-let accessToken: string | null = null;
+let _accessToken: string | null = null;
+
+function loadToken(): string | null {
+  if (_accessToken) return _accessToken;
+  try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+function saveToken(token: string) {
+  _accessToken = token;
+  try { sessionStorage.setItem(TOKEN_KEY, token); } catch {}
+}
 
 export function getToken(): string | null {
-  return accessToken;
+  return loadToken();
 }
 
 export async function initAuth(initData: string): Promise<{
@@ -26,17 +37,18 @@ export async function initAuth(initData: string): Promise<{
   if (!res.ok) throw new Error('Auth failed');
 
   const data = await res.json();
-  accessToken = data.accessToken;
+  saveToken(data.accessToken);
   return data;
 }
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = loadToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
-  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}/api${path}`, { ...options, headers });
 

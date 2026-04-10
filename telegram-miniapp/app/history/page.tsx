@@ -33,6 +33,7 @@ function HistoryApp() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<{ chats: Chat[] }>('/chats')
@@ -65,11 +66,14 @@ function HistoryApp() {
 
   async function handleDelete(chatId: string) {
     setDeletingId(chatId);
+    setDeleteError(null);
     try {
       await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
       setChats((prev) => prev.filter((c) => c.id !== chatId));
-    } catch {
-      // ignore
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Ошибка удаления';
+      setDeleteError(msg);
+      setTimeout(() => setDeleteError(null), 3000);
     } finally {
       setDeletingId(null);
     }
@@ -161,7 +165,9 @@ function HistoryApp() {
         className="flex items-center gap-3 px-4 pt-5 pb-4"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
       >
-        <span className="text-base font-medium tracking-tight flex-1">История чатов</span>
+        <span className="text-base font-medium tracking-tight flex-1">
+          {deleteError ? <span style={{ color: '#f87171', fontSize: 13 }}>{deleteError}</span> : 'История чатов'}
+        </span>
         <button
           onClick={handleNew}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm"

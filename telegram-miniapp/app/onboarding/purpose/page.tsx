@@ -35,7 +35,7 @@ function PurposeForm() {
   useMainButton({ text: 'Начать', onClick: handleNext, isVisible: selected.length > 0, isLoading: loading });
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0A0A12] px-5 pt-10">
+    <div className="flex flex-col min-h-screen px-5 pt-10" style={{ background: 'var(--bg-primary)' }}>
       <div className="flex gap-2 mb-8">
         {[0,1,2].map((i) => (
           <div key={i} className="h-1.5 rounded-full" style={{ width: 24, background: i === 1 ? '#7B5CF0' : i < 1 ? 'rgba(123,92,240,0.4)' : 'rgba(255,255,255,0.1)' }} />

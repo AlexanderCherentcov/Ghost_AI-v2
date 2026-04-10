@@ -82,8 +82,9 @@ function BalanceApp() {
         body: JSON.stringify({ plan: planKey }),
       });
       tg?.openLink(paymentUrl);
-    } catch (err: any) {
-      tg?.showAlert(err.message ?? 'Ошибка оплаты');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Ошибка оплаты';
+      tg?.showAlert(msg);
     } finally {
       setLoading(null);
     }
@@ -92,10 +93,10 @@ function BalanceApp() {
   const plan = user?.plan ?? 'FREE';
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0A0A12] pb-[80px]">
-      <div className="px-4 py-4 border-b border-[rgba(255,255,255,0.06)]">
-        <h1 className="font-medium text-white">Баланс и тарифы</h1>
-        <p className="text-xs text-[rgba(255,255,255,0.35)] mt-0.5">Текущий план: <span className="text-[#7B5CF0]">{plan}</span></p>
+    <div className="flex flex-col min-h-screen pb-[60px]" style={{ background: 'var(--bg-primary)' }}>
+      <div className="px-4 py-4" style={{ borderBottom: '0.5px solid var(--border)' }}>
+        <h1 className="font-medium" style={{ color: 'var(--text-primary)' }}>Баланс и тарифы</h1>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Текущий план: <span style={{ color: 'var(--accent)' }}>{plan}</span></p>
       </div>
 
       <div className="px-4 py-4 space-y-6">

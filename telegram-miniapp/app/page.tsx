@@ -64,31 +64,29 @@ function TgInit() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#06060B] text-white px-8">
-      <div className="text-5xl mb-6" style={{ animation: 'float 3s ease-in-out infinite' }}>👻</div>
-      <p className="text-lg font-medium mb-1 tracking-tight">GhostLine</p>
-      <p className="text-sm mb-8" style={{ color: error ? '#f87171' : 'rgba(255,255,255,0.35)' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-8" style={{ background: 'var(--bg-void)' }}>
+      <div className="text-5xl mb-6 animate-float">👻</div>
+      <p className="text-lg font-medium mb-1 tracking-tight" style={{ color: 'var(--text-primary)' }}>GhostLine</p>
+      <p className="text-sm mb-8" style={{ color: error ? '#f87171' : 'var(--text-secondary)' }}>
         {status}
       </p>
 
       {/* Progress bar */}
-      <div className="w-48 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+      <div className="w-48 h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
         <div
           className="h-full rounded-full transition-all duration-300 ease-out"
           style={{
             width: `${progress}%`,
-            background: error ? '#f87171' : '#7B5CF0',
+            background: error ? '#f87171' : 'var(--accent)',
           }}
         />
       </div>
 
       {!error && (
-        <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.2)' }}>
+        <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
           {progress}%
         </p>
       )}
-
-      <style>{`@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }`}</style>
     </div>
   );
 }

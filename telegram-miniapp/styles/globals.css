@@ -1,22 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --accent: #7B5CF0;
-  --accent-glow: rgba(123, 92, 240, 0.15);
-  --accent-border: rgba(123, 92, 240, 0.25);
-  --accent-dim: rgba(123, 92, 240, 0.12);
-  --bg-void: #06060B;
-  --bg-primary: #0A0A12;
-  --bg-surface: #0E0E1A;
-  --bg-elevated: #13131F;
-  --bg-input: #161625;
-  --text-primary: rgba(255,255,255,0.9);
+  --accent:         #7B5CF0;
+  --accent-glow:    rgba(123, 92, 240, 0.15);
+  --accent-border:  rgba(123, 92, 240, 0.25);
+  --accent-dim:     rgba(123, 92, 240, 0.12);
+
+  --bg-void:        #06060B;
+  --bg-primary:     #0A0A12;
+  --bg-surface:     #0E0E1A;
+  --bg-elevated:    #13131F;
+  --bg-input:       #161625;
+
+  --text-primary:   rgba(255,255,255,0.90);
   --text-secondary: rgba(255,255,255,0.45);
-  --text-muted: rgba(255,255,255,0.2);
-  --border: rgba(255,255,255,0.06);
-  --border-hover: rgba(255,255,255,0.12);
+  --text-muted:     rgba(255,255,255,0.20);
+  --text-ghost:     rgba(255,255,255,0.08);
+
+  --border:         rgba(255,255,255,0.06);
+  --border-hover:   rgba(255,255,255,0.12);
+
+  --radius:         12px;
+  --radius-lg:      16px;
+  --radius-xl:      20px;
+
+  --bottom-nav-h:   60px;
+
+  color-scheme: dark;
 }
 
 /* ─── Light theme ────────────────────────────────────────────────────────────── */
@@ -59,12 +73,16 @@ html.font-small  { font-size: 13px; }
 html.font-medium { font-size: 15px; }
 html.font-large  { font-size: 17px; }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html { -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-void);
+}
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.6;
   /* Prevent rubber-band scroll in Telegram */
@@ -118,7 +136,7 @@ input:focus, textarea:focus {
 }
 .prose-ghost p { margin-bottom: 10px; }
 .prose-ghost p:last-child { margin-bottom: 0; }
-.prose-ghost strong { color: white; font-weight: 600; }
+.prose-ghost strong { color: var(--text-primary); font-weight: 600; }
 .prose-ghost code {
   background: var(--bg-elevated);
   border-radius: 6px;

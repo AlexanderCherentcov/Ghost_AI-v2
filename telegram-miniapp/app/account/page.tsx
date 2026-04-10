@@ -70,13 +70,13 @@ function AccountApp() {
   const imgLimit = user?.images_daily_limit ?? 3;
 
   return (
-    <div className="flex flex-col h-screen pb-[60px]" style={{ background: '#06060B', color: 'white' }}>
+    <div className="flex flex-col h-screen pb-[60px]" style={{ background: 'var(--bg-void)' }}>
       {/* Header */}
       <div
         className="flex items-center px-4 pt-5 pb-4"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        style={{ borderBottom: '0.5px solid var(--border)' }}
       >
-        <span className="text-base font-medium tracking-tight">Аккаунт</span>
+        <span className="text-base font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Аккаунт</span>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 px-4">

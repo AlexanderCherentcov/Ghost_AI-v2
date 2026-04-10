@@ -39,7 +39,7 @@ function NameForm() {
   useMainButton({ text: 'Далее', onClick: handleNext, isVisible: name.trim().length > 0, isLoading: loading });
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0A0A12] px-5 pt-10">
+    <div className="flex flex-col min-h-screen px-5 pt-10 pb-24" style={{ background: 'var(--bg-primary)' }}>
       <div className="text-center mb-8">
         <div className="text-5xl mb-4">👻</div>
         <span className="text-sm font-medium text-white">GhostLine</span>

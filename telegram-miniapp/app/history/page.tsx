@@ -159,11 +159,11 @@ function HistoryApp() {
   }
 
   return (
-    <div className="flex flex-col h-screen pb-[60px]" style={{ background: '#06060B', color: 'white' }}>
+    <div className="flex flex-col h-screen pb-[60px]" style={{ background: 'var(--bg-void)' }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 pt-5 pb-4"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        style={{ borderBottom: '0.5px solid var(--border)' }}
       >
         <span className="text-base font-medium tracking-tight flex-1">
           {deleteError ? <span style={{ color: '#f87171', fontSize: 13 }}>{deleteError}</span> : 'История чатов'}

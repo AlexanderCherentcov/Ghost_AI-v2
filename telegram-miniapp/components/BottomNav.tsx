@@ -64,8 +64,10 @@ export function BottomNav() {
       style={{
         background: 'rgba(10,10,18,0.96)',
         backdropFilter: 'blur(16px)',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderTop: '0.5px solid var(--border)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        minHeight: 'var(--bottom-nav-h)',
       }}
     >
       {ITEMS.map(({ href, label, Icon }) => {
@@ -74,28 +76,26 @@ export function BottomNav() {
           <Link
             key={href}
             href={href}
-            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-all relative"
-            style={{ color: active ? '#7B5CF0' : 'rgba(255,255,255,0.28)' }}
+            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-all relative min-h-[44px]"
+            style={{ color: active ? 'var(--accent)' : 'var(--text-secondary)' }}
+            aria-label={label}
           >
             {active && (
               <span
                 className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full"
-                style={{ background: '#7B5CF0' }}
+                style={{ background: 'var(--accent)' }}
               />
             )}
             <span
               className="flex items-center justify-center rounded-xl transition-all"
               style={{
                 padding: active ? '5px 10px' : '5px 8px',
-                background: active ? 'rgba(123,92,240,0.12)' : 'transparent',
+                background: active ? 'var(--accent-dim)' : 'transparent',
               }}
             >
               <Icon active={active} />
             </span>
-            <span
-              className="text-[10px] font-medium tracking-wide"
-              style={{ opacity: active ? 1 : 0.7 }}
-            >
+            <span className="text-[10px] font-medium tracking-wide" style={{ opacity: active ? 1 : 0.65 }}>
               {label}
             </span>
           </Link>

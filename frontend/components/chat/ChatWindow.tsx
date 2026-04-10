@@ -10,9 +10,46 @@ import { greetingByHour } from '@/lib/utils';
 
 interface ChatWindowProps {
   onSuggestion?: (text: string) => void;
+  isLoading?: boolean;
 }
 
-export function ChatWindow({ onSuggestion }: ChatWindowProps) {
+// Skeleton rows: [side, width%]
+const SKELETON_ROWS: Array<['left' | 'right', number]> = [
+  ['left',  65],
+  ['right', 45],
+  ['left',  80],
+  ['left',  55],
+  ['right', 70],
+  ['left',  40],
+];
+
+function ChatSkeleton() {
+  return (
+    <div className="max-w-[720px] mx-auto px-4 py-6 space-y-5">
+      {SKELETON_ROWS.map(([side, w], i) => (
+        <div key={i} className={`flex gap-3 ${side === 'right' ? 'justify-end' : ''}`}>
+          {side === 'left' && (
+            <div
+              className="w-7 h-7 rounded-full flex-shrink-0 mt-1"
+              style={{ background: 'var(--bg-elevated)', animation: `pulse 1.6s ease-in-out ${i * 0.1}s infinite` }}
+            />
+          )}
+          <div
+            className="h-10 rounded-2xl"
+            style={{
+              width: `${w}%`,
+              background: side === 'left' ? 'var(--bg-elevated)' : 'var(--accent-dim)',
+              borderRadius: side === 'right' ? '18px 18px 4px 18px' : '4px 18px 18px 18px',
+              animation: `pulse 1.6s ease-in-out ${i * 0.1}s infinite`,
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
   const { user } = useAuthStore();
   const { messages, isStreaming, streamContent, activeChat } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -25,7 +62,9 @@ export function ChatWindow({ onSuggestion }: ChatWindowProps) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {isEmpty ? (
+      {isLoading ? (
+        <ChatSkeleton />
+      ) : isEmpty ? (
         <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}

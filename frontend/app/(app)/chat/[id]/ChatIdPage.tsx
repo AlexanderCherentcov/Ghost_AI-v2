@@ -647,23 +647,10 @@ export default function ChatConversationPage() {
     }
   }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, showToast]);
 
-  // Show skeleton while waiting for accessToken (it's restored async via refresh)
-  if (!accessToken) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex flex-col gap-4 px-4 py-6 max-w-[720px] mx-auto w-full">
-          {[70, 45, 85, 50].map((w, i) => (
-            <div key={i} className={`flex gap-3 ${i % 2 === 0 ? '' : 'justify-end'}`}>
-              {i % 2 === 0 && <div className="w-6 h-6 rounded-full flex-shrink-0" style={{ background: 'var(--bg-elevated)' }} />}
-              <div className="h-10 rounded-2xl" style={{ width: `${w}%`, background: 'var(--bg-elevated)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   const busy = isStreaming || generatingImage || generatingVideo || !messagesReady;
+
+  // isLoading = true when we're waiting for token OR waiting for messages from server
+  const isLoading = !accessToken || !messagesReady;
 
   const placeholder = chatMode === 'images'
     ? 'Опишите изображение...'
@@ -675,7 +662,7 @@ export default function ChatConversationPage() {
     <div className="flex flex-col h-full">
       <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
 
-      <ChatWindow onSuggestion={handleSend} />
+      <ChatWindow onSuggestion={handleSend} isLoading={isLoading} />
 
       <InputBar
         onSend={handleSend}

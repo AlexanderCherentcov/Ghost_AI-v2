@@ -64,15 +64,13 @@ export function BottomNav() {
         const handleClick = href === '/chat'
           ? () => { sessionStorage.setItem('newChat', '1'); router.push('/chat'); }
           : undefined;
-        return handleClick ? (
-          <button
-            key={href}
-            onClick={handleClick}
-            className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative',
-              isActive ? 'text-accent' : 'text-[rgba(255,255,255,0.3)]'
-            )}
-          >
+        const itemStyle = isActive ? {} : { color: 'var(--text-secondary)' };
+        const itemClass = cn(
+          'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative',
+          isActive ? 'text-accent' : ''
+        );
+        const content = (
+          <>
             {isActive && (
               <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-accent" />
             )}
@@ -80,23 +78,27 @@ export function BottomNav() {
               <Icon active={isActive} />
             </span>
             <span className="text-[10px] uppercase tracking-wider">{label}</span>
+          </>
+        );
+        return handleClick ? (
+          <button
+            key={href}
+            onClick={handleClick}
+            className={itemClass}
+            style={itemStyle}
+            aria-label={label}
+          >
+            {content}
           </button>
         ) : (
           <Link
             key={href}
             href={href}
-            className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative',
-              isActive ? 'text-accent' : 'text-[rgba(255,255,255,0.3)]'
-            )}
+            className={itemClass}
+            style={itemStyle}
+            aria-label={label}
           >
-            {isActive && (
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-accent" />
-            )}
-            <span className={cn('flex items-center justify-center rounded-xl transition-all', isActive ? 'bg-[var(--accent-dim)] px-3 py-1' : 'px-2 py-1')}>
-              <Icon active={isActive} />
-            </span>
-            <span className="text-[10px] uppercase tracking-wider">{label}</span>
+            {content}
           </Link>
         );
       })}

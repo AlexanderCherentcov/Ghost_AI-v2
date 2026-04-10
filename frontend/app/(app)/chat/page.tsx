@@ -146,10 +146,10 @@ export default function ChatPage() {
         >
           <GhostIcon size={44} className="text-accent animate-float mx-auto mb-6" animated />
 
-          <h1 className="text-[clamp(22px,5vw,36px)] font-normal tracking-tight text-white mb-1">
+          <h1 className="text-[clamp(22px,5vw,36px)] font-normal tracking-tight mb-1" style={{ color: 'var(--text-primary)' }}>
             Здравствуйте, {firstName}!
           </h1>
-          <p className="text-lg text-[rgba(255,255,255,0.4)]">
+          <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>
             С чего начнём?
           </p>
         </motion.div>

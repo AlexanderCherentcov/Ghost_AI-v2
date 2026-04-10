@@ -13,10 +13,12 @@ function Tip({ text }: { text: string }) {
     <div className="relative inline-flex items-center">
       <button
         type="button"
-        className="w-4 h-4 rounded-full flex items-center justify-center text-[rgba(255,255,255,0.22)] hover:text-[rgba(255,255,255,0.55)] transition-colors"
+        className="w-4 h-4 rounded-full flex items-center justify-center transition-colors opacity-30 hover:opacity-70"
+        style={{ color: 'var(--text-primary)' }}
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         tabIndex={-1}
+        aria-label="Подсказка"
       >
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
           <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.2"/>
@@ -192,10 +194,12 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
         className={cn(
           'flex items-center gap-1 px-2 h-7 rounded-md transition-all relative',
           open
-            ? 'bg-[rgba(123,92,240,0.18)] text-accent'
-            : 'text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.65)] hover:bg-[rgba(255,255,255,0.06)]'
+            ? 'bg-[var(--accent-dim)] text-accent'
+            : 'hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80'
         )}
+        style={!open ? { color: 'var(--text-primary)' } : {}}
         title="Настройки видео"
+        aria-label="Настройки видео"
       >
         {/* Sliders / tune icon */}
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -231,12 +235,14 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
             }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
-              <span className="text-[13px] font-medium text-white">Настройки видео</span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>Настройки видео</span>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="w-6 h-6 flex items-center justify-center rounded-md text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-[var(--bg-void)] transition-colors opacity-40 hover:opacity-80"
+                style={{ color: 'var(--text-primary)' }}
+                aria-label="Закрыть"
               >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                   <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
@@ -245,9 +251,9 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
             </div>
 
             {/* ── Camera presets ── */}
-            <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
+            <div className="px-4 py-3 border-b border-[var(--border)]">
               <div className="flex items-center gap-1.5 mb-3">
-                <span className="text-[10px] font-semibold text-[rgba(255,255,255,0.4)] uppercase tracking-widest">
+                <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                   Движение камеры
                 </span>
                 <Tip text="Как камера будет двигаться во время съёмки. «Статично» — без движения, объект в фокусе." />
@@ -259,11 +265,12 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
                     type="button"
                     onClick={() => onChange({ ...options, cameraPreset: preset.key })}
                     className={cn(
-                      'flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-xl text-[10px] leading-none transition-all',
+                      'flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-xl text-[10px] leading-none transition-all border',
                       options.cameraPreset === preset.key
-                        ? 'bg-[rgba(123,92,240,0.22)] text-accent border border-[rgba(123,92,240,0.4)]'
-                        : 'text-[rgba(255,255,255,0.38)] border border-transparent hover:bg-[rgba(255,255,255,0.05)] hover:text-[rgba(255,255,255,0.7)]'
+                        ? 'bg-[var(--accent-dim)] text-accent border-[var(--accent-border)]'
+                        : 'border-transparent hover:bg-[var(--bg-void)] opacity-50 hover:opacity-80'
                     )}
+                    style={options.cameraPreset !== preset.key ? { color: 'var(--text-primary)' } : {}}
                   >
                     {preset.icon}
                     <span className="text-center leading-tight">{preset.label}</span>
@@ -273,9 +280,9 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
             </div>
 
             {/* ── Negative prompt ── */}
-            <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
+            <div className="px-4 py-3 border-b border-[var(--border)]">
               <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-[10px] font-semibold text-[rgba(255,255,255,0.4)] uppercase tracking-widest">
+                <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                   Исключить из видео
                 </span>
                 <Tip text="Опишите то, чего не должно быть в видео. Например: размытость, дым, текст, люди на фоне." />
@@ -285,13 +292,13 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
                 onChange={(e) => onChange({ ...options, negativePrompt: e.target.value })}
                 placeholder="размытость, плохое качество, водяной знак..."
                 rows={2}
-                className="w-full rounded-xl px-3 py-2 text-[12px] text-[rgba(255,255,255,0.75)] placeholder:text-[rgba(255,255,255,0.18)] outline-none resize-none transition-colors"
+                className="w-full rounded-xl px-3 py-2 text-[12px] outline-none resize-none transition-colors placeholder:opacity-30"
                 style={{
                   background: 'var(--bg-input)',
                   border: '1px solid var(--border)',
                   color: 'var(--text-primary)',
                 }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(123,92,240,0.4)'; }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-border)'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
               />
             </div>
@@ -300,7 +307,7 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
             <div className="px-4 py-3">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-[rgba(255,255,255,0.4)] uppercase tracking-widest">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
                     Точность
                   </span>
                   <Tip text="Насколько строго итоговое видео следует вашему описанию. Ближе к «Свободно» — больше творчества, ближе к «Точно» — строже по тексту." />
@@ -324,8 +331,8 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
                 }}
               />
               <div className="flex justify-between mt-1">
-                <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Свободно</span>
-                <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Точно</span>
+                <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Свободно</span>
+                <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Точно</span>
               </div>
             </div>
           </motion.div>

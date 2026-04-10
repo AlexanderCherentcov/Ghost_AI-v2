@@ -56,7 +56,7 @@ function SupportInlineForm({ userEmail }: { userEmail: string | null }) {
     return (
       <div className="text-center py-2">
         <p className="text-accent font-medium mb-1">✓ Сообщение отправлено</p>
-        <p className="text-sm text-[rgba(255,255,255,0.4)]">Ответим на {userEmail ?? 'ваш email'}.</p>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Ответим на {userEmail ?? 'ваш email'}.</p>
         <button onClick={() => setSent(false)} className="mt-3 text-sm text-accent hover:opacity-80">
           Написать ещё
         </button>
@@ -67,20 +67,21 @@ function SupportInlineForm({ userEmail }: { userEmail: string | null }) {
   return (
     <div className="space-y-3">
       {userEmail && (
-        <p className="text-xs text-[rgba(255,255,255,0.3)]">Ответ придёт на {userEmail}</p>
+        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Ответ придёт на {userEmail}</p>
       )}
       <textarea
         placeholder="Опишите вашу проблему или вопрос..."
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         rows={4}
-        className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-base)] text-sm text-white placeholder-[rgba(255,255,255,0.3)] focus:outline-none focus:border-accent resize-none"
+        className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm focus:outline-none focus:border-accent resize-none transition-colors"
+        style={{ color: 'var(--text-primary)' }}
       />
       {error && <p className="text-xs text-red-400">{error}</p>}
       <button
         onClick={handleSend}
         disabled={sending || !message.trim()}
-        className="btn btn-primary h-10 px-5 text-sm disabled:opacity-40"
+        className="btn btn-primary h-10 px-5 text-sm disabled:opacity-40 w-full sm:w-auto"
       >
         {sending ? 'Отправка...' : 'Отправить в поддержку'}
       </button>
@@ -115,26 +116,27 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="px-6 py-5 border-b border-[var(--border)]">
-        <h1 className="text-xl font-medium text-white">Настройки</h1>
+      <div className="px-4 sm:px-6 py-5 border-b border-[var(--border)]">
+        <h1 className="text-xl font-medium" style={{ color: 'var(--text-primary)' }}>Настройки</h1>
       </div>
 
-      <div className="flex-1 max-w-2xl mx-auto w-full px-6 py-6 space-y-6">
+      <div className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Response style */}
         <div className="card">
-          <h2 className="font-medium text-white mb-1">Стиль ответов</h2>
-          <p className="text-sm text-[rgba(255,255,255,0.3)] mb-4">Как GhostLine отвечает на вопросы</p>
+          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Стиль ответов</h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Как GhostLine отвечает на вопросы</p>
           <div className="flex flex-wrap gap-2 mb-4">
             {STYLES.map(({ id, label }) => (
               <button
                 key={id}
                 onClick={() => setStyle(id)}
                 className={cn(
-                  'px-4 py-2 rounded-xl text-sm border transition-all',
+                  'px-3 py-1.5 rounded-xl text-sm border transition-all',
                   style === id
                     ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                    : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)]'
+                    : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                 )}
+                style={style !== id ? { color: 'var(--text-secondary)' } : {}}
               >
                 {label}
               </button>
@@ -151,13 +153,13 @@ export default function SettingsPage() {
 
         {/* Appearance */}
         <div className="card">
-          <h2 className="font-medium text-white mb-1">Внешний вид</h2>
-          <p className="text-sm text-[rgba(255,255,255,0.3)] mb-4">Тема и размер шрифта</p>
+          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Внешний вид</h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Тема и размер шрифта</p>
 
           <div className="space-y-4">
             {/* Theme */}
             <div>
-              <p className="text-xs text-[rgba(255,255,255,0.4)] mb-2 uppercase tracking-wider">Тема</p>
+              <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Тема</p>
               <div className="flex gap-2">
                 {([
                   { key: 'dark' as Theme,  label: '🌙 Тёмная' },
@@ -167,11 +169,12 @@ export default function SettingsPage() {
                     key={key}
                     onClick={() => { setTheme(key); applyTheme(key); }}
                     className={cn(
-                      'flex-1 py-2 rounded-xl text-sm border transition-all',
+                      'flex-1 py-2.5 rounded-xl text-sm border transition-all focus-visible:ring-2 focus-visible:ring-accent',
                       theme === key
                         ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                        : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)]'
+                        : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                     )}
+                    style={theme !== key ? { color: 'var(--text-secondary)' } : {}}
                   >
                     {label}
                   </button>
@@ -181,7 +184,7 @@ export default function SettingsPage() {
 
             {/* Font size */}
             <div>
-              <p className="text-xs text-[rgba(255,255,255,0.4)] mb-2 uppercase tracking-wider">Размер шрифта</p>
+              <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Размер шрифта</p>
               <div className="flex gap-2">
                 {([
                   { key: 'small' as FontSize,  label: 'A', desc: 'Мелкий' },
@@ -192,11 +195,12 @@ export default function SettingsPage() {
                     key={key}
                     onClick={() => { setFontSize(key); applyFontSize(key); }}
                     className={cn(
-                      'flex-1 py-2 flex flex-col items-center rounded-xl border transition-all',
+                      'flex-1 py-2 flex flex-col items-center rounded-xl border transition-all focus-visible:ring-2 focus-visible:ring-accent',
                       fontSize === key
                         ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                        : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)]'
+                        : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                     )}
+                    style={fontSize !== key ? { color: 'var(--text-secondary)' } : {}}
                   >
                     <span style={{ fontSize: 12 + i * 3 }}>{label}</span>
                     <span className="text-[10px] mt-0.5 opacity-60">{desc}</span>
@@ -209,14 +213,14 @@ export default function SettingsPage() {
 
         {/* Account */}
         <div className="card">
-          <h2 className="font-medium text-white mb-4">Аккаунт</h2>
+          <h2 className="font-medium mb-4" style={{ color: 'var(--text-primary)' }}>Аккаунт</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-[var(--border)]">
-              <span className="text-sm text-[rgba(255,255,255,0.5)]">Email</span>
-              <span className="text-sm text-white">{user?.email ?? 'Не указан'}</span>
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Email</span>
+              <span className="text-sm truncate ml-3 max-w-[60%] text-right" style={{ color: 'var(--text-primary)' }}>{user?.email ?? 'Не указан'}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-[var(--border)]">
-              <span className="text-sm text-[rgba(255,255,255,0.5)]">Plan</span>
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Тариф</span>
               <span className="text-sm text-accent">{user?.plan ?? 'FREE'}</span>
             </div>
           </div>
@@ -224,8 +228,8 @@ export default function SettingsPage() {
 
         {/* Support */}
         <div className="card">
-          <h2 className="font-medium text-white mb-1">Поддержка</h2>
-          <p className="text-sm text-[rgba(255,255,255,0.3)] mb-4">Напишите нам — ответим на ваш email</p>
+          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Поддержка</h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Напишите нам — ответим на ваш email</p>
           <SupportInlineForm userEmail={user?.email ?? null} />
         </div>
 
@@ -234,7 +238,7 @@ export default function SettingsPage() {
           <h2 className="font-medium text-red-400 mb-4">Выход</h2>
           <button
             onClick={handleLogout}
-            className="btn btn-ghost h-10 px-5 text-sm border-red-500/30 text-red-400 hover:bg-red-500/10"
+            className="btn btn-ghost h-10 px-5 text-sm border-red-500/30 text-red-400 hover:bg-red-500/10 w-full sm:w-auto"
           >
             Выйти из аккаунта
           </button>

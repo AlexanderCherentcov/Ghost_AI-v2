@@ -47,7 +47,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div className={`relative max-w-[85%] ${isUser ? 'order-first' : ''}`}>
         {isUser ? (
           /* User bubble */
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[18px_4px_18px_18px] px-4 py-3 text-sm text-[rgba(255,255,255,0.88)] leading-relaxed">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[18px_4px_18px_18px] px-4 py-3 text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
             {/* Image preview */}
             {message.mediaUrl && (
               <div className="mb-2 rounded-xl overflow-hidden max-w-[260px]">
@@ -90,13 +90,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.3)] hover:text-white transition-colors"
+                className="flex items-center gap-1.5 text-[11px] transition-colors"
+                style={{ color: copied ? 'var(--accent)' : 'var(--text-secondary)' }}
               >
                 {copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
                 {copied ? 'Скопировано' : 'Копировать'}
               </button>
               {message.cacheHit && (
-                <span className="text-[11px] text-[rgba(123,92,240,0.5)]">⚡ Кэш</span>
+                <span className="text-[11px]" style={{ color: 'rgba(123,92,240,0.5)' }}>⚡ Кэш</span>
               )}
             </div>
           </div>
@@ -125,9 +126,9 @@ function fileIcon(name: string): string {
 
 function FileChip({ name }: { name: string }) {
   return (
-    <div className="flex items-center gap-1.5 mb-2 bg-[rgba(255,255,255,0.06)] rounded-lg px-2.5 py-1.5 w-fit max-w-[240px]">
+    <div className="flex items-center gap-1.5 mb-2 rounded-lg px-2.5 py-1.5 w-fit max-w-[240px]" style={{ background: 'var(--bg-elevated)' }}>
       <span className="text-sm leading-none">{fileIcon(name)}</span>
-      <span className="text-xs text-[rgba(255,255,255,0.7)] truncate">{name}</span>
+      <span className="text-xs truncate" style={{ color: 'var(--text-primary)' }}>{name}</span>
     </div>
   );
 }
@@ -192,11 +193,11 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
         ))}
       </div>
       <div className="flex flex-col items-center gap-1 px-4 text-center">
-        <span className="text-[13px] font-medium text-[rgba(255,255,255,0.6)]">
+        <span className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
           {isVideo ? 'Генерирую видео...' : 'Генерирую картинку...'}
         </span>
         {isVideo && (
-          <span className="text-[11px] text-[rgba(255,255,255,0.25)]">
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
             Обычно занимает 1–3 минуты
           </span>
         )}
@@ -231,7 +232,8 @@ function MediaContent({
         <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
           <button
             onClick={() => downloadFile(mediaUrl, 'jpg')}
-            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+            style={{ color: 'var(--text-secondary)' }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -284,7 +286,8 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
         <div className="flex items-center gap-3">
           <button
             onClick={toggleMute}
-            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+            style={{ color: 'var(--text-secondary)' }}
           >
             {muted ? (
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -301,7 +304,8 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
         <div className="flex items-center gap-3">
           <button
             onClick={onOpen}
-            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+            style={{ color: 'var(--text-secondary)' }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2 2h3M2 2v3M10 10H7M10 10V7M2 10h3M2 10V7M10 2H7M10 2v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -310,7 +314,8 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
           </button>
           <button
             onClick={() => downloadFile(mediaUrl, 'mp4')}
-            className="flex items-center gap-1.5 text-[11px] text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+            style={{ color: 'var(--text-secondary)' }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>

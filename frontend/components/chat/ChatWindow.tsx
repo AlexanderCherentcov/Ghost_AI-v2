@@ -33,8 +33,8 @@ export function ChatWindow({ onSuggestion }: ChatWindowProps) {
             transition={{ duration: 0.5 }}
           >
             <GhostIcon size={64} className="text-accent animate-float mx-auto mb-6" animated />
-            <h1 className="text-3xl font-medium text-white mb-2">Чем займёмся?</h1>
-            <p className="text-sm text-[rgba(255,255,255,0.3)]">
+            <h1 className="text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Чем займёмся?</h1>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               {greetingByHour()}{user?.name ? `, ${user.name.charAt(0).toUpperCase() + user.name.slice(1)}` : ''}.
             </p>
           </motion.div>
@@ -55,7 +55,7 @@ export function ChatWindow({ onSuggestion }: ChatWindowProps) {
               className="flex gap-3 py-4"
             >
               <GhostIcon size={24} className="text-accent flex-shrink-0 mt-0.5" />
-              <div className="flex-1 text-[rgba(255,255,255,0.88)] leading-7 prose-ghost">
+              <div className="flex-1 leading-7 prose-ghost" style={{ color: 'var(--text-primary)' }}>
                 <span>{streamContent}</span>
                 <span className="ghost-cursor" />
               </div>

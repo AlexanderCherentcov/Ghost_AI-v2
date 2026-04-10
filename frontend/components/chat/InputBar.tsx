@@ -128,7 +128,8 @@ function ModelPill({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1 text-[12px] text-[rgba(255,255,255,0.45)] hover:text-[rgba(255,255,255,0.8)] transition-colors rounded-md px-1.5 py-0.5 hover:bg-[rgba(255,255,255,0.06)]"
+        className="flex items-center gap-1 text-[12px] transition-colors rounded-md px-1.5 py-0.5"
+        style={{ color: 'var(--text-secondary)' }}
       >
         {current.label}
         <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
@@ -158,11 +159,12 @@ function ModelPill({
                     setOpen(false);
                   }}
                   className={cn(
-                    'w-full text-left px-4 py-2.5 text-[12px] transition-colors hover:bg-[rgba(255,255,255,0.05)] flex items-center justify-between',
+                    'w-full text-left px-4 py-2.5 text-[12px] transition-colors flex items-center justify-between hover:bg-[var(--bg-void)]',
                     preferredModel === opt.key
                       ? 'text-accent'
-                      : 'text-[rgba(255,255,255,0.65)]'
+                      : ''
                   )}
+                  style={preferredModel !== opt.key ? { color: 'var(--text-primary)' } : {}}
                 >
                   {opt.label}
                   {isProLocked && (
@@ -324,7 +326,7 @@ export function InputBar({
 
             {/* 10s warning */}
             {videoOptions.duration === 10 && (
-              <span className="text-[10px] text-[rgba(255,200,80,0.7)]">
+              <span className="text-[10px]" style={{ color: 'rgba(255,200,80,0.7)' }}>
                 10с = 2 генерации видео
               </span>
             )}
@@ -338,13 +340,13 @@ export function InputBar({
             animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-2 mb-2 px-1"
           >
-            <div className="flex items-center gap-2 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-1.5 max-w-[340px]">
-              <span className="text-base leading-none">{fileIcon(attachedFile)}</span>
+            <div className="flex items-center gap-2 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg px-3 py-1.5 max-w-[340px] min-w-0">
+              <span className="text-base leading-none flex-shrink-0">{fileIcon(attachedFile)}</span>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs text-[rgba(255,255,255,0.75)] truncate font-medium">
+                <span className="text-xs truncate font-medium" style={{ color: 'var(--text-primary)' }}>
                   {attachedFile.name}
                 </span>
-                <span className="text-[10px] text-[rgba(255,255,255,0.3)]">
+                <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>
                   {formatSize(attachedFile.size)}
                   {category === 'binary' && ' · будет извлечён текст'}
                   {category === 'image' && ' · изображение'}
@@ -354,7 +356,8 @@ export function InputBar({
             </div>
             <button
               onClick={() => setAttachedFile(null)}
-              className="text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)] text-sm focus:outline-none flex-shrink-0"
+              className="text-sm focus:outline-none flex-shrink-0 opacity-40 hover:opacity-80 transition-opacity"
+              style={{ color: 'var(--text-primary)' }}
               type="button"
               aria-label="Удалить файл"
             >
@@ -390,9 +393,9 @@ export function InputBar({
             placeholder={placeholder ?? 'Напишите что-нибудь...'}
             disabled={disabled}
             rows={1}
-            style={{ fontSize: '16px', minHeight: '36px' }}
+            style={{ fontSize: '16px', minHeight: '36px', color: 'var(--text-primary)' }}
             className={cn(
-              'w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[200px]',
+              'w-full bg-transparent resize-none outline-none leading-[1.75] max-h-[200px] placeholder:opacity-30',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
           />
@@ -403,9 +406,11 @@ export function InputBar({
               {/* Attach / plus button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.65)] transition-colors focus:outline-none rounded-md hover:bg-[rgba(255,255,255,0.06)]"
+                className="w-7 h-7 flex items-center justify-center transition-colors focus:outline-none rounded-md hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80"
+                style={{ color: 'var(--text-primary)' }}
                 title="Прикрепить файл"
                 type="button"
+                aria-label="Прикрепить файл"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -423,9 +428,10 @@ export function InputBar({
                       className={cn(
                         'px-2 py-0.5 rounded-md text-[12px] transition-colors',
                         chatMode === m.key
-                          ? 'bg-[rgba(123,92,240,0.18)] text-accent font-medium'
-                          : 'text-[rgba(255,255,255,0.32)] hover:text-[rgba(255,255,255,0.65)]'
+                          ? 'bg-[var(--accent-dim)] text-accent font-medium'
+                          : 'hover:opacity-80 opacity-40'
                       )}
+                      style={chatMode !== m.key ? { color: 'var(--text-primary)' } : {}}
                     >
                       {m.label}
                     </button>
@@ -473,8 +479,9 @@ export function InputBar({
                   'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all focus:outline-none',
                   hasContent && !disabled
                     ? 'bg-accent text-white hover:opacity-90'
-                    : 'bg-[var(--bg-elevated)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
+                    : 'bg-[var(--bg-elevated)] cursor-not-allowed opacity-40'
                 )}
+                style={!(hasContent && !disabled) ? { color: 'var(--text-secondary)' } : {}}
               >
                 <SendIcon size={15} />
               </motion.button>
@@ -482,7 +489,7 @@ export function InputBar({
           </div>
         </div>
 
-        <p className="text-center text-[11px] text-[rgba(255,255,255,0.15)] mt-2">
+        <p className="text-center text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
           GhostLine может ошибаться. Проверяйте важную информацию.
         </p>
       </div>

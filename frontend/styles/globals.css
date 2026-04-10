@@ -11,6 +11,7 @@
   --bg-surface:     #0E0E1A;
   --bg-elevated:    #13131F;
   --bg-input:       #161625;
+  --bg-base:        #0A0A12;
 
   --accent:         #7B5CF0;
   --accent-glow:    rgba(123, 92, 240, 0.15);
@@ -31,6 +32,8 @@
 
   --sidebar-width:  260px;
   --bottom-nav-h:   60px;
+
+  color-scheme: dark;
 }
 
 /* ─── Light theme ────────────────────────────────────────────────────────────── */
@@ -41,6 +44,12 @@ html.light {
   --bg-surface:     #EFEFF8;
   --bg-elevated:    #E8E8F2;
   --bg-input:       #E0E0EC;
+  --bg-base:        #F6F6FC;
+
+  --accent:         #6B4CE0;
+  --accent-glow:    rgba(107, 76, 224, 0.12);
+  --accent-dim:     rgba(107, 76, 224, 0.10);
+  --accent-border:  rgba(107, 76, 224, 0.30);
 
   --text-primary:   rgba(0, 0, 0, 0.82);
   --text-secondary: rgba(0, 0, 0, 0.48);
@@ -73,24 +82,26 @@ html.light body { background: var(--bg-primary); color: var(--text-primary); }
    Since this CSS comes after @tailwind utilities it wins on equal specificity. */
 
 /* Text overrides */
-html.light [class~="text-white"]                  { color: var(--text-primary); }
-html.light [class*="text-[rgba(255,255,255"]       { color: var(--text-primary); }
-html.light [class*="hover:text-white"]:hover       { color: var(--text-primary); }
-html.light [class*="hover:text-[rgba(255"]:hover   { color: var(--text-secondary); }
+html.light [class~="text-white"]                    { color: var(--text-primary) !important; }
+html.light [class*="text-[rgba(255,255,255"]         { color: var(--text-primary) !important; }
+html.light [class*="hover:text-white"]:hover         { color: var(--text-primary) !important; }
+html.light [class*="hover:text-[rgba(255"]:hover     { color: var(--text-secondary) !important; }
+html.light [class*="placeholder:text-[rgba(255"]::placeholder { color: var(--text-muted); }
 
 /* Background overrides — white-alpha → dark-alpha equivalents */
-html.light [class*="bg-[rgba(255,255,255"]         { background-color: rgba(0,0,0,0.04); }
-html.light [class*="hover:bg-[rgba(255,255,255"]:hover { background-color: rgba(0,0,0,0.05); }
+html.light [class*="bg-[rgba(255,255,255"]           { background-color: rgba(0,0,0,0.04) !important; }
+html.light [class*="hover:bg-[rgba(255,255,255"]:hover { background-color: rgba(0,0,0,0.06) !important; }
+html.light [class*="focus-within:shadow-[0_0_0_3px_var(--accent"] { box-shadow: 0 0 0 3px var(--accent-glow) !important; }
 
 /* Border overrides */
-html.light [class*="border-[rgba(255,255,255"]     { border-color: var(--border); }
+html.light [class*="border-[rgba(255,255,255"]       { border-color: var(--border) !important; }
 
 /* Scrollbar */
 html.light ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.15); }
 html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
 
 /* Selection */
-html.light ::selection { background: rgba(123,92,240,0.18); color: inherit; }
+html.light ::selection { background: rgba(107,76,224,0.18); color: inherit; }
 
 /* Markdown prose */
 html.light .prose-ghost                      { color: var(--text-primary); }
@@ -110,7 +121,7 @@ html.light .card {
 
 /* Gradient title text on light bg */
 html.light .gradient-text {
-  background: linear-gradient(135deg, #1a1a2e 0%, #7B5CF0 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #6B4CE0 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -118,6 +129,16 @@ html.light .gradient-text {
 
 /* Input placeholder */
 html.light .input-ghost::placeholder { color: var(--text-muted); }
+
+/* Settings / style buttons in light mode */
+html.light [class*="text-[rgba(255,255,255,0.4)"]   { color: var(--text-secondary) !important; }
+html.light [class*="text-[rgba(255,255,255,0.3)"]   { color: var(--text-secondary) !important; }
+html.light [class*="text-[rgba(255,255,255,0.5)"]   { color: var(--text-secondary) !important; }
+html.light [class*="text-[rgba(255,255,255,0.2)"]   { color: var(--text-muted) !important; }
+html.light [class*="text-[rgba(255,255,255,0.88)"]  { color: var(--text-primary) !important; }
+
+/* Ghost icon wrapper in light mode */
+html.light .ghost-cursor::after { color: var(--accent); }
 
 /* ─── Font sizes ─────────────────────────────────────────────────────────────── */
 html.font-small  { font-size: 13px; }
@@ -132,14 +153,14 @@ html.font-large  { font-size: 17px; }
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Remove ALL focus outlines — custom border/glow handles focus state */
+/* Remove default browser focus outlines — keyboard focus uses :focus-visible below */
 *,
 *:focus,
-*:focus-visible,
 *:focus-within {
-  outline: none !important;
-  outline-offset: 0 !important;
+  outline: none;
+  outline-offset: 0;
 }
+/* Override: restore accessible keyboard focus ring via :focus-visible (defined below) */
 
 textarea,
 input,
@@ -149,12 +170,12 @@ select {
   appearance: none;
 }
 
-/* iOS Safari specific */
+/* iOS Safari: suppress default focus box-shadow but allow our custom one */
 textarea:focus,
 input:focus {
   outline: none !important;
-  box-shadow: none;
-  -webkit-box-shadow: none;
+  /* Do NOT set box-shadow: none here — our .input-ghost:focus rule uses it */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -185,10 +206,11 @@ body {
   color: white;
 }
 
-/* ─── Focus ──────────────────────────────────────────────────────────────────── */
+/* ─── Keyboard Focus (accessible) ────────────────────────────────────────────── */
+/* Only show focus ring for keyboard navigation, not mouse clicks */
 :focus-visible {
-  outline: 2px solid var(--accent-border);
-  outline-offset: 2px;
+  outline: 2px solid var(--accent-border) !important;
+  outline-offset: 2px !important;
   border-radius: var(--radius);
 }
 
@@ -353,8 +375,11 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
   background: var(--bg-surface);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 28px;
+  padding: 20px;
   transition: border-color 200ms, transform 200ms;
+}
+@media (min-width: 480px) {
+  .card { padding: 28px; }
 }
 .card:hover { border-color: var(--border-hover); }
 .card-interactive:hover {
@@ -371,12 +396,16 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
 .prose-ghost p:last-child { margin-bottom: 0; }
 .prose-ghost ul, .prose-ghost ol { padding-left: 20px; margin-bottom: 12px; }
 .prose-ghost li { margin-bottom: 4px; }
-.prose-ghost strong { color: white; font-weight: 600; }
+.prose-ghost strong { color: var(--text-primary); font-weight: 600; }
 .prose-ghost em { color: var(--text-secondary); font-style: italic; }
 .prose-ghost h1, .prose-ghost h2, .prose-ghost h3 {
-  color: white;
+  color: var(--text-primary);
   margin: 20px 0 8px;
+  font-weight: 500;
 }
+.prose-ghost h1 { font-size: 1.4em; }
+.prose-ghost h2 { font-size: 1.2em; }
+.prose-ghost h3 { font-size: 1.05em; }
 .prose-ghost blockquote {
   border-left: 2px solid var(--accent-border);
   padding-left: 12px;
@@ -387,10 +416,21 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
   width: 100%;
   border-collapse: collapse;
   margin: 12px 0;
+  overflow-x: auto;
+  display: block;
 }
 .prose-ghost th, .prose-ghost td {
   border: 0.5px solid var(--border);
   padding: 8px 12px;
   text-align: left;
+  white-space: nowrap;
 }
 .prose-ghost th { background: var(--bg-elevated); }
+.prose-ghost a { color: var(--accent); }
+.prose-ghost a:hover { opacity: 0.8; }
+.prose-ghost code { font-size: 0.875em; }
+.prose-ghost hr {
+  border: none;
+  border-top: 0.5px solid var(--border);
+  margin: 16px 0;
+}

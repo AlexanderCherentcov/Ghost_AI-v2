@@ -95,7 +95,7 @@ export function Sidebar() {
     if (!items.length) return null;
     return (
       <div className="mb-3">
-        <p className="text-[11px] uppercase tracking-wider text-[rgba(255,255,255,0.2)] px-3 mb-1">
+        <p className="text-[11px] uppercase tracking-wider px-3 mb-1" style={{ color: 'var(--text-muted)' }}>
           {label}
         </p>
         {items.map((chat) => (
@@ -105,9 +105,12 @@ export function Sidebar() {
             className={cn(
               'group flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all relative',
               activeChat?.id === chat.id
-                ? 'bg-[var(--bg-elevated)] border-l-2 border-accent text-[rgba(255,255,255,0.9)]'
-                : 'text-[rgba(255,255,255,0.45)] hover:bg-[var(--bg-elevated)] hover:text-[rgba(255,255,255,0.7)]'
+                ? 'bg-[var(--bg-elevated)] border-l-2 border-accent'
+                : 'hover:bg-[var(--bg-elevated)]'
             )}
+            style={{
+              color: activeChat?.id === chat.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+            }}
           >
             {editingId === chat.id ? (
               <input
@@ -120,21 +123,26 @@ export function Sidebar() {
                   if (e.key === 'Escape') setEditingId(null);
                 }}
                 className="flex-1 bg-transparent outline-none text-sm"
+                style={{ color: 'var(--text-primary)' }}
                 onClick={(e) => e.preventDefault()}
               />
             ) : (
-              <span className="flex-1 truncate">{truncate(chat.title, 35)}</span>
+              <span className="flex-1 truncate min-w-0">{truncate(chat.title, 35)}</span>
             )}
-            <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+            <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
               <button
                 onClick={(e) => startEdit(chat.id, chat.title, e)}
-                className="p-1 hover:text-white transition-colors"
+                className="p-1 transition-colors hover:opacity-100 opacity-60"
+                style={{ color: 'var(--text-secondary)' }}
+                aria-label="Переименовать"
               >
                 <EditIcon size={14} />
               </button>
               <button
                 onClick={(e) => handleDeleteChat(chat.id, e)}
-                className="p-1 hover:text-red-400 transition-colors"
+                className="p-1 hover:text-red-400 transition-colors opacity-60"
+                style={{ color: 'var(--text-secondary)' }}
+                aria-label="Удалить"
               >
                 <TrashIcon size={14} />
               </button>
@@ -156,11 +164,13 @@ export function Sidebar() {
       {sidebarOpen ? (
         <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
           <GhostIcon size={24} className="text-accent flex-shrink-0" />
-          <span className="text-base font-medium tracking-tight text-white truncate flex-1">GhostLine</span>
+          <span className="text-base font-medium tracking-tight truncate flex-1" style={{ color: 'var(--text-primary)' }}>GhostLine</span>
           <button
             onClick={toggleSidebar}
-            className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors flex-shrink-0"
+            className="transition-colors flex-shrink-0 hover:opacity-100 opacity-40"
+            style={{ color: 'var(--text-primary)' }}
             title="Свернуть"
+            aria-label="Свернуть боковую панель"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M10 4L6 8L10 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -172,8 +182,10 @@ export function Sidebar() {
           <GhostIcon size={22} className="text-accent" />
           <button
             onClick={toggleSidebar}
-            className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors"
+            className="transition-colors hover:opacity-100 opacity-40"
+            style={{ color: 'var(--text-primary)' }}
             title="Развернуть"
+            aria-label="Развернуть боковую панель"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -187,9 +199,11 @@ export function Sidebar() {
         <button
           onClick={handleNewChat}
           className={cn(
-            'w-full flex items-center rounded-xl border border-[var(--border)] text-sm text-[rgba(255,255,255,0.55)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all',
+            'w-full flex items-center rounded-xl border border-[var(--border)] text-sm hover:bg-[var(--bg-elevated)] transition-all',
             sidebarOpen ? 'gap-2 px-4 py-2.5 justify-start' : 'justify-center p-2.5'
           )}
+          style={{ color: 'var(--text-secondary)' }}
+          aria-label="Новый чат"
         >
           <PlusIcon size={16} className="flex-shrink-0" />
           {sidebarOpen && <span>Новый чат</span>}
@@ -207,7 +221,7 @@ export function Sidebar() {
           <ChatSection label="Эта неделя" items={grouped.week} />
           <ChatSection label="Ранее"      items={grouped.older} />
           {!chats.length && (
-            <p className="text-xs text-[rgba(255,255,255,0.2)] text-center mt-4">
+            <p className="text-xs text-center mt-4" style={{ color: 'var(--text-muted)' }}>
               История пустая
             </p>
           )}
@@ -222,7 +236,7 @@ export function Sidebar() {
           <div className="mb-3 space-y-2">
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
+                <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                   <TokenIcon size={12} className="text-accent" />
                   <span>{balanceLabel}</span>
                 </div>
@@ -243,7 +257,7 @@ export function Sidebar() {
             {isUnlimitedChat && videoLimit > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{videoUsed}/{videoLimit} видео</span>
+                  <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{videoUsed}/{videoLimit} видео</span>
                 </div>
                 <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
                   <div
@@ -268,10 +282,16 @@ export function Sidebar() {
           {sidebarOpen && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{user?.name ?? 'Ghost'}</p>
-                <p className="text-[11px] text-[rgba(255,255,255,0.3)] uppercase tracking-wider">{user?.plan ?? 'FREE'}</p>
+                <p className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{user?.name ?? 'Ghost'}</p>
+                <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{user?.plan ?? 'FREE'}</p>
               </div>
-              <Link href="/settings" className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors">
+              <Link
+                href="/settings"
+                className="transition-colors opacity-40 hover:opacity-100 flex-shrink-0"
+                style={{ color: 'var(--text-primary)' }}
+                title="Настройки"
+                aria-label="Открыть настройки"
+              >
                 <SettingsIcon size={16} />
               </Link>
             </>

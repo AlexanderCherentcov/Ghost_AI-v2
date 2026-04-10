@@ -61,7 +61,7 @@ export default function HistoryPage() {
     if (!items.length) return null;
     return (
       <div className="mb-4">
-        <p className="text-[11px] uppercase tracking-wider text-[rgba(255,255,255,0.25)] px-4 mb-2">
+        <p className="text-[11px] uppercase tracking-wider px-4 mb-2" style={{ color: 'var(--text-muted)' }}>
           {label}
         </p>
         {items.map((chat) => (
@@ -77,15 +77,16 @@ export default function HistoryPage() {
                     if (e.key === 'Enter') handleRename(chat.id);
                     if (e.key === 'Escape') setEditingId(null);
                   }}
-                  className="flex-1 bg-transparent text-sm text-white"
+                  className="flex-1 bg-transparent text-sm"
+                  style={{ color: 'var(--text-primary)' }}
                 />
               </div>
             ) : (
               <Link
                 href={`/chat/${chat.id}`}
-                className="flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-4 py-3 active:bg-[var(--bg-elevated)] transition-colors"
+                className="flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-4 py-3 active:bg-[var(--bg-elevated)] transition-colors hover:border-[var(--border-hover)]"
               >
-                <span className="text-sm text-[rgba(255,255,255,0.75)] truncate flex-1 pr-2">
+                <span className="text-sm truncate flex-1 pr-2" style={{ color: 'var(--text-primary)' }}>
                   {truncate(chat.title, 38)}
                 </span>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -95,13 +96,17 @@ export default function HistoryPage() {
                       setEditingId(chat.id);
                       setEditTitle(chat.title);
                     }}
-                    className="p-1.5 text-[rgba(255,255,255,0.3)] active:text-white"
+                    className="p-1.5 transition-colors opacity-40 hover:opacity-80"
+                    style={{ color: 'var(--text-secondary)' }}
+                    aria-label="Переименовать"
                   >
                     <EditIcon size={15} />
                   </button>
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
-                    className="p-1.5 text-[rgba(255,255,255,0.3)] active:text-red-400"
+                    className="p-1.5 transition-colors opacity-40 hover:opacity-80 hover:text-red-400"
+                    style={{ color: 'var(--text-secondary)' }}
+                    aria-label="Удалить"
                   >
                     <TrashIcon size={15} />
                   </button>
@@ -119,10 +124,11 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
         <GhostIcon size={22} className="text-accent" />
-        <span className="text-base font-medium text-white tracking-tight">Чаты</span>
+        <span className="text-base font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Чаты</span>
         <button
           onClick={handleNewChat}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent/10 text-accent text-sm"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--accent-dim)] text-accent text-sm border border-[var(--accent-border)] transition-colors hover:bg-[rgba(123,92,240,0.18)]"
+          aria-label="Новый чат"
         >
           <PlusIcon size={14} />
           Новый
@@ -132,7 +138,7 @@ export default function HistoryPage() {
       {/* Token bar */}
       <div className="px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-1.5 text-xs text-[rgba(255,255,255,0.4)]">
+          <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <TokenIcon size={12} className="text-accent" />
             <span>{showMsgBar ? `${stdToday}/${stdLimit} сегодня` : 'Безлимитный'}</span>
           </div>
@@ -157,11 +163,12 @@ export default function HistoryPage() {
 
         {!chats.length && (
           <div className="flex flex-col items-center justify-center mt-20 gap-3">
-            <GhostIcon size={48} className="text-[rgba(255,255,255,0.08)]" />
-            <p className="text-sm text-[rgba(255,255,255,0.25)]">История пустая</p>
+            <GhostIcon size={48} className="opacity-10" />
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>История пустая</p>
             <button
               onClick={handleNewChat}
-              className="mt-2 px-4 py-2 rounded-xl bg-accent/10 text-accent text-sm"
+              className="mt-2 px-4 py-2 rounded-xl bg-[var(--accent-dim)] text-accent text-sm border border-[var(--accent-border)]"
+              aria-label="Начать первый чат"
             >
               Начать первый чат
             </button>

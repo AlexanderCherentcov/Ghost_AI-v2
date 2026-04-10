@@ -95,12 +95,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading && !user) return null;
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[var(--bg-primary)]">
+    <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
       <div className="hidden lg:block">
         <Sidebar />
       </div>
       <main
         className={`flex-1 flex flex-col overflow-hidden pb-[60px] lg:pb-0 transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
+        style={{ minWidth: 0 }}
       >
         {children}
       </main>

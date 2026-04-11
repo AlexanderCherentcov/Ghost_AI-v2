@@ -11,10 +11,14 @@ export default function AuthCallbackPage() {
   const { setAuth, clearAuth } = useAuthStore();
 
   useEffect(() => {
-    // Tokens are passed via URL hash (#) — hash is never sent to the server
-    // and never modified by Next.js App Router's history.replaceState calls.
-    const hash = window.location.hash.slice(1); // strip leading '#'
-    const params = new URLSearchParams(hash);
+    // Next.js App Router calls history.replaceState during hydration which
+    // strips both query string AND hash before useEffect runs.
+    // A sync inline script in layout.tsx saves the hash to sessionStorage
+    // before any JS runs, so we can always read it here.
+    const saved = sessionStorage.getItem('_oauthHash') ?? '';
+    sessionStorage.removeItem('_oauthHash');
+    const hash = saved || window.location.hash;
+    const params = new URLSearchParams(hash.slice(1));
     const access = params.get('access');
     const refresh = params.get('refresh');
     const redirect = decodeURIComponent(params.get('redirect') ?? '/chat');

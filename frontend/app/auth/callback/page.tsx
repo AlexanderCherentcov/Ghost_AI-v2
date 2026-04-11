@@ -11,9 +11,11 @@ export default function AuthCallbackPage() {
   const { setAuth, clearAuth } = useAuthStore();
 
   useEffect(() => {
-    // Read params directly from window.location — useSearchParams() can return
-    // empty object during static-export hydration before Next.js router is ready
-    const params = new URLSearchParams(window.location.search);
+    // Next.js App Router calls history.replaceState during hydration and strips
+    // query params. We pre-save them in a sync inline script before React loads.
+    const saved = sessionStorage.getItem('_oauthSearch') ?? '';
+    sessionStorage.removeItem('_oauthSearch');
+    const params = new URLSearchParams(saved || window.location.search);
     const access = params.get('access');
     const refresh = params.get('refresh');
     const redirect = params.get('redirect') ?? '/chat';

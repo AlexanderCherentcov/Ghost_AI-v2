@@ -94,6 +94,23 @@ services:
     networks:
       - ghost_net
 
+  # ── Frontend (Next.js) ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.ghostlineai.ru}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://api.ghostlineai.ru}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://ghostlineai.ru}
+        NEXT_PUBLIC_TG_BOT_USERNAME: ${NEXT_PUBLIC_TG_BOT_USERNAME:-GhostSuperAI_bot}
+    image: ghostline-frontend:latest
+    restart: always
+    expose:
+      - '3000'
+    networks:
+      - ghost_net
+
   # ── Nginx (reverse proxy + SSL) ───────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
@@ -107,6 +124,7 @@ services:
       - letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
+      - frontend
     networks:
       - ghost_net
 

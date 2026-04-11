@@ -11,14 +11,13 @@ export default function AuthCallbackPage() {
   const { setAuth, clearAuth } = useAuthStore();
 
   useEffect(() => {
-    // Next.js App Router calls history.replaceState during hydration and strips
-    // query params. We pre-save them in a sync inline script before React loads.
-    const saved = sessionStorage.getItem('_oauthSearch') ?? '';
-    sessionStorage.removeItem('_oauthSearch');
-    const params = new URLSearchParams(saved || window.location.search);
+    // Tokens are passed via URL hash (#) — hash is never sent to the server
+    // and never modified by Next.js App Router's history.replaceState calls.
+    const hash = window.location.hash.slice(1); // strip leading '#'
+    const params = new URLSearchParams(hash);
     const access = params.get('access');
     const refresh = params.get('refresh');
-    const redirect = params.get('redirect') ?? '/chat';
+    const redirect = decodeURIComponent(params.get('redirect') ?? '/chat');
 
     if (!access || !refresh) {
       clearAuth();

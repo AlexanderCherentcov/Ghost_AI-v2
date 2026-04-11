@@ -31,7 +31,7 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
     // Callback pages set their own tokens — don't interfere
     const path = window.location.pathname;
-    if (path === '/auth/callback' || path === '/auth/telegram/callback') return;
+    if (path.startsWith('/auth/callback') || path.startsWith('/auth/telegram/callback')) return;
 
     const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
 

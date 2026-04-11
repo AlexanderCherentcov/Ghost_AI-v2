@@ -29,6 +29,10 @@ function AuthInit({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
 
+    // Callback pages set their own tokens — don't interfere
+    const path = window.location.pathname;
+    if (path === '/auth/callback' || path === '/auth/telegram/callback') return;
+
     const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
 
     // Already have user from cache — refresh token silently in background

@@ -187,7 +187,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Redirect to frontend with tokens in query (frontend stores in httpOnly cookie via API)
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
-      `${process.env.FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
+      `${process.env.FRONTEND_URL}/auth/callback/?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
     );
   });
 
@@ -258,7 +258,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
-      `${process.env.FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
+      `${process.env.FRONTEND_URL}/auth/callback/?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
     );
   });
 
@@ -371,7 +371,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const { accessToken, refreshToken } = signTokens(fastify, user.id);
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
-      `${process.env.FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
+      `${process.env.FRONTEND_URL}/auth/callback/?access=${accessToken}&refresh=${refreshToken}&redirect=${redirectUrl}`
     );
   });
 

@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - 'infra/docker-compose.yml'
       - '.github/workflows/deploy.yml'
 
@@ -12,22 +13,42 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "backend=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "frontend=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 178.253.55.232
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND
           script: |
             set -e
             cd /root/ghostline_v2
             git pull origin master
             cd infra
 
-            # Пересобираем и рестартуем только backend
-            docker compose up -d --build --no-deps backend
+            if [ "$DEPLOY_BACKEND" = "true" ]; then
+              echo "→ Rebuilding backend..."
+              docker compose up -d --build --no-deps backend
+            fi
 
-            # Очищаем старые образы
+            if [ "$DEPLOY_FRONTEND" = "true" ]; then
+              echo "→ Rebuilding frontend..."
+              docker compose up -d --build --no-deps frontend
+            fi
+
             docker image prune -f
-
             echo "✅ Deploy done: $(date)"
+        env:
+          DEPLOY_BACKEND: ${{ steps.changes.outputs.backend }}
+          DEPLOY_FRONTEND: ${{ steps.changes.outputs.frontend }}

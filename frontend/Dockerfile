@@ -31,4 +31,4 @@ COPY --from=builder /app/out ./out
 
 EXPOSE 3000
 
-CMD ["serve", "out", "-l", "3000", "--no-clipboard"]
+CMD ["serve", "-s", "out", "-l", "3000", "--no-clipboard"]

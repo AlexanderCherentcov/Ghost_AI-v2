@@ -171,8 +171,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* Theme + font init — runs before paint to prevent flash */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme')||'dark';var f=localStorage.getItem('fontSize')||'medium';var cl=document.documentElement.classList;cl.remove('light','dark');cl.add(t);cl.remove('font-small','font-medium','font-large');if(f!=='medium')cl.add('font-'+f);}catch(e){}})();` }} />
-        {/* Preserve OAuth callback hash before Next.js App Router hydration strips it via history.replaceState */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(window.location.pathname.startsWith('/auth/callback')&&window.location.hash){sessionStorage.setItem('_oauthHash',window.location.hash);}}catch(e){}})();` }} />
+        {/* Preserve OAuth callback hash — store in window global AND sessionStorage.
+            window.__oauthHash survives COOP browsing-context switches that wipe sessionStorage. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(window.location.pathname.startsWith('/auth/callback')&&window.location.hash){var h=window.location.hash;window.__oauthHash=h;try{sessionStorage.setItem('_oauthHash',h);}catch(e){}}}catch(e){}})();` }} />
         {/* JSON-LD */}
         <script
           type="application/ld+json"

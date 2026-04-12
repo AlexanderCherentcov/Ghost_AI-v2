@@ -63,9 +63,13 @@ function AuthInit({ children }: { children: React.ReactNode }) {
     clearAuth();
   }, [hydrated]);
 
-  // Show nothing only on first load when there's no cached user
+  // Show nothing only on first load when there's no cached user.
+  // Callback pages must mount immediately so their useState initializer
+  // can capture the hash/tokens before React effects run.
   const { user } = useAuthStore();
-  if (!hydrated && !user) return null;
+  const isCallback = typeof window !== 'undefined' &&
+    window.location.pathname.startsWith('/auth/callback');
+  if (!isCallback && !hydrated && !user) return null;
 
   return <>{children}</>;
 }

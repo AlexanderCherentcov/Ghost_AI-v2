@@ -45,3 +45,4 @@ specs/
 
 # Claude Code
 .claude/
+.aider*

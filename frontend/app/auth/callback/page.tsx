@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { api, setAccessToken } from '@/lib/api';
@@ -10,18 +10,29 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const { setAuth, clearAuth } = useAuthStore();
 
+  // Read tokens synchronously on first render — before Next.js App Router calls
+  // history.replaceState (which strips the hash) and before any effects run.
+  // Priority: window.__oauthHash (set by inline script, survives COOP context
+  // switches) → sessionStorage → window.location.hash (fallback).
+  const [tokenData] = useState(() => {
+    if (typeof window === 'undefined') return { access: '', refresh: '', redirect: '/chat' };
+    const w = window as any;
+    const fromGlobal: string = w.__oauthHash ?? '';
+    const fromSS: string = (() => {
+      try { const v = sessionStorage.getItem('_oauthHash') ?? ''; if (v) sessionStorage.removeItem('_oauthHash'); return v; } catch { return ''; }
+    })();
+    const hash = fromGlobal || fromSS || window.location.hash || '';
+    w.__oauthHash = undefined;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    return {
+      access: params.get('access') ?? '',
+      refresh: params.get('refresh') ?? '',
+      redirect: decodeURIComponent(params.get('redirect') ?? '/chat'),
+    };
+  });
+
   useEffect(() => {
-    // Next.js App Router calls history.replaceState during hydration which
-    // strips both query string AND hash before useEffect runs.
-    // A sync inline script in layout.tsx saves the hash to sessionStorage
-    // before any JS runs, so we can always read it here.
-    const saved = sessionStorage.getItem('_oauthHash') ?? '';
-    sessionStorage.removeItem('_oauthHash');
-    const hash = saved || window.location.hash;
-    const params = new URLSearchParams(hash.slice(1));
-    const access = params.get('access');
-    const refresh = params.get('refresh');
-    const redirect = decodeURIComponent(params.get('redirect') ?? '/chat');
+    const { access, refresh, redirect } = tokenData;
 
     if (!access || !refresh) {
       clearAuth();

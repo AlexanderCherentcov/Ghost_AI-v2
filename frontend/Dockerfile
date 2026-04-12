@@ -28,7 +28,6 @@ WORKDIR /app
 RUN npm install -g serve@14
 
 COPY --from=builder /app/out ./out
-COPY serve.json .
 
 EXPOSE 3000
 

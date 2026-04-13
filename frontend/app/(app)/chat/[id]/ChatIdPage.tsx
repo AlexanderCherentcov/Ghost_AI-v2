@@ -153,7 +153,7 @@ export default function ChatConversationPage() {
   const id = segments[segments.length - 1] || 'index';
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
-  const messagesLoadedRef = useRef(false);
+  const loadedChatIdRef = useRef<string | null>(null);
   const { show: showToast } = useToast();
   const {
     messages, setMessages, addMessage, appendStreamToken,
@@ -173,9 +173,11 @@ export default function ChatConversationPage() {
     // via refreshToken call in providers.tsx. Without this guard the request
     // fires before the token is ready and gets a 401.
     if (!accessToken) return;
-    // Prevent double-fetch if token silently refreshes mid-session
-    if (messagesLoadedRef.current) return;
-    messagesLoadedRef.current = true;
+    // Prevent double-fetch for the same chat (e.g. silent token refresh mid-session).
+    // Use ID-based tracking so switching to a different chat always re-fetches.
+    if (loadedChatIdRef.current === id) return;
+    loadedChatIdRef.current = id;
+    setMessagesReady(false);
     localStorage.setItem('lastChatId', id);
     const chat = chats.find((c) => c.id === id);
     if (chat) setActiveChat(chat);

@@ -62,7 +62,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           const me = await api.auth.me();
           setAuth(me, accessToken, newRT);
         })
-        .catch((err) => {
+        .catch((err: any) => {
           if (err?.status === 401) clearAuth();
         });
     };

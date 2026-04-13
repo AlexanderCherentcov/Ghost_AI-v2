@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { ToastProvider } from '@/components/ui/Toast';
-import { api, setAccessToken } from '@/lib/api';
+import { api, setAccessToken, getAccessToken } from '@/lib/api';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,19 +35,10 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
     const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
 
-    // Already have user from cache — refresh token silently in background
-    if (user && refreshToken) {
-      api.auth.refreshToken(refreshToken)
-        .then(async ({ accessToken, refreshToken: newRT }) => {
-          setAccessToken(accessToken);
-          const me = await api.auth.me();
-          setAuth(me, accessToken, newRT);
-        })
-        .catch(() => clearAuth());
-      return;
-    }
+    // Already authenticated with an in-memory access token (e.g. fresh OAuth login) — skip refresh
+    if (user && getAccessToken()) return;
 
-    // No cached user — must refresh to get user
+    // Have a refresh token — use it to get a fresh access token
     if (refreshToken) {
       api.auth.refreshToken(refreshToken)
         .then(async ({ accessToken, refreshToken: newRT }) => {
@@ -55,11 +46,14 @@ function AuthInit({ children }: { children: React.ReactNode }) {
           const me = await api.auth.me();
           setAuth(me, accessToken, newRT);
         })
-        .catch(() => clearAuth());
+        .catch((err) => {
+          // Only clear auth on explicit 401 — network errors or 5xx should not log the user out
+          if (err?.status === 401) clearAuth();
+        });
       return;
     }
 
-    // No refresh token at all
+    // No refresh token — not logged in
     clearAuth();
   }, [hydrated]);
 

@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/chat/:path+", "destination": "/chat/index.html" }
+    { "source": "/chat/:id/:rest+", "destination": "/chat/index/:rest" },
+    { "source": "/chat/:id", "destination": "/chat/index.html" }
   ]
 }

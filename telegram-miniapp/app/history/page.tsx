@@ -127,11 +127,11 @@ function HistoryApp() {
                     setEditingId(chat.id);
                     setEditTitle(chat.title);
                   }}
-                  className="p-1.5 flex-shrink-0"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                  className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg active:bg-white/5"
+                  style={{ color: 'rgba(255,255,255,0.35)' }}
                   title="Переименовать"
                 >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
                     <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
                   </svg>
                 </button>
@@ -142,11 +142,11 @@ function HistoryApp() {
                     handleDelete(chat.id);
                   }}
                   disabled={deletingId === chat.id}
-                  className="p-1.5 flex-shrink-0 disabled:opacity-30 transition-opacity"
-                  style={{ color: 'rgba(255,80,80,0.6)' }}
+                  className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg disabled:opacity-30 transition-opacity active:bg-red-500/10"
+                  style={{ color: 'rgba(255,80,80,0.7)' }}
                   title="Удалить"
                 >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
                     <path d="M2 3.5h10M5 3.5V2.5h4v1M5.5 6v4.5M8.5 6v4.5M3 3.5l.5 8h7l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>

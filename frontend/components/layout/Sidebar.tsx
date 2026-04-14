@@ -124,6 +124,7 @@ export function Sidebar() {
             <Link
               href={`/chat/${chat.id}`}
               className="flex-1 min-w-0 py-2.5"
+              style={{ color: 'inherit' }}
             >
               {editingId === chat.id ? (
                 <input

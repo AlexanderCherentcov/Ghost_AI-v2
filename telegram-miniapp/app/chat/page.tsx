@@ -822,7 +822,7 @@ function ChatApp() {
       </div>
 
       {/* Messages — flex-1, scrollable */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-4">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="text-5xl mb-4 animate-float">👻</div>

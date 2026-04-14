@@ -110,23 +110,24 @@ function HistoryApp() {
               </div>
             ) : (
               <div
-                className="flex items-center rounded-xl px-4 py-3 gap-1"
+                className="flex items-center rounded-xl px-3 py-2 gap-0"
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
                 onClick={() => router.push(`/chat?id=${chat.id}`)}
               >
                 <span
-                  className="flex-1 text-sm truncate"
+                  className="flex-1 text-sm truncate px-1"
                   style={{ color: 'rgba(255,255,255,0.75)' }}
                 >
                   {chat.title.length > 34 ? chat.title.slice(0, 34) + '…' : chat.title}
                 </span>
-                {/* Rename button */}
+                {/* Rename button — 44×44 touch target */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingId(chat.id);
                     setEditTitle(chat.title);
                   }}
+                  onTouchStart={(e) => e.stopPropagation()}
                   className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg active:bg-white/5"
                   style={{ color: 'rgba(255,255,255,0.35)' }}
                   title="Переименовать"
@@ -135,12 +136,13 @@ function HistoryApp() {
                     <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                {/* Delete button */}
+                {/* Delete button — 44×44 touch target */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(chat.id);
                   }}
+                  onTouchStart={(e) => e.stopPropagation()}
                   disabled={deletingId === chat.id}
                   className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg disabled:opacity-30 transition-opacity active:bg-red-500/10"
                   style={{ color: 'rgba(255,80,80,0.7)' }}

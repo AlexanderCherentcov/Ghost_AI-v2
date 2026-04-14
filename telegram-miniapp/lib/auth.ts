@@ -5,12 +5,12 @@ let _accessToken: string | null = null;
 
 function loadToken(): string | null {
   if (_accessToken) return _accessToken;
-  try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
 
 function saveToken(token: string) {
   _accessToken = token;
-  try { sessionStorage.setItem(TOKEN_KEY, token); } catch {}
+  try { localStorage.setItem(TOKEN_KEY, token); } catch {}
 }
 
 export function getToken(): string | null {

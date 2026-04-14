@@ -740,11 +740,11 @@ function ChatApp() {
 
   return (
     <div
-      className="flex flex-col bg-[#0A0A12]"
+      className="flex flex-col bg-[#0A0A12] overflow-hidden"
       style={{
         height: vpHeight,
-        // Reserve space for fixed BottomNav so input never goes behind it
-        paddingBottom: 'calc(68px + env(safe-area-inset-bottom))',
+        // Reserve space for fixed BottomNav (60px) + device safe-area
+        paddingBottom: 'calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px))',
       }}
     >
       {/* Image lightbox */}

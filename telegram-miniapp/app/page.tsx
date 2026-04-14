@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TelegramProvider } from '@/components/TelegramProvider';
-import { initAuth } from '@/lib/auth';
+import { initAuth, getToken } from '@/lib/auth';
 
 export default function TgRootPage() {
   return (
@@ -23,12 +23,21 @@ function TgInit() {
   useEffect(() => {
     async function init() {
       try {
+        const initData = window.Telegram?.WebApp?.initData ?? '';
+
+        // If user already has a token — skip the loading screen and go straight to chat.
+        // Silently refresh the token in the background so it stays fresh.
+        const existingToken = getToken();
+        if (existingToken && initData) {
+          initAuth(initData).catch(() => {});
+          router.replace('/chat');
+          return;
+        }
+
         // Phase 1: 0 → 30% — prepare
         setProgress(10);
         await tick(120);
         setProgress(30);
-
-        const initData = window.Telegram?.WebApp?.initData ?? '';
 
         if (!initData && process.env.NODE_ENV !== 'production') {
           setProgress(100);

@@ -110,43 +110,45 @@ function HistoryApp() {
               </div>
             ) : (
               <div
-                className="flex items-center rounded-xl px-4 py-3 gap-1"
+                className="flex items-center rounded-xl px-3 py-2 gap-0"
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
                 onClick={() => router.push(`/chat?id=${chat.id}`)}
               >
                 <span
-                  className="flex-1 text-sm truncate"
+                  className="flex-1 text-sm truncate px-1"
                   style={{ color: 'rgba(255,255,255,0.75)' }}
                 >
                   {chat.title.length > 34 ? chat.title.slice(0, 34) + '…' : chat.title}
                 </span>
-                {/* Rename button */}
+                {/* Rename button — 44×44 touch target */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingId(chat.id);
                     setEditTitle(chat.title);
                   }}
-                  className="p-1.5 flex-shrink-0"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="flex-shrink-0 flex items-center justify-center transition-opacity active:opacity-60"
+                  style={{ width: 44, height: 44, color: 'rgba(255,255,255,0.35)' }}
                   title="Переименовать"
                 >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
                     <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                {/* Delete button */}
+                {/* Delete button — 44×44 touch target */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(chat.id);
                   }}
+                  onTouchStart={(e) => e.stopPropagation()}
                   disabled={deletingId === chat.id}
-                  className="p-1.5 flex-shrink-0 disabled:opacity-30 transition-opacity"
-                  style={{ color: 'rgba(255,80,80,0.6)' }}
+                  className="flex-shrink-0 flex items-center justify-center disabled:opacity-30 transition-opacity active:opacity-60"
+                  style={{ width: 44, height: 44, color: 'rgba(255,80,80,0.7)' }}
                   title="Удалить"
                 >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
                     <path d="M2 3.5h10M5 3.5V2.5h4v1M5.5 6v4.5M8.5 6v4.5M3 3.5l.5 8h7l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>

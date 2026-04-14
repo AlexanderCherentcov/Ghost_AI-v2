@@ -53,12 +53,13 @@ export function Sidebar() {
   const stdToday    = user?.std_messages_today ?? 0;
   const stdLimit    = user?.std_messages_daily_limit ?? 10;
 
-  // FREE: show std message progress; paid: show images progress
-  const tokenPercent = plan === 'FREE'
+  // FREE/TRIAL: show std message progress; paid: show images progress
+  const showMsgProgress = plan === 'FREE' || plan === 'TRIAL';
+  const tokenPercent = showMsgProgress
     ? Math.min(stdLimit > 0 ? (stdToday / stdLimit) * 100 : 0, 100)
     : Math.min(imagesLimit > 0 ? (imagesUsed / imagesLimit) * 100 : 0, 100);
 
-  const balanceLabel = plan === 'FREE'
+  const balanceLabel = showMsgProgress
     ? `${stdToday}/${stdLimit} сегодня`
     : `${imagesUsed}/${imagesLimit} картинок`;
 

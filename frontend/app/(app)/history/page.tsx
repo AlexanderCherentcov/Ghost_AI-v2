@@ -35,7 +35,7 @@ export default function HistoryPage() {
   const plan = user?.plan ?? 'FREE';
   const stdToday = user?.std_messages_today ?? 0;
   const stdLimit = user?.std_messages_daily_limit ?? 10;
-  const showMsgBar = plan === 'FREE' && stdLimit !== -1;
+  const showMsgBar = (plan === 'FREE' || plan === 'TRIAL') && stdLimit !== -1;
   const tokenPercent = showMsgBar ? Math.min((stdToday / stdLimit) * 100, 100) : 0;
   const grouped = groupChats(chats);
 

@@ -45,22 +45,26 @@ function textKey(
   mode: string,
   complexity: string,
   prompt: string,
-  historyContext: string[]   // только user-сообщения из истории
+  historyContext: string[],  // только user-сообщения из истории
+  responseStyle?: string | null
 ): string {
   const ctx     = historyContext.slice(-2).map(normalize);
   const combined = [...ctx, normalize(prompt)].join('\n↓\n');
-  return `ghost:t:${sha256(`${VER}:${mode}:${complexity}:${combined}`)}`;
+  // Включаем стиль в ключ — ответы для разных стилей не взаимозаменяемы
+  const styleTag = responseStyle ?? 'ghost';
+  return `ghost:t:${sha256(`${VER}:${mode}:${complexity}:${styleTag}:${combined}`)}`;
 }
 
 export async function getTextCached(
   mode: string,
   complexity: string,
   prompt: string,
-  historyContext: string[] = []
+  historyContext: string[] = [],
+  responseStyle?: string | null
 ): Promise<{ hit: true; response: object } | { hit: false }> {
   if (isShortPrompt(prompt)) return { hit: false };  // коротыши → мимо
   try {
-    const raw = await redis.get(textKey(mode, complexity, prompt, historyContext));
+    const raw = await redis.get(textKey(mode, complexity, prompt, historyContext, responseStyle));
     return raw ? { hit: true, response: JSON.parse(raw) } : { hit: false };
   } catch {
     return { hit: false }; // Redis недоступен → miss (fail-open)
@@ -72,12 +76,13 @@ export async function setTextCached(
   complexity: string,
   prompt: string,
   response: object,
-  historyContext: string[] = []
+  historyContext: string[] = [],
+  responseStyle?: string | null
 ): Promise<void> {
   if (isShortPrompt(prompt)) return;
   try {
     await redis.set(
-      textKey(mode, complexity, prompt, historyContext),
+      textKey(mode, complexity, prompt, historyContext, responseStyle),
       JSON.stringify(response),
       'EX',
       TTL_TEXT

@@ -94,6 +94,8 @@ export default function SettingsPage() {
   const { user, setUser, clearAuth } = useAuthStore();
   const [style, setStyle] = useState(user?.responseStyle ?? 'ghost');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [theme, setTheme] = useState<Theme>('dark');
   const [fontSize, setFontSize] = useState<FontSize>('medium');
 
@@ -104,9 +106,18 @@ export default function SettingsPage() {
 
   async function handleSaveStyle() {
     setSaving(true);
-    const updated = await api.auth.updateMe({ responseStyle: style });
-    setUser(updated);
-    setSaving(false);
+    setSaveError('');
+    setSaved(false);
+    try {
+      const updated = await api.auth.updateMe({ responseStyle: style });
+      setUser(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setSaveError('Не удалось сохранить. Попробуйте позже.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleLogout() {
@@ -142,13 +153,21 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={handleSaveStyle}
-            disabled={saving || style === user?.responseStyle}
-            className="btn btn-primary h-10 px-5 text-sm disabled:opacity-40"
-          >
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveStyle}
+              disabled={saving || style === user?.responseStyle}
+              className="btn btn-primary h-10 px-5 text-sm disabled:opacity-40"
+            >
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+            {saved && (
+              <span className="text-sm text-accent animate-fade-in">✓ Сохранено</span>
+            )}
+            {saveError && (
+              <span className="text-sm text-red-400">{saveError}</span>
+            )}
+          </div>
         </div>
 
         {/* Appearance */}

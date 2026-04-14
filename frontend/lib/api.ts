@@ -148,7 +148,7 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  plan: 'FREE' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
+  plan: 'FREE' | 'TRIAL' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
   planExpiresAt: string | null;
   billing: 'MONTHLY' | 'YEARLY';
   // Daily counters

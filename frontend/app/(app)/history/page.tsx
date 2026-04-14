@@ -84,31 +84,36 @@ export default function HistoryPage() {
             ) : (
               <Link
                 href={`/chat/${chat.id}`}
-                className="flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-4 py-3 active:bg-[var(--bg-elevated)] transition-colors hover:border-[var(--border-hover)]"
+                className="flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl pl-4 pr-1 py-1 active:bg-[var(--bg-elevated)] transition-colors hover:border-[var(--border-hover)]"
               >
-                <span className="text-sm truncate flex-1 pr-2" style={{ color: 'var(--text-primary)' }}>
+                <span className="text-sm truncate flex-1 py-2" style={{ color: 'var(--text-primary)' }}>
                   {truncate(chat.title, 38)}
                 </span>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
+                <div className="flex items-center flex-shrink-0">
+                  {/* Rename — 44×44 touch target */}
                   <button
                     onClick={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       setEditingId(chat.id);
                       setEditTitle(chat.title);
                     }}
-                    className="p-1.5 transition-colors opacity-40 hover:opacity-80"
+                    onTouchStart={(e) => { e.stopPropagation(); }}
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-[var(--bg-elevated)]"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Переименовать"
                   >
-                    <EditIcon size={15} />
+                    <EditIcon size={16} />
                   </button>
+                  {/* Delete — 44×44 touch target */}
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
-                    className="p-1.5 transition-colors opacity-40 hover:opacity-80 hover:text-red-400"
+                    onTouchStart={(e) => { e.stopPropagation(); }}
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-red-500/10 hover:text-red-400"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Удалить"
                   >
-                    <TrashIcon size={15} />
+                    <TrashIcon size={16} />
                   </button>
                 </div>
               </Link>
@@ -120,7 +125,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
         <GhostIcon size={22} className="text-accent" />

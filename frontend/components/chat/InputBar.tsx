@@ -393,6 +393,7 @@ export function InputBar({
             placeholder={placeholder ?? 'Напишите что-нибудь...'}
             disabled={disabled}
             rows={1}
+            spellCheck={true}
             style={{ fontSize: '16px', minHeight: '36px', color: 'var(--text-primary)' }}
             className={cn(
               'w-full bg-transparent resize-none outline-none leading-[1.75] max-h-[200px] placeholder:opacity-30',

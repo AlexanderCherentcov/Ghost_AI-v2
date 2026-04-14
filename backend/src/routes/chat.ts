@@ -271,11 +271,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // 1) Redis (точный составной ключ)
         const cached = cacheDisabled
           ? { hit: false as const }
-          : await getTextCached(mode, complexity, effectivePrompt, userHistoryContext);
+          : await getTextCached(mode, complexity, effectivePrompt, userHistoryContext, responseStyle);
 
         // 2) Vector cache (семантический, если Redis не попал)
         const vecCached = (!cacheDisabled && !cached.hit)
-          ? await getVectorCached(mode, effectivePrompt, userHistoryContext)
+          ? await getVectorCached(mode, effectivePrompt, userHistoryContext, responseStyle)
           : { hit: false as const };
 
         // Merge cache hits — TypeScript-safe narrowing through a single variable
@@ -360,8 +360,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         // Cache the response (skip if any attachment present)
         if (!hasAttachment) {
-          await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext);
-          await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext);
+          await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
+          await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
         }
 
         // Save assistant message

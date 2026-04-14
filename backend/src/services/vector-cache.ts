@@ -109,13 +109,16 @@ async function embed(text: string): Promise<number[] | null> {
 export async function getVectorCached(
   mode: string,
   prompt: string,
-  historyContext: string[] = []
+  historyContext: string[] = [],
+  responseStyle?: string | null
 ): Promise<{ hit: true; response: object } | { hit: false }> {
   const combined = [...historyContext.slice(-2), prompt].join('\n');
   const vec = await embed(combined);
   if (!vec) return { hit: false };
 
   const vecStr = `[${vec.join(',')}]`;
+  // Добавляем стиль к mode для изоляции кэша по стилям
+  const modeStyled = `${mode}:${responseStyle ?? 'ghost'}`;
 
   try {
     const rows = await prisma.$queryRawUnsafe<Array<{ response: string; similarity: number }>>(
@@ -125,7 +128,7 @@ export async function getVectorCached(
          AND 1 - (embedding <=> $1::vector) >= $3
        ORDER BY similarity DESC
        LIMIT 1`,
-      vecStr, mode, THRESHOLD
+      vecStr, modeStyled, THRESHOLD
     );
 
     if (rows.length > 0) {
@@ -138,7 +141,7 @@ export async function getVectorCached(
            WHERE mode = $1 AND 1 - (embedding <=> $2::vector) >= $3
            ORDER BY embedding <=> $2::vector LIMIT 1
          )`,
-        mode, vecStr, THRESHOLD
+        modeStyled, vecStr, THRESHOLD
       ).catch(() => {});
 
       return { hit: true, response: JSON.parse(rows[0].response) };
@@ -158,7 +161,8 @@ export async function setVectorCached(
   mode: string,
   prompt: string,
   response: object,
-  historyContext: string[] = []
+  historyContext: string[] = [],
+  responseStyle?: string | null
 ): Promise<void> {
   const combined = [...historyContext.slice(-2), prompt].join('\n');
   const vec = await embed(combined);
@@ -167,6 +171,7 @@ export async function setVectorCached(
   // Стабильный SHA-256 хеш для UNIQUE constraint — необратимый, исходный текст не восстановить
   const hash = createHash('sha256').update(normalize(combined)).digest('hex');
   const vecStr = `[${vec.join(',')}]`;
+  const modeStyled = `${mode}:${responseStyle ?? 'ghost'}`;
 
   try {
     await prisma.$executeRawUnsafe(
@@ -174,7 +179,7 @@ export async function setVectorCached(
        VALUES ($1, $2, $3::vector, $4)
        ON CONFLICT (mode, prompt_hash)
        DO UPDATE SET response = EXCLUDED.response`,
-      mode, hash, vecStr, JSON.stringify(response)
+      modeStyled, hash, vecStr, JSON.stringify(response)
     );
   } catch (err: any) {
     console.warn('[VectorCache] Insert error:', err.message);

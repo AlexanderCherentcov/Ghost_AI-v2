@@ -96,25 +96,30 @@ export default function HistoryPage() {
                   </span>
                 </Link>
                 <div className="flex items-center gap-0 pr-1 flex-shrink-0">
+                  {/* Rename — 44×44 touch target */}
                   <button
                     onClick={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       setEditingId(chat.id);
                       setEditTitle(chat.title);
                     }}
-                    className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors opacity-40 hover:opacity-80 active:bg-[var(--bg-elevated)]"
+                    onTouchStart={(e) => { e.stopPropagation(); }}
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-[var(--bg-elevated)]"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Переименовать"
                   >
-                    <EditIcon size={15} />
+                    <EditIcon size={16} />
                   </button>
+                  {/* Delete — 44×44 touch target */}
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
-                    className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors opacity-40 hover:opacity-80 hover:text-red-400 active:bg-red-500/10"
+                    onTouchStart={(e) => { e.stopPropagation(); }}
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-red-500/10 hover:text-red-400"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Удалить"
                   >
-                    <TrashIcon size={15} />
+                    <TrashIcon size={16} />
                   </button>
                 </div>
               </div>
@@ -126,7 +131,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
         <GhostIcon size={22} className="text-accent" />

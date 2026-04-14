@@ -8,13 +8,24 @@ import { api } from '@/lib/api';
 import { CheckIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
+// trial=true означает фиксированный срок 7 дней, без yearly
 const PLANS = [
+  {
+    key: 'TRIAL',
+    name: 'Пробный',
+    price: 299,
+    price_yearly: 299,
+    badge: '7 дней' as string | undefined,
+    trial: true,
+    features: ['30 сообщений/день', '5 картинок/день', '1 видео/день'],
+  },
   {
     key: 'BASIC',
     name: 'Базовый',
     price: 699,
     price_yearly: 594,
     badge: undefined as string | undefined,
+    trial: false,
     features: ['Безлимитный чат (std)', '20 картинок/день', '40 файлов/месяц'],
   },
   {
@@ -23,6 +34,7 @@ const PLANS = [
     price: 1199,
     price_yearly: 1019,
     badge: 'Популярный',
+    trial: false,
     features: ['Безлимитный чат (std)', '50 про-сообщений/день', '30 картинок/день', '1 видео/день', '150 файлов/месяц'],
   },
   {
@@ -31,6 +43,7 @@ const PLANS = [
     price: 2490,
     price_yearly: 2117,
     badge: undefined,
+    trial: false,
     features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '80 картинок/день', '3 видео/день', '500 файлов/месяц'],
   },
   {
@@ -39,6 +52,7 @@ const PLANS = [
     price: 5490,
     price_yearly: 4667,
     badge: 'Максимум',
+    trial: false,
     features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '150 картинок/день', '5 видео/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
   },
 ];
@@ -96,16 +110,16 @@ export default function BillingPage() {
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
             <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider">Использование сегодня</p>
 
-            {/* Message progress — only for FREE (all paid plans show ∞ to user) */}
-            {plan === 'FREE' && (
+            {/* Message progress — FREE and TRIAL show limit bar */}
+            {(plan === 'FREE' || plan === 'TRIAL') && (
               <UsageBar used={user.std_messages_today} limit={user.std_messages_daily_limit} label="Сообщений сегодня" />
             )}
             {/* Pro messages — show only for STANDARD (PRO/ULTRA have hidden cap) */}
             {user.pro_messages_daily_limit !== 0 && plan === 'STANDARD' && (
               <UsageBar used={user.pro_messages_today} limit={user.pro_messages_daily_limit} label="Про-сообщений" />
             )}
-            {/* Unlimited chat label for all paid plans */}
-            {plan !== 'FREE' && (
+            {/* Unlimited chat label for paid plans with no message cap shown */}
+            {plan !== 'FREE' && plan !== 'TRIAL' && (
               <p className="text-xs text-[rgba(255,255,255,0.3)]">
                 {plan === 'PRO' || plan === 'ULTRA' ? '✨ Чат: безлимитный' : 'Стандартный чат: безлимитный'}
               </p>
@@ -121,7 +135,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Billing toggle */}
+        {/* Billing toggle — hidden when only TRIAL plans visible */}
         <div className="flex items-center gap-3">
           <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>Месяц</span>
           <button
@@ -145,9 +159,10 @@ export default function BillingPage() {
         {/* Plans */}
         <div>
           <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider mb-4">Подписки</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {PLANS.map(({ key, name, price, price_yearly, badge, features }) => {
-              const displayPrice = billingCycle === 'yearly' ? price_yearly : price;
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {PLANS.map(({ key, name, price, price_yearly, badge, trial, features }) => {
+              // TRIAL always shows its fixed price regardless of billing toggle
+              const displayPrice = trial ? price : (billingCycle === 'yearly' ? price_yearly : price);
               return (
                 <motion.div
                   key={key}
@@ -157,12 +172,15 @@ export default function BillingPage() {
                     'card relative flex flex-col',
                     badge === 'Максимум' && 'border-accent',
                     badge === 'Популярный' && 'border-accent/60',
+                    badge === '7 дней' && 'border-accent/40',
                     plan === key && 'border-accent/40 bg-accent/5'
                   )}
                 >
-                  {/* Badge row — badge on top, active pill below to avoid overlap */}
                   {badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-black text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
+                    <div className={cn(
+                      'absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap',
+                      badge === '7 дней' ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-accent text-black'
+                    )}>
                       {badge}
                     </div>
                   )}
@@ -176,9 +194,9 @@ export default function BillingPage() {
                   </div>
                   <div className="text-2xl font-medium mb-1">
                     {displayPrice.toLocaleString('ru-RU')} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
+                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{trial ? '/7 дней' : '/мес'}</span>
                   </div>
-                  {billingCycle === 'yearly' && (
+                  {!trial && billingCycle === 'yearly' && (
                     <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
                       {(displayPrice * 12).toLocaleString('ru-RU')} ₽/год
                     </p>

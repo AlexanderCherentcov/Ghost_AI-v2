@@ -8,29 +8,49 @@ import { apiRequest } from '@/lib/auth';
 
 const PLANS = [
   {
+    key: 'TRIAL',
+    name: 'Пробный',
+    price: 299,
+    priceLabel: '299 ₽ / 7 дней',
+    features: ['30 сообщений/день', '5 картинок/день', '1 видео/день'],
+    trial: true,
+    popular: false,
+  },
+  {
     key: 'BASIC',
     name: 'Базовый',
     price: 699,
+    priceLabel: '699 ₽/мес',
     features: ['Безлимитный чат', '20 картинок/день', '40 файлов/мес'],
+    trial: false,
+    popular: false,
   },
   {
     key: 'STANDARD',
     name: 'Стандарт',
     price: 1199,
+    priceLabel: '1 199 ₽/мес',
     features: ['Безлимитный чат', '50 про/день', '30 картинок/день', '1 видео/день'],
+    trial: false,
     popular: true,
   },
   {
     key: 'PRO',
     name: 'Про',
     price: 2490,
+    priceLabel: '2 490 ₽/мес',
     features: ['Безлимитный чат', '200 про/день', '80 картинок/день', '3 видео/день'],
+    trial: false,
+    popular: false,
   },
   {
     key: 'ULTRA',
     name: 'Ультра',
     price: 5490,
+    priceLabel: '5 490 ₽/мес',
     features: ['Безлимитный чат', '400 про/день', '150 картинок/день', '5 видео/день'],
+    trial: false,
+    popular: false,
   },
 ];
 
@@ -106,15 +126,15 @@ function BalanceApp() {
           <div className="bg-[#0E0E1A] border border-[rgba(255,255,255,0.06)] rounded-2xl p-4 space-y-3">
             <p className="text-xs text-[rgba(255,255,255,0.35)] font-medium uppercase tracking-wider">Использование</p>
 
-            {/* Message progress — FREE only; all paid plans show ∞ to user */}
-            {plan === 'FREE' && (
+            {/* Message progress — FREE and TRIAL show limit; paid plans show ∞ */}
+            {(plan === 'FREE' || plan === 'TRIAL') && (
               <UsageRow label="Сообщения сегодня" used={user.std_messages_today} limit={user.std_messages_daily_limit} />
             )}
             {/* Pro messages — show only for STANDARD; PRO/ULTRA have hidden cap */}
             {user.pro_messages_daily_limit > 0 && plan === 'STANDARD' && (
               <UsageRow label="Про-сообщения" used={user.pro_messages_today} limit={user.pro_messages_daily_limit} />
             )}
-            {plan !== 'FREE' && (
+            {plan !== 'FREE' && plan !== 'TRIAL' && (
               <p className="text-xs text-[rgba(255,255,255,0.3)]">
                 {plan === 'PRO' || plan === 'ULTRA' ? '✨ Чат: безлимитный' : 'Стандартный чат: безлимитный'}
               </p>
@@ -134,24 +154,28 @@ function BalanceApp() {
         <div>
           <h2 className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-3">Подписки</h2>
           <div className="grid grid-cols-2 gap-2">
-            {PLANS.map(({ key, name, price, features, popular }) => {
+            {PLANS.map(({ key, name, priceLabel, features, popular, trial }) => {
               const isActive = plan === key;
               return (
                 <div
                   key={key}
                   className={`bg-[#0E0E1A] border rounded-xl p-3 flex flex-col ${
                     isActive ? 'border-[#7B5CF0]/60 bg-[#7B5CF0]/5' :
-                    popular ? 'border-[#7B5CF0]' : 'border-[rgba(255,255,255,0.06)]'
+                    popular ? 'border-[#7B5CF0]' :
+                    trial ? 'border-[#7B5CF0]/40' : 'border-[rgba(255,255,255,0.06)]'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    {popular && !isActive && (
-                      <span className="text-[10px] text-[#7B5CF0] font-medium">★ Популярный</span>
-                    )}
                     {isActive && (
                       <span className="text-[10px] text-[#7B5CF0] font-semibold">✓ Активен</span>
                     )}
-                    {!popular && !isActive && <span />}
+                    {popular && !isActive && (
+                      <span className="text-[10px] text-[#7B5CF0] font-medium">★ Популярный</span>
+                    )}
+                    {trial && !isActive && (
+                      <span className="text-[10px] text-[#A78BFA] font-medium">7 дней</span>
+                    )}
+                    {!popular && !trial && !isActive && <span />}
                   </div>
                   <p className="text-sm font-medium text-white mb-1.5">{name}</p>
                   <div className="flex-1 mb-3 space-y-0.5">
@@ -168,7 +192,7 @@ function BalanceApp() {
                         : 'bg-[#7B5CF0] text-white'
                     } disabled:opacity-50`}
                   >
-                    {loading === key ? '...' : isActive ? 'Продлить' : `${price.toLocaleString('ru-RU')} ₽/мес`}
+                    {loading === key ? '...' : isActive ? 'Продлить' : priceLabel}
                   </button>
                 </div>
               );

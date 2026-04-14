@@ -29,6 +29,14 @@ export const PLANS = {
     std_messages_daily: 10, pro_messages_daily: 0,
     images_daily: 3,   videos_daily: 0,  files_monthly: 0,
   },
+  TRIAL: {
+    price: 299, price_yearly: 299,
+    label: 'Пробный',
+    show_message_limit: true,
+    duration_days: 7,            // особый срок: 7 дней вместо месяца
+    std_messages_daily: 30, pro_messages_daily: 0,
+    images_daily: 5,   videos_daily: 1,  files_monthly: 0,
+  },
   BASIC: {
     price: 699, price_yearly: 594,
     label: 'Базовый',
@@ -141,7 +149,11 @@ export async function processWebhook(body: unknown): Promise<void> {
     if (planInfo) {
       const billing = (event.object.metadata?.billing === 'yearly' ? 'YEARLY' : 'MONTHLY') as 'MONTHLY' | 'YEARLY';
       const expiresAt = new Date();
-      if (billing === 'YEARLY') {
+      // TRIAL — 7 days; YEARLY — 1 year; default — 1 month
+      const durationDays = (planInfo as any).duration_days as number | undefined;
+      if (durationDays) {
+        expiresAt.setDate(expiresAt.getDate() + durationDays);
+      } else if (billing === 'YEARLY') {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
       } else {
         expiresAt.setMonth(expiresAt.getMonth() + 1);

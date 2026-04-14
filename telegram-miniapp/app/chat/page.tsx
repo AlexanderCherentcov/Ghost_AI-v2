@@ -1204,6 +1204,7 @@ function ChatApp() {
             placeholder={chatMode === 'images' ? 'Опишите изображение...' : chatMode === 'video' ? 'Опишите видео...' : 'Сообщение...'}
             disabled={streaming || generatingVideo}
             rows={1}
+            spellCheck={true}
             style={{ fontSize: '16px', minHeight: '36px' }}
             className="w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[160px]"
           />

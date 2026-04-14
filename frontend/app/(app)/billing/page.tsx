@@ -156,12 +156,13 @@ export default function BillingPage() {
           )}
         </div>
 
-        {/* Plans */}
-        <div>
-          <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider mb-4">Подписки</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            {PLANS.map(({ key, name, price, price_yearly, badge, trial, features }) => {
-              // TRIAL always shows its fixed price regardless of billing toggle
+        {/* Plans — row 1: TRIAL + BASIC + STANDARD (3 cols), row 2: PRO + ULTRA (2 cols) */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Подписки</h2>
+
+          {/* Row 1 — starter plans */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {PLANS.filter(p => ['TRIAL','BASIC','STANDARD'].includes(p.key)).map(({ key, name, price, price_yearly, badge, trial, features }) => {
               const displayPrice = trial ? price : (billingCycle === 'yearly' ? price_yearly : price);
               return (
                 <motion.div
@@ -170,7 +171,6 @@ export default function BillingPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className={cn(
                     'card relative flex flex-col',
-                    badge === 'Максимум' && 'border-accent',
                     badge === 'Популярный' && 'border-accent/60',
                     badge === '7 дней' && 'border-accent/40',
                     plan === key && 'border-accent/40 bg-accent/5'
@@ -179,7 +179,9 @@ export default function BillingPage() {
                   {badge && (
                     <div className={cn(
                       'absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap',
-                      badge === '7 дней' ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-accent text-black'
+                      badge === '7 дней'
+                        ? 'bg-accent/20 text-accent border border-accent/40'
+                        : 'bg-accent text-black'
                     )}>
                       {badge}
                     </div>
@@ -214,9 +216,67 @@ export default function BillingPage() {
                     disabled={loading === key}
                     className={cn(
                       'w-full btn h-9 text-sm',
-                      plan === key
-                        ? 'btn-accent-outline'
-                        : (badge === 'Максимум' || badge === 'Популярный') ? 'btn-primary' : 'btn-ghost'
+                      plan === key ? 'btn-accent-outline' : badge === 'Популярный' ? 'btn-primary' : 'btn-ghost'
+                    )}
+                  >
+                    {loading === key ? 'Загрузка...' : plan === key ? 'Продлить' : 'Подключить'}
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Row 2 — premium plans */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {PLANS.filter(p => ['PRO','ULTRA'].includes(p.key)).map(({ key, name, price, price_yearly, badge, trial, features }) => {
+              const displayPrice = billingCycle === 'yearly' ? price_yearly : price;
+              return (
+                <motion.div
+                  key={key}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    'card relative flex flex-col',
+                    badge === 'Максимум' && 'border-accent',
+                    plan === key && 'border-accent/40 bg-accent/5'
+                  )}
+                >
+                  {badge && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-black text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
+                      {badge}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mb-1 min-h-[18px]">
+                    <h3 className="font-medium text-white">{name}</h3>
+                    {plan === key && (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-2">
+                        ✓ Активен
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-medium mb-1">
+                    {displayPrice.toLocaleString('ru-RU')} ₽
+                    <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
+                  </div>
+                  {billingCycle === 'yearly' && (
+                    <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
+                      {(displayPrice * 12).toLocaleString('ru-RU')} ₽/год
+                    </p>
+                  )}
+                  <ul className="space-y-1.5 mb-5 flex-1 mt-2">
+                    {features.map((f) => (
+                      <li key={f} className="flex items-center gap-2 text-xs text-[rgba(255,255,255,0.4)]">
+                        <CheckIcon size={12} className="text-accent flex-shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => handleBuy(key)}
+                    disabled={loading === key}
+                    className={cn(
+                      'w-full btn h-9 text-sm',
+                      plan === key ? 'btn-accent-outline' : badge === 'Максимум' ? 'btn-primary' : 'btn-ghost'
                     )}
                   >
                     {loading === key ? 'Загрузка...' : plan === key ? 'Продлить' : 'Подключить'}

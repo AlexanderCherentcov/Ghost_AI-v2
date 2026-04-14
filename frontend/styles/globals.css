@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Prevent body-level scroll (all scrolling happens inside app containers) ── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* ─── CSS Variables ─────────────────────────────────────────────────────────── */
 :root {
   --bg-void:        #06060B;

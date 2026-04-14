@@ -145,17 +145,10 @@ export function Sidebar() {
               )}
             </Link>
             {/* Action buttons — always visible on mobile, hover-only on desktop */}
-<<<<<<< HEAD
             <span className="flex items-center gap-0.5 flex-shrink-0 md:opacity-0 md:group-hover:opacity-60 transition-opacity">
               <button
                 onClick={(e) => startEdit(chat.id, chat.title, e)}
                 className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:opacity-100 active:bg-[var(--bg-elevated)]"
-=======
-            <span className="flex items-center gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={(e) => startEdit(chat.id, chat.title, e)}
-                className="p-2 sm:p-1 rounded-lg transition-colors hover:opacity-100 opacity-50 active:bg-[var(--bg-elevated)]"
->>>>>>> claude/musing-satoshi
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Переименовать"
               >
@@ -163,11 +156,7 @@ export function Sidebar() {
               </button>
               <button
                 onClick={(e) => handleDeleteChat(chat.id, e)}
-<<<<<<< HEAD
                 className="flex items-center justify-center w-8 h-8 rounded-lg hover:text-red-400 transition-colors active:bg-red-500/10"
-=======
-                className="p-2 sm:p-1 rounded-lg hover:text-red-400 transition-colors opacity-50 active:bg-red-500/10"
->>>>>>> claude/musing-satoshi
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Удалить"
               >

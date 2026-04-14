@@ -50,6 +50,8 @@ services:
         condition: service_healthy
     ports:
       - '127.0.0.1:4000:4000'   # только localhost — наружу через nginx
+    volumes:
+      - backend_uploads:/app/uploads  # persist generated images across restarts
     networks:
       - ghost_net
     healthcheck:
@@ -160,3 +162,6 @@ volumes:
   letsencrypt:
     external: true
     name: infra_letsencrypt
+  backend_uploads:
+    external: true
+    name: infra_backend_uploads

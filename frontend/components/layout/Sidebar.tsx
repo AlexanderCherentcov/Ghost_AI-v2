@@ -117,7 +117,7 @@ export function Sidebar() {
                 : 'hover:bg-[var(--bg-elevated)]'
             )}
             style={{
-              color: activeChat?.id === chat.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+              color: 'var(--text-primary)',
             }}
           >
             {/* Clickable title area */}

@@ -105,11 +105,10 @@ export function Sidebar() {
           {label}
         </p>
         {items.map((chat) => (
-          <Link
+          <div
             key={chat.id}
-            href={`/chat/${chat.id}`}
             className={cn(
-              'group flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all relative',
+              'group flex items-center gap-2 px-3 rounded-xl text-sm transition-all relative',
               activeChat?.id === chat.id
                 ? 'bg-[var(--bg-elevated)] border-l-2 border-accent'
                 : 'hover:bg-[var(--bg-elevated)]'
@@ -118,42 +117,49 @@ export function Sidebar() {
               color: activeChat?.id === chat.id ? 'var(--text-primary)' : 'var(--text-secondary)',
             }}
           >
-            {editingId === chat.id ? (
-              <input
-                autoFocus
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onBlur={() => handleRenameChat(chat.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRenameChat(chat.id);
-                  if (e.key === 'Escape') setEditingId(null);
-                }}
-                className="flex-1 bg-transparent outline-none text-sm"
-                style={{ color: 'var(--text-primary)' }}
-                onClick={(e) => e.preventDefault()}
-              />
-            ) : (
-              <span className="flex-1 truncate min-w-0">{truncate(chat.title, 35)}</span>
-            )}
-            <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
+            {/* Clickable title area */}
+            <Link
+              href={`/chat/${chat.id}`}
+              className="flex-1 min-w-0 py-2.5"
+            >
+              {editingId === chat.id ? (
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={() => handleRenameChat(chat.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRenameChat(chat.id);
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  className="w-full bg-transparent outline-none text-sm"
+                  style={{ color: 'var(--text-primary)' }}
+                  onClick={(e) => e.preventDefault()}
+                />
+              ) : (
+                <span className="block truncate">{truncate(chat.title, 28)}</span>
+              )}
+            </Link>
+            {/* Action buttons — always visible on mobile, hover-only on desktop */}
+            <span className="flex items-center gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
               <button
                 onClick={(e) => startEdit(chat.id, chat.title, e)}
-                className="p-1 transition-colors hover:opacity-100 opacity-60"
+                className="p-2 sm:p-1 rounded-lg transition-colors hover:opacity-100 opacity-50 active:bg-[var(--bg-elevated)]"
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Переименовать"
               >
-                <EditIcon size={14} />
+                <EditIcon size={15} />
               </button>
               <button
                 onClick={(e) => handleDeleteChat(chat.id, e)}
-                className="p-1 hover:text-red-400 transition-colors opacity-60"
+                className="p-2 sm:p-1 rounded-lg hover:text-red-400 transition-colors opacity-50 active:bg-red-500/10"
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Удалить"
               >
-                <TrashIcon size={14} />
+                <TrashIcon size={15} />
               </button>
             </span>
-          </Link>
+          </div>
         ))}
       </div>
     );

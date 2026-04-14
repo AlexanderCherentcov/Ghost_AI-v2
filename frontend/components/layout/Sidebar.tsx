@@ -73,13 +73,16 @@ export function Sidebar() {
   async function handleDeleteChat(chatId: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    await api.chats.delete(chatId);
-    removeChat(chatId);
-    if (pathname === `/chat/${chatId}`) {
-      // Clear lastChatId so /chat doesn't redirect back to the deleted chat
-      localStorage.removeItem('lastChatId');
-      sessionStorage.setItem('newChat', '1');
-      router.push('/chat');
+    try {
+      await api.chats.delete(chatId);
+      removeChat(chatId);
+      if (pathname === `/chat/${chatId}`) {
+        localStorage.removeItem('lastChatId');
+        sessionStorage.setItem('newChat', '1');
+        router.push('/chat');
+      }
+    } catch {
+      // silently ignore — chat stays in list
     }
   }
 
@@ -141,10 +144,10 @@ export function Sidebar() {
               )}
             </Link>
             {/* Action buttons — always visible on mobile, hover-only on desktop */}
-            <span className="flex items-center gap-0.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <span className="flex items-center gap-0.5 flex-shrink-0 md:opacity-0 md:group-hover:opacity-60 transition-opacity">
               <button
                 onClick={(e) => startEdit(chat.id, chat.title, e)}
-                className="p-2 sm:p-1 rounded-lg transition-colors hover:opacity-100 opacity-50 active:bg-[var(--bg-elevated)]"
+                className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors hover:opacity-100 active:bg-[var(--bg-elevated)]"
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Переименовать"
               >
@@ -152,7 +155,7 @@ export function Sidebar() {
               </button>
               <button
                 onClick={(e) => handleDeleteChat(chat.id, e)}
-                className="p-2 sm:p-1 rounded-lg hover:text-red-400 transition-colors opacity-50 active:bg-red-500/10"
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:text-red-400 transition-colors active:bg-red-500/10"
                 style={{ color: 'var(--text-secondary)' }}
                 aria-label="Удалить"
               >

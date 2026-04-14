@@ -46,8 +46,12 @@ export default function HistoryPage() {
   async function handleDelete(chatId: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    await api.chats.delete(chatId);
-    removeChat(chatId);
+    try {
+      await api.chats.delete(chatId);
+      removeChat(chatId);
+    } catch {
+      // silently ignore
+    }
   }
 
   async function handleRename(chatId: string) {
@@ -82,21 +86,23 @@ export default function HistoryPage() {
                 />
               </div>
             ) : (
-              <Link
-                href={`/chat/${chat.id}`}
-                className="flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-4 py-3 active:bg-[var(--bg-elevated)] transition-colors hover:border-[var(--border-hover)]"
-              >
-                <span className="text-sm truncate flex-1 pr-2" style={{ color: 'var(--text-primary)' }}>
-                  {truncate(chat.title, 38)}
-                </span>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
+              <div className="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl transition-colors hover:border-[var(--border-hover)] active:bg-[var(--bg-elevated)]">
+                <Link
+                  href={`/chat/${chat.id}`}
+                  className="flex-1 min-w-0 px-4 py-3"
+                >
+                  <span className="text-sm truncate block" style={{ color: 'var(--text-primary)' }}>
+                    {truncate(chat.title, 34)}
+                  </span>
+                </Link>
+                <div className="flex items-center gap-0 pr-1 flex-shrink-0">
                   <button
                     onClick={(e) => {
                       e.preventDefault();
                       setEditingId(chat.id);
                       setEditTitle(chat.title);
                     }}
-                    className="p-1.5 transition-colors opacity-40 hover:opacity-80"
+                    className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors opacity-40 hover:opacity-80 active:bg-[var(--bg-elevated)]"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Переименовать"
                   >
@@ -104,14 +110,14 @@ export default function HistoryPage() {
                   </button>
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
-                    className="p-1.5 transition-colors opacity-40 hover:opacity-80 hover:text-red-400"
+                    className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors opacity-40 hover:opacity-80 hover:text-red-400 active:bg-red-500/10"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Удалить"
                   >
                     <TrashIcon size={15} />
                   </button>
                 </div>
-              </Link>
+              </div>
             )}
           </div>
         ))}

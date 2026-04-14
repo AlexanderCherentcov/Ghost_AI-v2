@@ -97,7 +97,7 @@ export default function BillingPage() {
   const plan = user?.plan ?? 'FREE';
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       <div className="px-6 py-5 border-b border-[var(--border)]">
         <h1 className="text-xl font-medium text-white">Тарифы</h1>
         <p className="text-sm text-[rgba(255,255,255,0.3)] mt-1">Текущий план: <span className="text-accent">{plan}</span></p>

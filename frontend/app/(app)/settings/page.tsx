@@ -126,7 +126,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       <div className="px-4 sm:px-6 py-5 border-b border-[var(--border)]">
         <h1 className="text-xl font-medium" style={{ color: 'var(--text-primary)' }}>Настройки</h1>
       </div>

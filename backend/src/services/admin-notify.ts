@@ -30,6 +30,7 @@ export async function notifyNewUser(user: {
   id: string;
   name: string | null;
   telegramId: string | null;
+  telegramUsername?: string | null;
   email: string | null;
   plan: string;
   createdAt: Date;
@@ -37,7 +38,8 @@ export async function notifyNewUser(user: {
 }): Promise<void> {
   const src  = user.source ?? 'unknown';
   const name = user.name ?? 'Без имени';
-  const tg   = user.telegramId ? `\nTG ID: <code>${user.telegramId}</code>` : '';
+  const tgHandle = user.telegramUsername ? ` (@${user.telegramUsername})` : '';
+  const tg   = user.telegramId ? `\nTG ID: <code>${user.telegramId}</code>${tgHandle}` : '';
   const mail = user.email ? `\nEmail: ${user.email}` : '';
   await notifyAdmins(
     `🆕 <b>Новый пользователь!</b>\n\n` +

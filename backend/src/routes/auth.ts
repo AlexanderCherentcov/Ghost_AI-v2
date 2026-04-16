@@ -105,12 +105,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
       user = await prisma.user.create({
         data: {
           telegramId,
-          name: tgUser.first_name,
+          name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || null,
           avatarUrl: tgUser.photo_url,
         },
       });
       await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-webapp' }).catch(() => {});
+      notifyNewUser({ ...user, source: 'telegram-webapp', telegramUsername: tgUser.username }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -271,7 +271,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const body = request.body as {
       id: number; first_name?: string; last_name?: string;
-      username?: string; photo_url?: string;
+      username?: string | null; photo_url?: string;
     };
 
     const telegramId = String(body.id);
@@ -285,7 +285,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       });
       await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-bot' }).catch(() => {});
+      notifyNewUser({ ...user, source: 'telegram-bot', telegramUsername: body.username }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -316,7 +316,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
-      notifyNewUser({ ...user, source: 'telegram-verify' }).catch(() => {});
+      await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'telegram-verify', telegramUsername: fields.username }).catch(() => {});
     }
 
     const tokens = signTokens(fastify, user.id);
@@ -365,7 +366,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
-      notifyNewUser({ ...user, source: 'telegram-oauth' }).catch(() => {});
+      await setupTrialForNewUser(user.id);
+      notifyNewUser({ ...user, source: 'telegram-oauth', telegramUsername: fields.username }).catch(() => {});
     }
 
     const { accessToken, refreshToken } = signTokens(fastify, user.id);

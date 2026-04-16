@@ -43,6 +43,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ── Visual viewport height (keyboard-aware) ───────────────────────────────
+  // window.visualViewport tracks the *real* visible area on every browser,
+  // including when the soft keyboard opens. We write it to --app-h so the
+  // flex container always matches exactly what the user can see.
+  useEffect(() => {
+    const update = () => {
+      const h = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--app-h', `${h}px`);
+    };
+    update();
+    window.visualViewport?.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('scroll', update);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('scroll', update);
+    };
+  }, []);
+
   // ── iPhone screen-lock recovery ────────────────────────────────────────────
   // When phone is locked + unlocked, the WS may have dropped and the access
   // token may have expired. Reconnect WS and silently re-refresh token.
@@ -75,7 +93,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading && !user) return null;
 
   return (
-    <div className="flex h-dvh overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex overflow-hidden" style={{ height: 'var(--app-h, 100dvh)', background: 'var(--bg-primary)' }}>
       <div className="hidden lg:block">
         <Sidebar />
       </div>

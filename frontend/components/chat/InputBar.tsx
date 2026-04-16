@@ -258,7 +258,7 @@ export function InputBar({
   const category = attachedFile ? getFileCategory(attachedFile) : null;
 
   return (
-    <div className="flex-shrink-0 px-4 pb-2 pt-2 lg:pb-4">
+    <div className="flex-shrink-0 px-4 pt-2 pb-0 lg:pb-4">
       <div className="max-w-[720px] mx-auto">
 
         {/* Video options panel */}

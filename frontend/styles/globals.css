@@ -12,8 +12,11 @@ html, body {
 }
 
 /* ─── Mobile bottom nav padding (accounts for safe-area on iPhones) ─────────── */
-.mobile-nav-pb {
-  padding-bottom: var(--mobile-pb);
+/* Only below lg breakpoint (< 1024px) — no cascade conflict with lg:pb-0 */
+@media (max-width: 1023px) {
+  .mobile-nav-pb {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* ─── CSS Variables ─────────────────────────────────────────────────────────── */

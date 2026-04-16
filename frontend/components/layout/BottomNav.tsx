@@ -58,7 +58,15 @@ export function BottomNav() {
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden" style={{ height: 'calc(var(--bottom-nav-h) + var(--safe-bottom))', paddingBottom: 'var(--safe-bottom)' }}>
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden"
+      style={{
+        height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        transform: 'translateZ(0)',   /* GPU layer — fixes iOS fixed-element tap lag */
+        WebkitTransform: 'translateZ(0)',
+      }}
+    >
       {ITEMS.map(({ href, label, Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
         const handleClick = href === '/chat'
@@ -66,8 +74,8 @@ export function BottomNav() {
           : undefined;
         const itemStyle = isActive ? {} : { color: 'var(--text-secondary)' };
         const itemClass = cn(
-          'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative',
-          isActive ? 'text-accent' : ''
+          'flex-1 flex flex-col items-center justify-center gap-1 py-2 transition-all relative touch-manipulation select-none',
+          isActive ? 'text-accent' : '',
         );
         const content = (
           <>

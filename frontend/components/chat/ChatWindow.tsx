@@ -61,7 +61,7 @@ export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
   const isEmpty = !messages.length && !isStreaming;
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col">
+    <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col" style={{ touchAction: 'pan-y' }}>
       {isLoading ? (
         <ChatSkeleton />
       ) : isEmpty ? (

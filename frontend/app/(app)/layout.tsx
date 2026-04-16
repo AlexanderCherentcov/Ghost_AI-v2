@@ -42,14 +42,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── Visual viewport height (keyboard-aware) ───────────────────────────────
-  // The outer container is position:fixed so iOS cannot scroll it when the
-  // keyboard opens. We track visualViewport.height to resize it to exactly
-  // the visible area — this keeps InputBar and BottomNav always on-screen.
+  // ── Visual viewport height + offset (keyboard-aware) ─────────────────────
+  // iOS Safari scrolls the visual viewport when keyboard opens (offsetTop > 0).
+  // We track both height AND offsetTop so our fixed container always exactly
+  // covers the visual viewport — input/nav stay pinned above the keyboard.
   useEffect(() => {
     const update = () => {
-      const h = window.visualViewport?.height ?? window.innerHeight;
+      const vv = window.visualViewport;
+      const h = vv?.height ?? window.innerHeight;
+      const top = vv?.offsetTop ?? 0;
       document.documentElement.style.setProperty('--app-h', `${h}px`);
+      document.documentElement.style.setProperty('--app-top', `${top}px`);
     };
     update();
     window.visualViewport?.addEventListener('resize', update);
@@ -93,9 +96,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       className="flex overflow-hidden"
       style={{
         position: 'fixed',
-        top: 0, left: 0, right: 0,
+        top: 'var(--app-top, 0px)',
+        left: 0,
+        right: 0,
         height: 'var(--app-h, 100dvh)',
         background: 'var(--bg-primary)',
+        /* Prevent any touch-scroll on the shell itself */
+        touchAction: 'none',
       }}
     >
       {/* Sidebar — desktop only, position:fixed internally */}

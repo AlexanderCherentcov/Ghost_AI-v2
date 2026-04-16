@@ -61,11 +61,11 @@ export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
   const isEmpty = !messages.length && !isStreaming;
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
+    <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col">
       {isLoading ? (
         <ChatSkeleton />
       ) : isEmpty ? (
-        <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center px-4">
+        <div className="flex flex-col items-center justify-center flex-1 text-center px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -79,7 +79,10 @@ export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
           </motion.div>
         </div>
       ) : (
-        <div className="max-w-[720px] mx-auto px-4 py-6 space-y-1">
+        <>
+          {/* Spacer pushes messages to bottom when content is short */}
+          <div className="flex-1" />
+          <div className="max-w-[720px] w-full mx-auto px-4 py-6 space-y-1">
           <AnimatePresence initial={false}>
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
@@ -123,6 +126,7 @@ export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
 
           <div ref={bottomRef} />
         </div>
+        </>
       )}
     </div>
   );

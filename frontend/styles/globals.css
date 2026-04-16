@@ -11,6 +11,11 @@ html, body {
   overscroll-behavior: none;
 }
 
+/* ─── Mobile bottom nav padding (accounts for safe-area on iPhones) ─────────── */
+.mobile-nav-pb {
+  padding-bottom: var(--mobile-pb);
+}
+
 /* ─── CSS Variables ─────────────────────────────────────────────────────────── */
 :root {
   --bg-void:        #06060B;
@@ -39,6 +44,8 @@ html, body {
 
   --sidebar-width:  260px;
   --bottom-nav-h:   60px;
+  --safe-bottom:    env(safe-area-inset-bottom, 0px);
+  --mobile-pb:      calc(var(--bottom-nav-h) + var(--safe-bottom));
 
   color-scheme: dark;
 }

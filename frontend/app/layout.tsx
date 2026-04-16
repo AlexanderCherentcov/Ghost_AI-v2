@@ -110,6 +110,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1, // prevent iOS zoom on input focus
+  viewportFit: 'cover', // expose safe-area-inset-* on iOS notch/home-indicator
 };
 
 // ─── JSON-LD Structured Data ──────────────────────────────────────────────────

@@ -136,7 +136,7 @@ export default function ChatPage() {
       : 'Спросите что-нибудь у GhostLine...';
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 16 }}

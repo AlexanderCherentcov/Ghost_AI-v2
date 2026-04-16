@@ -58,7 +58,7 @@ export function BottomNav() {
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 h-[60px] bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden" style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       {ITEMS.map(({ href, label, Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
         const handleClick = href === '/chat'

@@ -28,7 +28,7 @@ function groupChats(chats: Chat[]) {
 export default function HistoryPage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { chats, updateChat, removeChat } = useChatStore();
+  const { chats, updateChat, removeChat, addChat } = useChatStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
@@ -46,11 +46,12 @@ export default function HistoryPage() {
   async function handleDelete(chatId: string, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    const snapshot = chats.find((c) => c.id === chatId);
+    removeChat(chatId); // optimistic
     try {
       await api.chats.delete(chatId);
-      removeChat(chatId);
     } catch {
-      // silently ignore
+      if (snapshot) addChat(snapshot); // restore on failure
     }
   }
 
@@ -95,7 +96,7 @@ export default function HistoryPage() {
                     {truncate(chat.title, 34)}
                   </span>
                 </Link>
-                <div className="flex items-center gap-0 pr-1 flex-shrink-0">
+                <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
                   {/* Rename — 44×44 touch target */}
                   <button
                     onClick={(e) => {
@@ -105,21 +106,21 @@ export default function HistoryPage() {
                       setEditTitle(chat.title);
                     }}
                     onTouchStart={(e) => { e.stopPropagation(); }}
-                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-[var(--bg-elevated)]"
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors active:bg-[var(--bg-elevated)]"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Переименовать"
                   >
-                    <EditIcon size={16} />
+                    <EditIcon size={18} />
                   </button>
                   {/* Delete — 44×44 touch target */}
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
                     onTouchStart={(e) => { e.stopPropagation(); }}
-                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors opacity-50 active:opacity-100 active:bg-red-500/10 hover:text-red-400"
+                    className="flex items-center justify-center w-11 h-11 rounded-xl transition-colors active:bg-red-500/10 active:text-red-400 hover:text-red-400"
                     style={{ color: 'var(--text-secondary)' }}
                     aria-label="Удалить"
                   >
-                    <TrashIcon size={16} />
+                    <TrashIcon size={18} />
                   </button>
                 </div>
               </div>

@@ -80,7 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar />
       </div>
       <main
-        className={`flex-1 flex flex-col overflow-hidden pb-[60px] lg:pb-0 transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
+        className={`flex-1 flex flex-col overflow-hidden pb-[calc(60px+env(safe-area-inset-bottom,0px))] lg:pb-0 transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
         style={{ minWidth: 0 }}
       >
         {children}

@@ -661,7 +661,7 @@ export default function ChatConversationPage() {
       : 'Продолжайте диалог...';
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
 
       <ChatWindow onSuggestion={handleSend} isLoading={isLoading} />

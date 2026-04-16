@@ -59,12 +59,10 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden"
+      className="flex-shrink-0 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden"
       style={{
         height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        transform: 'translateZ(0)',   /* GPU layer — fixes iOS fixed-element tap lag */
-        WebkitTransform: 'translateZ(0)',
       }}
     >
       {ITEMS.map(({ href, label, Icon }) => {

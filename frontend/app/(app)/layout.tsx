@@ -37,16 +37,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!tg) return;
     tg.ready?.();
     tg.expand?.();
-    // Apply Telegram's color scheme if provided
     if (tg.colorScheme === 'light') {
       document.documentElement.classList.remove('dark');
     }
   }, []);
 
   // ── Visual viewport height (keyboard-aware) ───────────────────────────────
-  // window.visualViewport tracks the *real* visible area on every browser,
-  // including when the soft keyboard opens. We write it to --app-h so the
-  // flex container always matches exactly what the user can see.
+  // The outer container is position:fixed so iOS cannot scroll it when the
+  // keyboard opens. We track visualViewport.height to resize it to exactly
+  // the visible area — this keeps InputBar and BottomNav always on-screen.
   useEffect(() => {
     const update = () => {
       const h = window.visualViewport?.height ?? window.innerHeight;
@@ -62,16 +61,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── iPhone screen-lock recovery ────────────────────────────────────────────
-  // When phone is locked + unlocked, the WS may have dropped and the access
-  // token may have expired. Reconnect WS and silently re-refresh token.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
-
-      // Reconnect WebSocket if closed
       connectWS();
-
-      // Silently refresh the access token so subsequent API calls don't fail
       const { refreshToken, setAuth, clearAuth } = useAuthStore.getState();
       if (!refreshToken) return;
       api.auth.refreshToken(refreshToken)
@@ -84,26 +77,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           if (err?.status === 401) clearAuth();
         });
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Show nothing only while actively loading — cached user renders immediately
   if (isLoading && !user) return null;
 
   return (
-    <div className="flex overflow-hidden" style={{ height: 'var(--app-h, 100dvh)', background: 'var(--bg-primary)' }}>
+    /*
+     * position:fixed prevents iOS from scrolling the layout viewport when
+     * the soft keyboard appears. Combined with --app-h (visualViewport),
+     * the container always fits the real visible area exactly.
+     */
+    <div
+      className="flex overflow-hidden"
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0,
+        height: 'var(--app-h, 100dvh)',
+        background: 'var(--bg-primary)',
+      }}
+    >
+      {/* Sidebar — desktop only, position:fixed internally */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
-      <main
-        className={`flex-1 flex flex-col overflow-hidden mobile-nav-pb transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
+
+      {/* Content column: page content + bottom nav */}
+      <div
+        className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
         style={{ minWidth: 0 }}
       >
-        {children}
-      </main>
-      <BottomNav />
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {children}
+        </main>
+        {/* BottomNav is in the flex flow (not fixed) — reliable on all browsers */}
+        <BottomNav />
+      </div>
     </div>
   );
 }

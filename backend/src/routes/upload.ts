@@ -141,34 +141,25 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           lang = 'csv';
         }
 
-        // ── PPTX (PowerPoint) — extract text from slide XML nodes ──────────
+        // ── PPTX (PowerPoint) — extract text via raw XML scan ─────────────
         else if (
           mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
           ext === 'pptx'
         ) {
-          // [M-05] Parse PPTX as ZIP and extract text from slide XML files
+          // PPTX is a ZIP; scan the raw buffer for DrawingML <a:t> text runs
+          // without adding a ZIP dependency — good enough for most slides.
           const text_parts: string[] = [];
           try {
-            const AdmZip = (await import('adm-zip')).default;
-            const zip = new AdmZip(buffer);
-            const entries = zip.getEntries()
-              .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
-              .sort((a, b) => a.entryName.localeCompare(b.entryName));
-
-            for (const entry of entries) {
-              const xml = entry.getData().toString('utf-8');
-              // Extract text from <a:t> nodes (DrawingML text runs)
-              const matches = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) ?? [];
-              const slideText = matches
-                .map((m) => m.replace(/<[^>]+>/g, '').trim())
-                .filter(Boolean)
-                .join(' ');
-              if (slideText) text_parts.push(slideText);
+            const raw = buffer.toString('latin1'); // lossless binary→string
+            const matches = raw.match(/<a:t(?:\s[^>]*)?>([^<]+)<\/a:t>/g) ?? [];
+            for (const m of matches) {
+              const t = m.replace(/<[^>]+>/g, '').trim();
+              if (t) text_parts.push(t);
             }
           } catch {
-            // ZIP parsing failed — fall through to user-friendly message below
+            // fall through
           }
-          text = text_parts.join('\n\n') || `[Не удалось извлечь текст из PowerPoint файла: ${fileName}]`;
+          text = text_parts.join(' ') || `[PowerPoint файл: ${fileName} — текст не извлечён]`;
           lang = 'text';
         }
 

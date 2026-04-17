@@ -11,28 +11,34 @@ type Status = 'loading' | 'succeeded' | 'cancelled' | 'pending' | 'error';
 
 export default function BillingSuccessPage() {
   const params = useSearchParams();
-  const paymentId = params.get('paymentId') ?? params.get('payment_id');
+  const rawId = params.get('paymentId') ?? params.get('payment_id');
+  // M-21: валидация формата paymentId перед использованием
+  const paymentId = rawId?.match(/^[a-zA-Z0-9_-]{1,100}$/) ? rawId : null;
   const [status, setStatus] = useState<Status>('loading');
 
   useEffect(() => {
     if (!paymentId) { setStatus('error'); return; }
 
+    let mounted = true; // M-20: предотвращаем setState после unmount
     let attempts = 0;
     const MAX = 8;
 
     async function poll() {
+      if (!mounted) return;
       try {
         const data = await api.payments.status(paymentId!);
+        if (!mounted) return;
         if (data.status === 'SUCCEEDED') { setStatus('succeeded'); return; }
         if (data.status === 'CANCELED' || data.status === 'CANCELLED') { setStatus('cancelled'); return; }
         if (++attempts < MAX) setTimeout(poll, 2000);
         else setStatus(data.status === 'PENDING' ? 'pending' : 'error');
       } catch {
-        setStatus('error');
+        if (mounted) setStatus('error');
       }
     }
 
     poll();
+    return () => { mounted = false; };
   }, [paymentId]);
 
   if (status === 'loading') {

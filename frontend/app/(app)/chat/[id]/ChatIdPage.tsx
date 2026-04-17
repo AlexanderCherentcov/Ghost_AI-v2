@@ -167,6 +167,13 @@ export default function ChatConversationPage() {
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
 
+  // Ref для предотвращения poll после unmount (H-09)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   // Load messages + resume any pending generation job after page refresh
   useEffect(() => {
     // Wait for accessToken — it lives only in memory and is restored async
@@ -207,7 +214,9 @@ export default function ChatConversationPage() {
           else setGeneratingVideo(true);
 
           const pollResume = async (): Promise<void> => {
+            if (!mountedRef.current) return;
             const job = await api.generate.status(jobId);
+            if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
               useChatStore.getState().setMessages(
                 useChatStore.getState().messages.map((m) =>
@@ -299,7 +308,7 @@ export default function ChatConversationPage() {
     setGeneratingImage(true);
 
     addMessage({
-      id: `temp-${Date.now()}`,
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'user',
       content: prompt,
       mode: 'vision',
@@ -309,7 +318,7 @@ export default function ChatConversationPage() {
       createdAt: new Date().toISOString(),
     });
 
-    const placeholderId = `gen-${Date.now()}`;
+    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     addMessage({
       id: placeholderId,
       role: 'assistant',
@@ -326,7 +335,9 @@ export default function ChatConversationPage() {
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'vision', prompt }));
 
       const poll = async (): Promise<void> => {
+        if (!mountedRef.current) return;
         const job = await api.generate.status(jobId);
+        if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -368,7 +379,7 @@ export default function ChatConversationPage() {
     setGeneratingVideo(true);
 
     addMessage({
-      id: `temp-${Date.now()}`,
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'user',
       content: prompt,
       mode: 'reel',
@@ -378,7 +389,7 @@ export default function ChatConversationPage() {
       createdAt: new Date().toISOString(),
     });
 
-    const placeholderId = `gen-${Date.now()}`;
+    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     addMessage({
       id: placeholderId,
       role: 'assistant',
@@ -405,7 +416,9 @@ export default function ChatConversationPage() {
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));
 
       const poll = async (): Promise<void> => {
+        if (!mountedRef.current) return;
         const job = await api.generate.status(jobId);
+        if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -559,7 +572,7 @@ export default function ChatConversationPage() {
 
     const displayContent = prompt || (fileName ? `[Файл: ${fileName}]` : '');
     const tempUserMsg = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'user' as const,
       content: displayContent,
       mode,

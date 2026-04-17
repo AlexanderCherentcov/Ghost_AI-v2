@@ -23,6 +23,11 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
       }
 
       const frontendUrl = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
+
+      if (returnUrl && !returnUrl.startsWith(frontendUrl)) {
+        return reply.code(400).send({ error: 'Invalid returnUrl: must start with the frontend URL' });
+      }
+
       const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
       const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing);

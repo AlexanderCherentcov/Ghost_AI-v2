@@ -15,6 +15,9 @@ const ADMIN_IDS = new Set(
 
 const bot = new Bot(BOT_TOKEN);
 
+// ─── Rate limit map for auth ───────────────────────────────────────────────────
+const authRateLimit = new Map<number, number>(); // userId -> lastAuthTime
+
 // ─── /start ────────────────────────────────────────────────────────────────────
 
 bot.command('start', async (ctx) => {
@@ -24,14 +27,21 @@ bot.command('start', async (ctx) => {
   // ── Auth via bot link ──────────────────────────────────────────────────────
   if (payload === 'auth' && ctx.from) {
     try {
+      // [L-09] Flood protection
+      const now = Date.now();
+      const lastAuth = authRateLimit.get(ctx.from.id) ?? 0;
+      if (now - lastAuth < 10_000) { // 10 секунд между запросами
+        await ctx.reply('⏳ Подождите немного перед повторным входом.');
+        return;
+      }
+      authRateLimit.set(ctx.from.id, now);
+
       const res = await axios.post(`${API_URL}/api/auth/telegram-bot`, {
         id: ctx.from.id,
         first_name: ctx.from.first_name,
         last_name: ctx.from.last_name,
         username: ctx.from.username,
-        photo_url: ctx.from.username
-          ? `https://t.me/i/userpic/320/${ctx.from.username}.jpg`
-          : undefined,
+        photo_url: undefined,
       }, {
         headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
       });
@@ -43,7 +53,7 @@ bot.command('start', async (ctx) => {
       };
 
       const redirect = isNew ? '/onboarding/name' : '/chat';
-      const loginUrl = `${FRONTEND_URL}/auth/callback?access=${accessToken}&refresh=${refreshToken}&redirect=${redirect}`;
+      const loginUrl = `${FRONTEND_URL}/auth/callback/#access=${accessToken}&refresh=${refreshToken}&redirect=${redirect}`;
 
       await ctx.reply(
         `🔑 *Ваша ссылка для входа:*\n\nНажмите кнопку ниже — она действует 5 минут.\nНикому не передавайте эту ссылку.`,
@@ -180,6 +190,11 @@ bot.on(['message:text', 'message:document', 'message:photo', 'message:video', 'm
 });
 
 // ─── Start bot ──────────────────────────────────────────────────────────────────
+
+bot.catch(async (err) => {
+  if (err.message?.includes('query is too old') || err.message?.includes('query ID is invalid')) return;
+  console.error('[Bot] Unhandled error:', err.message);
+});
 
 async function main() {
   console.log('[Bot] Starting GhostLine AI bot...');

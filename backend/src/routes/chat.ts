@@ -187,6 +187,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
+      // ── [H-01] Ban check via Redis ─────────────────────────────────────────
+      {
+        const redis = (await import('../lib/redis.js')).redis;
+        const isBanned = await redis.exists(`banned:${userId}`);
+        if (isBanned) {
+          send({ type: 'error', code: 'BANNED' });
+          socket.close();
+          return;
+        }
+      }
+
       // ── Per-user rate limit ────────────────────────────────────────────────
       if (!await checkChatRateLimit(userId)) {
         send({ type: 'error', code: 'RATE_LIMITED', message: 'Слишком много сообщений. Подождите минуту.' });

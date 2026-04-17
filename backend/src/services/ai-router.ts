@@ -70,13 +70,13 @@ export function route(
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
 
-  // Images always use gemini-3.1-flash-image-preview (supports vision + editing)
+  // [C-05] Images need a vision-capable model for analysis, not an image-generation model
   if (hasImage) {
     return {
       provider: 'openrouter-haiku' as Provider,
       complexity: 'complex',
-      model: OR_MODELS.flux,
-      fallbackModel: undefined,
+      model: OR_MODELS.haiku,
+      fallbackModel: OR_MODELS.gpt4oMini,
       maxTokens: plan === 'FREE' ? 400 : undefined,
     };
   }

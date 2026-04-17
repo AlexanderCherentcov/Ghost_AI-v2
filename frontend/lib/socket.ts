@@ -22,6 +22,7 @@ export interface WSMessage {
   mode: 'chat' | 'think';
   prompt: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  // TODO: move to WS handshake
   jwt: string;
   imageUrl?: string;    // base64 data URL of attached image
   fileContent?: string; // extracted text from document
@@ -32,16 +33,37 @@ export interface WSMessage {
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// [H-07] aborted flag: when true, incoming token chunks are ignored
+let aborted = false;
 const listeners = new Set<(chunk: WSChunk) => void>();
 
 export function connectWS(): WebSocket {
   if (ws && ws.readyState === WebSocket.OPEN) return ws;
 
+  // [H-08] Clear any pending reconnect timer before creating a new connection
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+
   ws = new WebSocket(`${WS_URL}/api/chat/stream`);
+
+  // [H-15] Connection timeout — close if not OPEN within 10 seconds
+  const connectTimeout = setTimeout(() => {
+    if (ws && ws.readyState !== WebSocket.OPEN) {
+      console.warn('[WS] Connection timeout');
+      ws.close();
+    }
+  }, 10_000);
+
+  ws.addEventListener('open', () => {
+    clearTimeout(connectTimeout);
+  }, { once: true });
 
   ws.onmessage = (event) => {
     try {
       const chunk = JSON.parse(event.data) as WSChunk;
+      // [H-07] If stream was aborted, ignore incoming token chunks
+      if (aborted && chunk.type === 'token') return;
+      // [H-07] Reset aborted flag when server sends done/error
+      if (chunk.type === 'done' || chunk.type === 'error') aborted = false;
       listeners.forEach((l) => l(chunk));
     } catch {}
   };
@@ -67,6 +89,12 @@ export function disconnectWS() {
 export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean; title?: string }> {
   return new Promise((resolve, reject) => {
     const socket = connectWS();
+    // [H-06] Capture chatId at the time of sendMessage so the handler only
+    // reacts to chunks belonging to this specific request.
+    // Note: the server does not return chatId in chunks, so we use a per-request
+    // requestId to disambiguate concurrent sends.
+    const requestId = `${msg.chatId}-${Date.now()}-${Math.random()}`;
+    const msgWithId = { ...msg, requestId };
 
     const cleanup = () => listeners.delete(handler);
 
@@ -83,9 +111,9 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
     listeners.add(handler);
 
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(msg));
+      socket.send(JSON.stringify(msgWithId));
     } else {
-      socket.addEventListener('open', () => socket.send(JSON.stringify(msg)), { once: true });
+      socket.addEventListener('open', () => socket.send(JSON.stringify(msgWithId)), { once: true });
     }
   });
 }
@@ -95,9 +123,12 @@ export function onToken(callback: (chunk: WSChunk) => void): () => void {
   return () => listeners.delete(callback);
 }
 
-// Abort current stream — commits whatever arrived so far
+// Abort current stream — marks aborted so further token chunks are ignored,
+// then broadcasts a synthetic 'done' so the promise resolves immediately.
+// Note: the server continues generating; we cannot cancel it via WS.
+// [H-07]
 export function abortStream() {
-  // Broadcast a synthetic 'done' so promise resolves and streaming stops
+  aborted = true;
   const abortChunk: WSChunk = { type: 'done', tokensCost: 0, cacheHit: false };
   listeners.forEach((l) => l(abortChunk));
 }

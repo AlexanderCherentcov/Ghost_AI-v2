@@ -53,7 +53,10 @@ export const useChatStore = create<ChatState>((set) => ({
       activeChat: s.activeChat?.id === chatId ? null : s.activeChat,
     })),
 
-  setActiveChat: (chat) => set({ activeChat: chat, messages: [] }),
+  // [M-14] Do NOT reset messages here — avoids race condition when switching chats quickly.
+  // The page component (ChatIdPage) is responsible for calling setMessages([]) after
+  // confirming the new chat's messages have been fetched.
+  setActiveChat: (chat) => set({ activeChat: chat }),
 
   setMessages: (messages) => set({ messages }),
 

@@ -196,7 +196,7 @@ export default function BillingPage() {
                   </div>
                   <div className="text-2xl font-medium mb-1">
                     {displayPrice.toLocaleString('ru-RU')} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{trial ? '/7 дней' : '/мес'}</span>
+                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{trial ? '/7 дней' : billingCycle === 'yearly' ? '/год' : '/мес'}</span>
                   </div>
                   {!trial && billingCycle === 'yearly' && (
                     <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
@@ -213,7 +213,7 @@ export default function BillingPage() {
                   </ul>
                   <button
                     onClick={() => handleBuy(key)}
-                    disabled={loading === key}
+                    disabled={loading !== null}
                     className={cn(
                       'w-full btn h-9 text-sm',
                       plan === key ? 'btn-accent-outline' : badge === 'Популярный' ? 'btn-primary' : 'btn-ghost'
@@ -256,7 +256,7 @@ export default function BillingPage() {
                   </div>
                   <div className="text-2xl font-medium mb-1">
                     {displayPrice.toLocaleString('ru-RU')} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
+                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{billingCycle === 'yearly' ? '/год' : '/мес'}</span>
                   </div>
                   {billingCycle === 'yearly' && (
                     <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
@@ -273,7 +273,7 @@ export default function BillingPage() {
                   </ul>
                   <button
                     onClick={() => handleBuy(key)}
-                    disabled={loading === key}
+                    disabled={loading !== null}
                     className={cn(
                       'w-full btn h-9 text-sm',
                       plan === key ? 'btn-accent-outline' : badge === 'Максимум' ? 'btn-primary' : 'btn-ghost'

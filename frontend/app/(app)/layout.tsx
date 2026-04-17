@@ -23,13 +23,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (user && !user.onboardingDone && !user.name) {
       router.replace('/onboarding/name');
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, router]);
 
   useEffect(() => {
-    if (user && accessToken) {
+    if (user?.id && accessToken) {
       api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
     }
-  }, [user, accessToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // только при смене пользователя, не при каждом обновлении токена
 
   // ── Telegram Mini App: notify ready + expand ──────────────────────────────
   useEffect(() => {
@@ -65,8 +66,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ── iPhone screen-lock recovery ────────────────────────────────────────────
   useEffect(() => {
+    let lastRefreshAt = 0;
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 30_000) return; // не чаще чем раз в 30 сек
+      lastRefreshAt = now;
       connectWS();
       const { refreshToken, setAuth, clearAuth } = useAuthStore.getState();
       if (!refreshToken) return;

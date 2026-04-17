@@ -141,18 +141,34 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           lang = 'csv';
         }
 
-        // ── PPTX (PowerPoint) — extract text nodes ─────────────────────────
+        // ── PPTX (PowerPoint) — extract text from slide XML nodes ──────────
         else if (
           mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
           ext === 'pptx'
         ) {
-          // Basic: read as zip and pull text from XML nodes
+          // [M-05] Parse PPTX as ZIP and extract text from slide XML files
           const text_parts: string[] = [];
           try {
-            const XLSX = await import('xlsx');
-            // xlsx can parse pptx text in a limited way; fall back to raw
-          } catch {}
-          text = text_parts.join('\n') || `[PowerPoint файл: ${fileName}]`;
+            const AdmZip = (await import('adm-zip')).default;
+            const zip = new AdmZip(buffer);
+            const entries = zip.getEntries()
+              .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
+              .sort((a, b) => a.entryName.localeCompare(b.entryName));
+
+            for (const entry of entries) {
+              const xml = entry.getData().toString('utf-8');
+              // Extract text from <a:t> nodes (DrawingML text runs)
+              const matches = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) ?? [];
+              const slideText = matches
+                .map((m) => m.replace(/<[^>]+>/g, '').trim())
+                .filter(Boolean)
+                .join(' ');
+              if (slideText) text_parts.push(slideText);
+            }
+          } catch {
+            // ZIP parsing failed — fall through to user-friendly message below
+          }
+          text = text_parts.join('\n\n') || `[Не удалось извлечь текст из PowerPoint файла: ${fileName}]`;
           lang = 'text';
         }
 
@@ -166,8 +182,9 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           }
         }
       } catch (err: any) {
+        // [M-24] Log full error server-side, return safe message to client
         fastify.log.error(err, '[upload/extract] parse error');
-        return reply.code(500).send({ error: 'Не удалось извлечь текст из файла: ' + err.message });
+        return reply.code(500).send({ error: 'Не удалось обработать файл' });
       }
 
       // Trim + truncate

@@ -3,19 +3,21 @@ import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateMusic } from '../services/providers/replicate.js';
 import { setMediaCached } from '../services/cache.js';
+import { encrypt } from '../lib/crypto.js';
 
 interface SoundJob {
   jobId: string;
   userId: string;
   prompt: string;
   duration: number;
+  chatId?: string | null;
 }
 
 export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, prompt, duration } = job.data;
+      const { jobId, userId, prompt, duration, chatId } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -29,7 +31,14 @@ export function startSoundWorker() {
         data: { status: 'done', mediaUrl },
       });
 
-      // Cache for future identical prompts (30-day TTL)
+      // [H-05] Save assistant message with audio to chat history
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'sound', tokensCost: 0, mediaUrl },
+        }).catch((e) => console.error('[SoundWorker] Failed to save assistant message:', e.message));
+      }
+
+      // Cache for future identical prompts (7-day TTL)
       setMediaCached('sound', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };

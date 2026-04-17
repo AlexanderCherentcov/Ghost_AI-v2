@@ -443,11 +443,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   fastify.patch('/me', {
     preHandler: [fastify.authenticate],
-    handler: async (request) => {
+    handler: async (request, reply) => {
       const { userId } = request.user;
       const data = updateProfileSchema.parse(request.body);
 
-      const birthDate = data.birthDate ? new Date(data.birthDate) : undefined;
+      let birthDate: Date | undefined;
+      if (data.birthDate) {
+        birthDate = new Date(data.birthDate);
+        if (isNaN(birthDate.getTime())) {
+          return reply.code(400).send({ error: 'Invalid birthDate' });
+        }
+      }
 
       const user = await prisma.user.update({
         where: { id: userId },

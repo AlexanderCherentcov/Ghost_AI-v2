@@ -83,17 +83,25 @@ export async function createPayment(
 
   const idempotencyKey = crypto.randomUUID();
 
-  const { data } = await axios.post(
-    `${YOKASSA_BASE}/payments`,
-    {
-      amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
-      confirmation: { type: 'redirect', return_url: returnUrl },
-      capture: true,
-      description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''} — GhostLine`,
-      metadata: { userId, plan: planKey, billing },
-    },
-    { headers: yokassaHeaders(idempotencyKey) }
-  );
+  let data: any;
+  try {
+    const response = await axios.post(
+      `${YOKASSA_BASE}/payments`,
+      {
+        amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
+        confirmation: { type: 'redirect', return_url: returnUrl },
+        capture: true,
+        description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''} — GhostLine`,
+        metadata: { userId, plan: planKey, billing },
+      },
+      { headers: yokassaHeaders(idempotencyKey), timeout: 15_000 }
+    );
+    data = response.data;
+  } catch (err: any) {
+    const detail = err?.response?.data ?? err?.message ?? 'unknown';
+    console.error('[yokassa] createPayment failed:', detail);
+    throw new Error('Платёжный сервис недоступен');
+  }
 
   await prisma.payment.create({
     data: {
@@ -128,10 +136,15 @@ export async function processWebhook(body: unknown): Promise<void> {
   }).catch(() => null);
   if (!verifyRes || verifyRes.data?.status !== 'succeeded') return;
 
-  const payment = await prisma.payment.findUnique({ where: { yokassaId: paymentId } });
-  if (!payment || payment.status === 'SUCCEEDED') return;
+  // Atomic update: only update if not yet SUCCEEDED — prevents double billing on duplicate webhooks
+  const updated = await prisma.payment.updateMany({
+    where: { yokassaId: paymentId, status: { not: 'SUCCEEDED' } },
+    data: { status: 'SUCCEEDED' },
+  });
+  if (updated.count === 0) return; // already processed
 
-  await prisma.payment.update({ where: { id: payment.id }, data: { status: 'SUCCEEDED' } });
+  const payment = await prisma.payment.findUnique({ where: { yokassaId: paymentId } });
+  if (!payment) return;
 
   // Notify admins about successful payment
   const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } });

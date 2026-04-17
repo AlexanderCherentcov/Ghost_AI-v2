@@ -12,7 +12,8 @@ export function getAccessToken(): string | null {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _isRetry = false
 ): Promise<T> {
   const hasBody = options.body != null;
   const headers: Record<string, string> = {
@@ -24,11 +25,30 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const res = await fetch(`${API_URL}/api${path}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
+  // [H-16] Abort fetch after 30 seconds to avoid hanging requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api${path}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') throw new Error('Запрос превысил время ожидания');
+    // [M-23] Retry once on network error for GET requests
+    const isGet = !options.method || options.method === 'GET';
+    if (isGet && !_isRetry) {
+      await new Promise(r => setTimeout(r, 1000));
+      return request<T>(path, options, true);
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));

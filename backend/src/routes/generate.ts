@@ -120,7 +120,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, duration } = generateSchema.parse(request.body);
+      const { prompt, duration, chatId } = generateSchema.parse(request.body);
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -148,14 +148,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Check media cache first
       const mediaCached = await getMediaCached('sound', prompt);
       if (mediaCached.hit) {
-        await checkAndDeduct(userId, 'image_generate');
+        // [H-04] Sound is a paid feature gated by plan check above — no image limit deduction
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
 
-      await checkAndDeduct(userId, 'image_generate');
+      // [H-04] Sound generation does not consume image quota
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'sound', prompt },
@@ -166,6 +166,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         userId,
         prompt,
         duration: duration ?? 15,
+        chatId: chatId ?? null,
       });
 
       await prisma.generateJob.update({

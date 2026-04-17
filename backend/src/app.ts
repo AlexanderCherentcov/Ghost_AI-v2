@@ -54,9 +54,12 @@ export async function buildApp() {
     'https://www.ghostlineai.ru',
   ].filter(Boolean));
 
-  // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted
+  // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted.
+  // Skip localhost / 127.0.0.1 — www.localhost is not a valid origin.
   const extraOrigins: string[] = [];
   for (const o of corsOrigins) {
+    const isLocal = o.includes('localhost') || o.includes('127.0.0.1');
+    if (isLocal) continue;
     if (o.includes('://www.')) extraOrigins.push(o.replace('://www.', '://'));
     else extraOrigins.push(o.replace('://', '://www.'));
   }
@@ -87,7 +90,8 @@ export async function buildApp() {
     // Use real client IP from nginx X-Real-IP header.
     // Without this, all users appear as the Docker bridge IP (172.18.0.x)
     // and share one rate-limit bucket, causing innocent users to get 429.
-    keyGenerator: (req) => (req.headers['x-real-ip'] as string) || req.ip,
+    keyGenerator: (req) =>
+      (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
     errorResponseBuilder: (_req, context) => ({
       error: `Слишком много запросов — повторите через ${context.after}`,
       code: 'RATE_LIMITED',
@@ -106,8 +110,23 @@ export async function buildApp() {
   // ── Decorators ────────────────────────────────────────────────────────────
   fastify.decorate('authenticate', authenticate);
 
+  // ── Stricter rate limit for auth endpoints (20 req/min per IP) ───────────
+  await fastify.register(async (authScope) => {
+    await authScope.register(rateLimit, {
+      max: 20,
+      timeWindow: '1 minute',
+      skipOnError: true,
+      keyGenerator: (req) =>
+        (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
+      errorResponseBuilder: (_req, context) => ({
+        error: `Слишком много запросов — повторите через ${context.after}`,
+        code: 'RATE_LIMITED',
+      }),
+    });
+    await authScope.register(authRoutes, { prefix: '/api' });
+  });
+
   // ── Routes ────────────────────────────────────────────────────────────────
-  await fastify.register(authRoutes, { prefix: '/api' });
   await fastify.register(chatRoutes, { prefix: '/api' });
   await fastify.register(uploadRoutes, { prefix: '/api' });
   await fastify.register(paymentRoutes, { prefix: '/api' });

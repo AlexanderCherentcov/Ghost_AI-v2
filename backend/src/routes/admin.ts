@@ -4,10 +4,13 @@ import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
 
-const BOT_SECRET = process.env.BOT_SECRET ?? '';
+if (!process.env.BOT_SECRET) {
+  throw new Error('BOT_SECRET is required — server refuses to start without it');
+}
+const BOT_SECRET = process.env.BOT_SECRET;
 
 function checkBotSecret(request: any, reply: any): boolean {
-  if (!BOT_SECRET || request.headers['x-bot-secret'] !== BOT_SECRET) {
+  if (request.headers['x-bot-secret'] !== BOT_SECRET) {
     reply.code(403).send({ error: 'Forbidden' });
     return false;
   }

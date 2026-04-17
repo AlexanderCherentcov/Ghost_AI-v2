@@ -221,10 +221,13 @@ export function InputBar({
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendingRef = useRef(false); // L-08: защита от повторной отправки до обновления isStreaming
 
   function handleSend() {
     const trimmed = value.trim();
     if ((!trimmed && !attachedFile) || disabled) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     const opts = chatMode === 'video' ? videoOptions : undefined;
     onSend(trimmed, attachedFile ?? undefined, opts);
     setValue('');
@@ -232,6 +235,7 @@ export function InputBar({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    setTimeout(() => { sendingRef.current = false; }, 500);
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {

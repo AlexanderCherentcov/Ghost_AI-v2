@@ -15,7 +15,7 @@ export function sanitizeInput(text: string): string {
     .trim()
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .slice(0, 2000);
+    .slice(0, 16000);
 }
 
 // ─── Reset daily/monthly counters if period ended ─────────────────────────────
@@ -63,80 +63,85 @@ export async function checkAndDeduct(
   count = 1,
   hasFile = false,
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      plan: true,
-      std_messages_today:       true,
-      pro_messages_today:       true,
-      images_today:             true,
-      videos_today:             true,
-      files_used:               true,
-      std_messages_daily_limit: true,
-      pro_messages_daily_limit: true,
-      images_daily_limit:       true,
-      videos_daily_limit:       true,
-      files_monthly_limit:      true,
-    },
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: {
+        plan: true,
+        std_messages_today:       true,
+        pro_messages_today:       true,
+        images_today:             true,
+        videos_today:             true,
+        files_used:               true,
+        std_messages_daily_limit: true,
+        pro_messages_daily_limit: true,
+        images_daily_limit:       true,
+        videos_daily_limit:       true,
+        files_monthly_limit:      true,
+      },
+    });
+    if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
+
+    const updates: Record<string, unknown> = {};
+
+    // ── Videos ────────────────────────────────────────────────────────────────
+    if (requestType === 'video_generate') {
+      if (user.videos_daily_limit === 0) {
+        throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
+      }
+      if (user.videos_daily_limit !== -1 && user.videos_today + count > user.videos_daily_limit) {
+        throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
+      }
+      await tx.user.update({ where: { id: userId }, data: { videos_today: { increment: count } } });
+      return;
+    }
+
+    // ── Images ────────────────────────────────────────────────────────────────
+    if (requestType === 'image_generate' || requestType === 'image_edit') {
+      if (user.images_daily_limit === 0) {
+        throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
+      }
+      if (user.images_daily_limit !== -1 && user.images_today + 1 > user.images_daily_limit) {
+        throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
+      }
+      await tx.user.update({ where: { id: userId }, data: { images_today: { increment: 1 } } });
+      return;
+    }
+
+    // ── Pro messages ───────────────────────────────────────────────────────────
+    if (requestType === 'chat_pro') {
+      if (user.pro_messages_daily_limit === 0) {
+        throw Object.assign(new Error('LIMIT_PRO_UNAVAILABLE'), { code: 'LIMIT_PRO_UNAVAILABLE' });
+      }
+      if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today + 1 > user.pro_messages_daily_limit) {
+        throw Object.assign(new Error('LIMIT_PRO_MESSAGES'), { code: 'LIMIT_PRO_MESSAGES' });
+      }
+      updates.pro_messages_today = { increment: 1 };
+    }
+
+    // ── Std messages ───────────────────────────────────────────────────────────
+    if (requestType === 'chat_std') {
+      const stdLimit = user.std_messages_daily_limit;
+      if (stdLimit !== -1 && user.std_messages_today >= stdLimit) {
+        const code = user.plan === 'FREE' ? 'LIMIT_FREE_MESSAGES' : 'LIMIT_STD_MESSAGES';
+        throw Object.assign(new Error(code), { code });
+      }
+      updates.std_messages_today = { increment: 1 };
+    }
+
+    // ── File attachment check — [C-04] skip when files_monthly_limit === -1 ───
+    if (hasFile) {
+      if (user.files_monthly_limit === 0) {
+        throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
+      }
+      if (user.files_monthly_limit !== -1 && user.files_used >= user.files_monthly_limit) {
+        throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
+      }
+      updates.files_used = { increment: 1 };
+    }
+
+    await tx.user.update({ where: { id: userId }, data: updates });
   });
-  if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
-
-  const updates: Record<string, unknown> = {};
-
-  // ── Videos ──────────────────────────────────────────────────────────────────
-  if (requestType === 'video_generate') {
-    if (user.videos_daily_limit === 0) {
-      throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
-    }
-    if (user.videos_daily_limit !== -1 && user.videos_today + count > user.videos_daily_limit) {
-      throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
-    }
-    await prisma.user.update({ where: { id: userId }, data: { videos_today: { increment: count } } });
-    return;
-  }
-
-  // ── Images ──────────────────────────────────────────────────────────────────
-  if (requestType === 'image_generate' || requestType === 'image_edit') {
-    if (user.images_daily_limit === 0) {
-      throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
-    }
-    if (user.images_daily_limit !== -1 && user.images_today + 1 > user.images_daily_limit) {
-      throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
-    }
-    await prisma.user.update({ where: { id: userId }, data: { images_today: { increment: 1 } } });
-    return;
-  }
-
-  // ── Pro messages ─────────────────────────────────────────────────────────────
-  if (requestType === 'chat_pro') {
-    if (user.pro_messages_daily_limit === 0) {
-      throw Object.assign(new Error('LIMIT_PRO_UNAVAILABLE'), { code: 'LIMIT_PRO_UNAVAILABLE' });
-    }
-    if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today + 1 > user.pro_messages_daily_limit) {
-      throw Object.assign(new Error('LIMIT_PRO_MESSAGES'), { code: 'LIMIT_PRO_MESSAGES' });
-    }
-    updates.pro_messages_today = { increment: 1 };
-  }
-
-  // ── Std messages ─────────────────────────────────────────────────────────────
-  if (requestType === 'chat_std') {
-    const stdLimit = user.std_messages_daily_limit;
-    if (stdLimit !== -1 && user.std_messages_today >= stdLimit) {
-      const code = user.plan === 'FREE' ? 'LIMIT_FREE_MESSAGES' : 'LIMIT_STD_MESSAGES';
-      throw Object.assign(new Error(code), { code });
-    }
-    updates.std_messages_today = { increment: 1 };
-  }
-
-  // ── File attachment check ─────────────────────────────────────────────────────
-  if (hasFile) {
-    if (user.files_monthly_limit === 0 || user.files_used >= user.files_monthly_limit) {
-      throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
-    }
-    updates.files_used = { increment: 1 };
-  }
-
-  await prisma.user.update({ where: { id: userId }, data: updates });
 }
 
 // ─── Refund on API error ──────────────────────────────────────────────────────
@@ -148,19 +153,22 @@ export async function refundCounter(
   hasFile = false,
 ): Promise<void> {
   try {
-    const updates: Record<string, unknown> = {};
+    // [M-08] Use updateMany with a floor-at-zero condition to avoid negative counters
     if (requestType === 'video_generate') {
-      updates.videos_today = { decrement: count };
+      await prisma.$executeRaw`UPDATE "User" SET "videos_today" = GREATEST(0, "videos_today" - ${count}) WHERE id = ${userId}`;
     } else if (requestType === 'image_generate' || requestType === 'image_edit') {
-      updates.images_today = { decrement: 1 };
+      await prisma.$executeRaw`UPDATE "User" SET "images_today" = GREATEST(0, "images_today" - 1) WHERE id = ${userId}`;
     } else if (requestType === 'chat_pro') {
-      updates.pro_messages_today = { decrement: 1 };
-      if (hasFile) updates.files_used = { decrement: 1 };
+      await prisma.$executeRaw`UPDATE "User" SET "pro_messages_today" = GREATEST(0, "pro_messages_today" - 1) WHERE id = ${userId}`;
+      if (hasFile) {
+        await prisma.$executeRaw`UPDATE "User" SET "files_used" = GREATEST(0, "files_used" - 1) WHERE id = ${userId}`;
+      }
     } else {
-      updates.std_messages_today = { decrement: 1 };
-      if (hasFile) updates.files_used = { decrement: 1 };
+      await prisma.$executeRaw`UPDATE "User" SET "std_messages_today" = GREATEST(0, "std_messages_today" - 1) WHERE id = ${userId}`;
+      if (hasFile) {
+        await prisma.$executeRaw`UPDATE "User" SET "files_used" = GREATEST(0, "files_used" - 1) WHERE id = ${userId}`;
+      }
     }
-    await prisma.user.update({ where: { id: userId }, data: updates });
   } catch {
     // Refund is best-effort
   }

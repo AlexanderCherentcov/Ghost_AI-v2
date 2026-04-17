@@ -86,6 +86,8 @@ function parseDockerLogs(buf: Buffer): string {
 }
 
 async function containerLogs(svc: string, tail = 60): Promise<string> {
+  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres', 'certbot'];
+  if (!allowedSvcs.includes(svc)) throw new Error(`Unknown service: ${svc}`);
   const res = await docker.get(
     `/containers/${cname(svc)}/logs?tail=${tail}&stdout=1&stderr=1&timestamps=1`,
     { responseType: 'arraybuffer' },
@@ -346,12 +348,16 @@ bot.command('start', async (ctx) => {
 });
 
 bot.command('users', async (ctx) => {
-  const page     = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
-  const { data } = await api.get(`/users?page=${page}&limit=8`);
-  await ctx.reply(fmtUserList(data, page), {
-    parse_mode: 'HTML',
-    reply_markup: userListKb(data, page),
-  });
+  try {
+    const page     = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
+    const { data } = await api.get(`/users?page=${page}&limit=8`);
+    await ctx.reply(fmtUserList(data, page), {
+      parse_mode: 'HTML',
+      reply_markup: userListKb(data, page),
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('user', async (ctx) => {
@@ -381,28 +387,32 @@ bot.command('find', async (ctx) => {
     return;
   }
 
-  const { data } = await api.get(`/users?search=${encodeURIComponent(q)}&limit=10`);
-  const users: any[] = data.users ?? [];
+  try {
+    const { data } = await api.get(`/users?search=${encodeURIComponent(q)}&limit=10`);
+    const users: any[] = data.users ?? [];
 
-  if (users.length === 0) {
-    await ctx.reply('🔍 Пользователей не найдено.');
-    return;
+    if (users.length === 0) {
+      await ctx.reply('🔍 Пользователей не найдено.');
+      return;
+    }
+    if (users.length === 1) {
+      await replyUserCard(ctx, users[0].id);
+      return;
+    }
+
+    const kb = new InlineKeyboard();
+    users.forEach((u: any) => {
+      const label = (u.name ?? 'Без имени').slice(0, 30);
+      kb.text(label, `u:${u.id}`).row();
+    });
+    kb.text('⬅ Меню', 'menu');
+
+    await ctx.reply(`🔍 Найдено ${data.total}. Выберите:`, {
+      reply_markup: kb,
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
   }
-  if (users.length === 1) {
-    await replyUserCard(ctx, users[0].id);
-    return;
-  }
-
-  const kb = new InlineKeyboard();
-  users.forEach((u: any) => {
-    const label = (u.name ?? 'Без имени').slice(0, 30);
-    kb.text(label, `u:${u.id}`).row();
-  });
-  kb.text('⬅ Меню', 'menu');
-
-  await ctx.reply(`🔍 Найдено ${data.total}. Выберите:`, {
-    reply_markup: kb,
-  });
 });
 
 bot.command('setplan', async (ctx) => {
@@ -412,8 +422,12 @@ bot.command('setplan', async (ctx) => {
     await ctx.reply(`❌ /setplan <userId> <план>\nПланы: ${valid.join(', ')}`);
     return;
   }
-  await api.post('/setplan', { userId, plan: plan.toUpperCase() });
-  await ctx.reply(`✅ <code>${userId}</code> → план <b>${plan.toUpperCase()}</b>`, { parse_mode: 'HTML' });
+  try {
+    await api.post('/setplan', { userId, plan: plan.toUpperCase() });
+    await ctx.reply(`✅ <code>${userId}</code> → план <b>${plan.toUpperCase()}</b>`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('setlimits', async (ctx) => {
@@ -427,9 +441,13 @@ bot.command('setlimits', async (ctx) => {
     if (k && v !== undefined) body[k] = parseInt(v);
   }
 
-  const { data } = await api.post('/setlimits', body);
-  const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
-  await ctx.reply(`✅ Лимиты установлены для <code>${userId}</code>\n${changed}`, { parse_mode: 'HTML' });
+  try {
+    const { data } = await api.post('/setlimits', body);
+    const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    await ctx.reply(`✅ Лимиты установлены для <code>${userId}</code>\n${changed}`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('addlimits', async (ctx) => {
@@ -443,37 +461,57 @@ bot.command('addlimits', async (ctx) => {
     if (k && v !== undefined) body[k] = parseInt(v);
   }
 
-  const { data } = await api.post('/addlimits', body);
-  const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
-  await ctx.reply(`✅ Лимиты добавлены для <code>${userId}</code>\n${changed || (data.note ?? '')}`, { parse_mode: 'HTML' });
+  try {
+    const { data } = await api.post('/addlimits', body);
+    const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    await ctx.reply(`✅ Лимиты добавлены для <code>${userId}</code>\n${changed || (data.note ?? '')}`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('resetlimits', async (ctx) => {
   const userId = (ctx.match ?? '').trim();
   if (!userId) { await ctx.reply('❌ /resetlimits <userId>'); return; }
-  await api.post('/resetlimits', { userId });
-  await ctx.reply(`✅ Лимиты сброшены для <code>${userId}</code>`, { parse_mode: 'HTML' });
+  try {
+    await api.post('/resetlimits', { userId });
+    await ctx.reply(`✅ Лимиты сброшены для <code>${userId}</code>`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('ban', async (ctx) => {
   const userId = (ctx.match ?? '').trim();
   if (!userId) { await ctx.reply('❌ /ban <userId>'); return; }
-  await api.post('/ban', { userId });
-  await ctx.reply(`🚫 Пользователь <code>${userId}</code> заблокирован`, { parse_mode: 'HTML' });
+  try {
+    await api.post('/ban', { userId });
+    await ctx.reply(`🚫 Пользователь <code>${userId}</code> заблокирован`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('stats', async (ctx) => {
-  const { data } = await api.get('/stats');
-  await ctx.reply(fmtStats(data), { parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
-  });
+  try {
+    const { data } = await api.get('/stats');
+    await ctx.reply(fmtStats(data), { parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('health', async (ctx) => {
-  const statuses = await allContainerStatuses();
-  await ctx.reply(fmtHealth(statuses), { parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text('🔄 Обновить', 'health').text('🏠 Меню', 'menu'),
-  });
+  try {
+    const statuses = await allContainerStatuses();
+    await ctx.reply(fmtHealth(statuses), { parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard().text('🔄 Обновить', 'health').text('🏠 Меню', 'menu'),
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
 });
 
 bot.command('restart', async (ctx) => {
@@ -493,8 +531,13 @@ bot.command('restart', async (ctx) => {
 });
 
 bot.command('logs', async (ctx) => {
+  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
   const parts = (ctx.match ?? 'backend 60').trim().split(/\s+/);
   const svc   = parts[0] || 'backend';
+  if (!allowedSvcs.includes(svc)) {
+    await ctx.reply(`❌ Недопустимый сервис. Доступные: ${allowedSvcs.join(', ')}`);
+    return;
+  }
   const n     = Math.min(200, parseInt(parts[1] ?? '60') || 60);
   await ctx.reply(`📋 Получаю логи <b>${svc}</b>...`, { parse_mode: 'HTML' });
   try {
@@ -679,17 +722,31 @@ bot.callbackQuery(/^dis:([^:]+):([a-z]+)$/, async (ctx) => {
   await replyUserCard(ctx, userId, true);
 });
 
-// ena:<userId>:<feature>  — re-enable by restoring plan default (full reset)
+// ena:<userId>:<feature>  — re-enable by restoring only the specific feature's default limit
 bot.callbackQuery(/^ena:([^:]+):([a-z]+)$/, async (ctx) => {
   const userId = ctx.match[1];
+  const feature = ctx.match[2]; // video | image | pro | chat
   await ctx.answerCallbackQuery('Восстанавливаю...');
-  // Reset ALL limits to plan defaults — cleanest way to restore one disabled feature
-  await api.post('/resetlimits', { userId });
+  // Restore default values by plan (only the specific feature)
+  const featureDefaults: Record<string, Record<string, number>> = {
+    video: { video: 3 },
+    image: { img: 5 },
+    pro: { pro: 10 },
+    chat: { chat: 30 },
+  };
+  const defaults = featureDefaults[feature];
+  if (!defaults) return;
+  await api.post('/setlimits', { userId, ...defaults });
   await replyUserCard(ctx, userId, true);
 });
 
 bot.callbackQuery(/^restart:(.+)$/, async (ctx) => {
+  const allowed = ['backend', 'bot', 'nginx', 'redis', 'admin-bot', 'certbot'];
   const svc = ctx.match[1];
+  if (!allowed.includes(svc)) {
+    await ctx.answerCallbackQuery('⛔ Недопустимый сервис');
+    return;
+  }
   await ctx.answerCallbackQuery(`Перезапускаю ${svc}...`);
   await containerRestart(svc);
   await ctx.editMessageText(
@@ -699,7 +756,12 @@ bot.callbackQuery(/^restart:(.+)$/, async (ctx) => {
 });
 
 bot.callbackQuery(/^logs:([^:]+):(\d+)$/, async (ctx) => {
+  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
   const svc = ctx.match[1];
+  if (!allowedSvcs.includes(svc)) {
+    await ctx.answerCallbackQuery('⛔ Недопустимый сервис');
+    return;
+  }
   const n   = parseInt(ctx.match[2]);
   await ctx.answerCallbackQuery('Получаю логи...');
   try {

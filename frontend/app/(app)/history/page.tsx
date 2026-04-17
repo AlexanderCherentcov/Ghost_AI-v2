@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -28,9 +28,10 @@ function groupChats(chats: Chat[]) {
 export default function HistoryPage() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { chats, updateChat, removeChat, addChat } = useChatStore();
+  const { chats, updateChat, removeChat } = useChatStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const renamingRef = useRef(false); // M-15: предотвращаем двойной вызов handleRename
 
   const plan = user?.plan ?? 'FREE';
   const stdToday = user?.std_messages_today ?? 0;
@@ -51,15 +52,28 @@ export default function HistoryPage() {
     try {
       await api.chats.delete(chatId);
     } catch {
-      if (snapshot) addChat(snapshot); // restore on failure
+      // L-02: восстанавливаем чат через setChats чтобы не ломать порядок
+      if (snapshot) {
+        const current = useChatStore.getState().chats;
+        if (!current.find((c) => c.id === snapshot.id)) {
+          useChatStore.getState().setChats([snapshot, ...current]);
+        }
+      }
     }
   }
 
   async function handleRename(chatId: string) {
+    // M-15: предотвращаем двойной вызов при Enter + onBlur
+    if (renamingRef.current) return;
     if (!editTitle.trim()) return;
-    await api.chats.update(chatId, { title: editTitle });
-    updateChat(chatId, { title: editTitle });
-    setEditingId(null);
+    renamingRef.current = true;
+    try {
+      await api.chats.update(chatId, { title: editTitle });
+      updateChat(chatId, { title: editTitle });
+      setEditingId(null);
+    } finally {
+      renamingRef.current = false;
+    }
   }
 
   function Section({ label, items }: { label: string; items: Chat[] }) {

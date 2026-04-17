@@ -15,10 +15,10 @@ async function downloadImageFile(url: string) {
     const ext = blob.type.includes('png') ? 'png' : 'jpg';
     const fname = `ghostline-${Date.now()}.${ext}`;
     // Web Share API (iOS 15+, Android Chrome) → "Save to Photos / Gallery"
-    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
+    if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
       const file = new File([blob], fname, { type: blob.type });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'GhostLine' });
+      if ((navigator as any).canShare({ files: [file] })) {
+        await (navigator as any).share({ files: [file], title: 'GhostLine' });
         return;
       }
     }
@@ -89,7 +89,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
+              {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
             </button>
             <button
               onClick={onClose}

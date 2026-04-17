@@ -140,10 +140,10 @@ async function downloadFile(url: string, ext = 'mp4') {
     const blob = await res.blob();
     // Web Share API (iOS 15+, Android Chrome) → opens native share sheet
     // with "Save to Photos / Gallery" option
-    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
+    if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
       const file = new File([blob], fname, { type: blob.type });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'GhostLine' });
+      if ((navigator as any).canShare({ files: [file] })) {
+        await (navigator as any).share({ files: [file], title: 'GhostLine' });
         return;
       }
     }
@@ -250,7 +250,7 @@ function MediaContent({
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
+            {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
           </button>
         </div>
       </div>
@@ -332,7 +332,7 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
+            {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
           </button>
         </div>
       </div>
@@ -404,7 +404,7 @@ function VideoViewer({ url, onClose }: { url: string; onClose: () => void }) {
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
+            {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
           </button>
           <button
             onClick={onClose}

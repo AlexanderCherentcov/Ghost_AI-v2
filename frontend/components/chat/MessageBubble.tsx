@@ -134,18 +134,30 @@ function FileChip({ name }: { name: string }) {
 }
 
 async function downloadFile(url: string, ext = 'mp4') {
+  const fname = `ghostline-${Date.now()}.${ext}`;
   try {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
+    // Web Share API (iOS 15+, Android Chrome) → opens native share sheet
+    // with "Save to Photos / Gallery" option
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
+      const file = new File([blob], fname, { type: blob.type });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'GhostLine' });
+        return;
+      }
+    }
+    // Desktop fallback — blob URL download
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = `ghostline-${Date.now()}.${ext}`;
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-  } catch {
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return; // user cancelled share sheet
     window.open(url, '_blank');
   }
 }
@@ -238,7 +250,7 @@ function MediaContent({
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Скачать
+            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
           </button>
         </div>
       </div>
@@ -320,7 +332,7 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Скачать
+            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
           </button>
         </div>
       </div>
@@ -392,7 +404,7 @@ function VideoViewer({ url, onClose }: { url: string; onClose: () => void }) {
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Скачать
+            {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
           </button>
           <button
             onClick={onClose}

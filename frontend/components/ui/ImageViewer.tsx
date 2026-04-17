@@ -13,15 +13,26 @@ async function downloadImageFile(url: string) {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
     const ext = blob.type.includes('png') ? 'png' : 'jpg';
+    const fname = `ghostline-${Date.now()}.${ext}`;
+    // Web Share API (iOS 15+, Android Chrome) → "Save to Photos / Gallery"
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
+      const file = new File([blob], fname, { type: blob.type });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'GhostLine' });
+        return;
+      }
+    }
+    // Desktop fallback
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = `ghostline-${Date.now()}.${ext}`;
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
-  } catch {
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return; // user cancelled share sheet
     window.open(url, '_blank');
   }
 }
@@ -78,7 +89,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Скачать
+              {typeof navigator !== 'undefined' && navigator.share ? 'Сохранить' : 'Скачать'}
             </button>
             <button
               onClick={onClose}

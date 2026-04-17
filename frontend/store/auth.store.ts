@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@/lib/api';
 import { setAccessToken } from '@/lib/api';
 
@@ -42,11 +42,7 @@ export const useAuthStore = create<AuthState>()(
       // [C-10] Use sessionStorage instead of localStorage to reduce XSS exposure.
       // refreshToken is scoped to the tab session and not accessible cross-tab via XSS.
       storage: typeof window !== 'undefined'
-        ? {
-            getItem: (k) => sessionStorage.getItem(k),
-            setItem: (k, v) => sessionStorage.setItem(k, v),
-            removeItem: (k) => sessionStorage.removeItem(k),
-          }
+        ? createJSONStorage(() => sessionStorage)
         : undefined,
       // Persist user too — shows cached data instantly on refresh
       partialize: (state) => ({

@@ -103,9 +103,7 @@ bot.command('start', async (ctx) => {
 
   const keyboard = new InlineKeyboard()
     .webApp('🤖 Открыть GhostLine', MINIAPP_URL)
-    .row()
-    .url('🌐 Сайт', FRONTEND_URL)
-    .url('💬 Чат', `${FRONTEND_URL}/chat`);
+    .url('🌐 Сайт', FRONTEND_URL);
 
   await ctx.reply(
     `✨ *Твой личный ИИ\\-ассистент*\n\n` +

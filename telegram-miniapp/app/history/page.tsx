@@ -112,22 +112,22 @@ function HistoryApp() {
               <div
                 className="flex items-center rounded-xl px-3 py-2 gap-0"
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
-                onClick={() => router.push(`/chat?id=${chat.id}`)}
               >
+                {/* Tap zone — only the title area navigates to chat */}
                 <span
-                  className="flex-1 text-sm truncate px-1"
+                  className="flex-1 text-sm truncate px-1 py-2 cursor-pointer"
                   style={{ color: 'rgba(255,255,255,0.75)' }}
+                  onClick={() => router.push(`/chat?id=${chat.id}`)}
                 >
                   {chat.title.length > 34 ? chat.title.slice(0, 34) + '…' : chat.title}
                 </span>
                 {/* Rename button — 44×44 touch target */}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  type="button"
+                  onClick={() => {
                     setEditingId(chat.id);
                     setEditTitle(chat.title);
                   }}
-                  onTouchStart={(e) => e.stopPropagation()}
                   className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg active:bg-white/5"
                   style={{ color: 'rgba(255,255,255,0.35)' }}
                   title="Переименовать"
@@ -138,11 +138,8 @@ function HistoryApp() {
                 </button>
                 {/* Delete button — 44×44 touch target */}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(chat.id);
-                  }}
-                  onTouchStart={(e) => e.stopPropagation()}
+                  type="button"
+                  onClick={() => handleDelete(chat.id)}
                   disabled={deletingId === chat.id}
                   className="flex items-center justify-center w-10 h-10 flex-shrink-0 rounded-lg disabled:opacity-30 transition-opacity active:bg-red-500/10"
                   style={{ color: 'rgba(255,80,80,0.7)' }}

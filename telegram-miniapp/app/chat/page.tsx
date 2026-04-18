@@ -182,7 +182,10 @@ async function extractFile(file: File): Promise<{ text: string; lang: string; tr
   return res.json();
 }
 
-async function downloadImage(url: string) {
+async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
+  const tg = window.Telegram?.WebApp;
+
+  // data: URI (base64 image) — blob download
   if (url.startsWith('data:')) {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -196,10 +199,31 @@ async function downloadImage(url: string) {
     URL.revokeObjectURL(blobUrl);
     return;
   }
-  const tg = window.Telegram?.WebApp;
+
+  // Video on mobile — Web Share API first, then Telegram openLink
+  if (type === 'video') {
+    // Try native share sheet (saves to gallery on iOS/Android)
+    if (navigator.share) {
+      try {
+        await navigator.share({ url });
+        return;
+      } catch {
+        // User cancelled or not supported — fall through
+      }
+    }
+    // Telegram Mini App — open in browser so user can download/save
+    if (tg) { tg.openLink(url); return; }
+    window.open(url, '_blank');
+    return;
+  }
+
+  // Image: open in browser/Telegram external browser
   if (tg) { tg.openLink(url); return; }
   window.open(url, '_blank');
 }
+
+// Keep backward-compatible alias used by the lightbox
+const downloadImage = (url: string) => downloadMedia(url, 'image');
 
 export default function TgChatPage() {
   return (
@@ -886,12 +910,26 @@ function ChatApp() {
                           </div>
                         </div>
                       ) : (msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
-                        <video
-                          src={msg.mediaUrl}
-                          controls
-                          playsInline
-                          className="rounded-xl w-full mb-2"
-                        />
+                        <div>
+                          <video
+                            src={msg.mediaUrl}
+                            controls
+                            playsInline
+                            className="rounded-xl w-full mb-2"
+                          />
+                          {/* Download button for video */}
+                          <button
+                            type="button"
+                            onClick={() => downloadMedia(msg.mediaUrl!, 'video')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium mt-1 mb-1"
+                            style={{ background: 'rgba(123,92,240,0.15)', color: '#A78BFA', border: '1px solid rgba(123,92,240,0.3)' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                              <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            Скачать видео
+                          </button>
+                        </div>
                       ) : (
                         <img
                           src={msg.mediaUrl}

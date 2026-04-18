@@ -57,8 +57,20 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
 };
 
 export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string): string {
+  // Inject current date so the AI never answers with a stale year
+  const now = new Date();
+  const currentDate = now.toLocaleDateString('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Europe/Moscow',
+  });
+  const dateInfo = `Сегодня: ${currentDate}. Всегда используй актуальную дату в ответах.`;
+
   const baseKey = plan === 'FREE' ? 'free' : (mode in SYSTEM_PROMPTS ? mode : 'chat');
   const base = SYSTEM_PROMPTS[baseKey] ?? SYSTEM_PROMPTS.chat;
   const styleHint = responseStyle ? STYLE_INSTRUCTIONS[responseStyle] : null;
-  return styleHint ? `${base}\n\n${styleHint}` : base;
+  const combined = styleHint ? `${base}\n\n${styleHint}` : base;
+  return `${combined}\n\n${dateInfo}`;
 }

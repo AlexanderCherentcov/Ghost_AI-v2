@@ -28,6 +28,7 @@
     "@fastify/multipart": "^8.3.0",
     "ioredis": "^5.4.1",
     "openai": "^4.52.0",
+    "undici": "^6.19.2",
     "@google/generative-ai": "^0.15.0",
     "axios": "^1.7.2",
     "pino": "^9.3.1",

@@ -30,10 +30,6 @@ import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Build app ────────────────────────────────────────────────────────────────
 
-// Set up outbound HTTPS proxy (Amsterdam) before any HTTP calls are made.
-// All fetch() calls — including OpenAI SDK, OpenRouter, GoAPI — go through it.
-await setupProxy();
-
 export async function buildApp() {
   const fastify = Fastify({
     logger: {
@@ -199,6 +195,9 @@ export async function buildApp() {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function start() {
+  // Set up outbound proxy FIRST — before any HTTP calls to AI APIs
+  setupProxy();
+
   const fastify = await buildApp();
 
   // Connect to DB and Redis

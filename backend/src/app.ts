@@ -13,6 +13,7 @@ import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
 import { authenticate } from './middleware/auth.js';
 import { initVectorCache } from './services/vector-cache.js';
+import { setupProxy } from './lib/proxy.js';
 
 import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
@@ -28,6 +29,10 @@ import { startReelWorker } from './workers/reel.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Build app ────────────────────────────────────────────────────────────────
+
+// Set up outbound HTTPS proxy (Amsterdam) before any HTTP calls are made.
+// All fetch() calls — including OpenAI SDK, OpenRouter, GoAPI — go through it.
+await setupProxy();
 
 export async function buildApp() {
   const fastify = Fastify({

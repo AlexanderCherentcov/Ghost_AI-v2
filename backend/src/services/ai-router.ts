@@ -2,7 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { OR_MODELS } from './providers/openrouter.js';
 
 export type Complexity = 'simple' | 'complex';
-export type Provider = 'openrouter-haiku' | 'openrouter-deepseek';
+export type Provider = 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
 
 export interface RouterResult {
   provider: Provider;
@@ -32,6 +32,27 @@ const COMPLEX_KEYWORDS = [
   'explain in detail','help me understand',
 ];
 
+// Keywords that signal the user wants fresh info from the web
+const SEARCH_KEYWORDS = [
+  // Russian
+  'найди','найти','поищи','поиск','погугли','загугли',
+  'что сейчас','что сегодня','последние новости','свежие новости',
+  'актуально','актуальная','актуальный','актуальные',
+  'текущий курс','текущая цена','текущие события',
+  'новости','сейчас происходит','что происходит',
+  'расписание','когда выйдет','когда выходит','дата выхода',
+  'погода','курс доллара','курс евро','цена биткоин',
+  'последняя версия','последний релиз','вышел ли',
+  'есть ли информация о','свежая информация',
+  // English
+  'search for','find information','look up','google it',
+  'latest news','current news','recent news',
+  'what is happening','right now','today\'s',
+  'current price','stock price','weather in',
+  'when does','release date','latest version',
+  'recent events','is there any news',
+];
+
 const DOCUMENT_KEYWORDS = [
   'проанализируй документ','прочитай файл','что в pdf','что в этом файле',
   'разбери документ','объясни документ','что написано в',
@@ -40,6 +61,11 @@ const DOCUMENT_KEYWORDS = [
 ];
 
 export type RouteCategory = 'chat' | 'code' | 'docs';
+
+export function isSearchQuery(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return SEARCH_KEYWORDS.some((k) => lower.includes(k));
+}
 
 export function classifyCategory(prompt: string, hasImage = false, hasDocument = false): RouteCategory {
   if (hasDocument) return 'docs';
@@ -81,8 +107,20 @@ export function route(
     };
   }
 
-  // PRO / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
+  // PRO / ULTRA + search intent → Perplexity Sonar (live web search)
   const isPremium = plan === 'PRO' || plan === 'ULTRA';
+  if (isPremium && !hasDocument && !hasImage && isSearchQuery(prompt)) {
+    logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Search query → Sonar');
+    return {
+      provider: 'openrouter-sonar',
+      complexity: 'complex',
+      model: OR_MODELS.sonar,
+      fallbackModel: OR_MODELS.deepseek,
+      maxTokens: undefined,
+    };
+  }
+
+  // PRO / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
   const useDeepSeek = preferredModel === 'deepseek'
     ? true
     : preferredModel === 'haiku'

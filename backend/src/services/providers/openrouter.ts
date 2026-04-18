@@ -7,6 +7,7 @@ export const OR_MODELS = {
   haiku:      'google/gemini-2.5-flash',
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
+  sonar:      'perplexity/sonar',          // web-search model, PRO/ULTRA only
   flux:       'google/gemini-3.1-flash-image-preview',
   fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;

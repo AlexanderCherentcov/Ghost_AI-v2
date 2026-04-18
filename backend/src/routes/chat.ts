@@ -263,7 +263,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         );
 
         // Determine request type based on which model was selected
-        const isProModel = model === OR_MODELS.deepseek;
+        // sonar (web search) counts as pro — only available to PRO/ULTRA
+        const isProModel = model === OR_MODELS.deepseek || model === OR_MODELS.sonar;
         const requestType: RequestType = isProModel ? 'chat_pro' : 'chat_std';
 
         // Reset daily counters if period ended

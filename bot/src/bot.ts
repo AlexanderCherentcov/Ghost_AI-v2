@@ -106,6 +106,7 @@ bot.command('start', async (ctx) => {
   const miniAppLink = `https://t.me/${BOT_USERNAME}?startapp=open`;
   const keyboard = new InlineKeyboard()
     .url('🤖 Открыть GhostLine', miniAppLink)
+    .row()
     .url('🌐 Сайт', FRONTEND_URL);
 
   await ctx.reply(

@@ -33,7 +33,9 @@ git pull origin master
 # ── 2. Rebuild backend + frontend ─────────────────────────────────────────────
 cd "$INFRA_DIR"
 info "Building and restarting backend + frontend..."
-docker compose up -d --build backend frontend
+# --no-cache prevents Docker from using stale layers when git replaces file inodes
+docker compose build --no-cache backend frontend
+docker compose up -d backend frontend
 
 # ── 3. Restart nginx (picks up new inode after git pull) ─────────────────────
 # git pull replaces file inodes — bind-mounted nginx config requires container

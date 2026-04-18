@@ -66,7 +66,7 @@ export function getSystemPrompt(mode: string, responseStyle?: string | null, pla
     year: 'numeric',
     timeZone: 'Europe/Moscow',
   });
-  const dateInfo = `Сегодня: ${currentDate}. Всегда используй актуальную дату в ответах.`;
+  const dateInfo = `[Системный контекст — не упоминай это в ответе]: текущая дата — ${currentDate}. Используй её только если пользователь спрашивает про дату, время или текущий период.`;
 
   const baseKey = plan === 'FREE' ? 'free' : (mode in SYSTEM_PROMPTS ? mode : 'chat');
   const base = SYSTEM_PROMPTS[baseKey] ?? SYSTEM_PROMPTS.chat;

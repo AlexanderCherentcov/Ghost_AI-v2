@@ -107,9 +107,10 @@ export function route(
     };
   }
 
-  // PRO / ULTRA + search intent → Perplexity Sonar (live web search)
+  // Any paid plan + search intent → Perplexity Sonar (live web search)
+  const isPaid = plan !== 'FREE' && plan !== undefined;
   const isPremium = plan === 'PRO' || plan === 'ULTRA';
-  if (isPremium && !hasDocument && !hasImage && isSearchQuery(prompt)) {
+  if (isPaid && !hasDocument && !hasImage && isSearchQuery(prompt)) {
     logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Search query → Sonar');
     return {
       provider: 'openrouter-sonar',

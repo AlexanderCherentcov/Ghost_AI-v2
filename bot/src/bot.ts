@@ -6,7 +6,8 @@ if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
 const API_URL      = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
-const MINIAPP_URL  = process.env.MINIAPP_URL ?? 'https://miniapp.ghostlineai.ru';
+const MINIAPP_URL     = process.env.MINIAPP_URL ?? 'https://miniapp.ghostlineai.ru';
+const BOT_USERNAME    = process.env.BOT_USERNAME ?? 'GhostSuperAI_bot';
 
 // Comma-separated list of admin Telegram user IDs
 const ADMIN_IDS = new Set(
@@ -101,8 +102,10 @@ bot.command('start', async (ctx) => {
   const displayName = dbName ?? tgName;
   const planLabel   = PLAN_LABELS[plan] ?? plan;
 
+  // webApp-кнопка всегда на отдельной строке в Telegram — используем url с t.me deep-link
+  const miniAppLink = `https://t.me/${BOT_USERNAME}?startapp=open`;
   const keyboard = new InlineKeyboard()
-    .webApp('🤖 Открыть GhostLine', MINIAPP_URL)
+    .url('🤖 Открыть GhostLine', miniAppLink)
     .url('🌐 Сайт', FRONTEND_URL);
 
   await ctx.reply(

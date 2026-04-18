@@ -185,9 +185,10 @@ async function extractFile(file: File): Promise<{ text: string; lang: string; tr
 async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
   const tg = (window.Telegram?.WebApp) as any;
   const ext = type === 'video' ? 'mp4' : 'jpg';
+  const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
   const filename = `ghostline-${type}-${Date.now()}.${ext}`;
 
-  // data: URI (base64 image) — blob download
+  // data: URI (base64 image) — blob download directly
   if (url.startsWith('data:')) {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -202,32 +203,40 @@ async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
     return;
   }
 
-  // Telegram Bot API 7.11+ — native download dialog (works in all Telegram clients)
-  if (tg?.downloadFile) {
-    tg.downloadFile({ url, file_name: filename });
+  // Fetch blob via CORS (works when backend sets Cross-Origin-Resource-Policy: cross-origin)
+  let blob: Blob | null = null;
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (res.ok) blob = await res.blob();
+  } catch { /* CORS unavailable — fall through to non-blob paths */ }
+
+  if (blob) {
+    // Web Share API with File object — iOS shows "Сохранить видео/фото" → saves to Gallery
+    // Android shows "Сохранить в галерею" via share sheet
+    const file = new File([blob], filename, { type: mimeType });
+    if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'GhostLine' });
+        return;
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return; // user cancelled share sheet
+        // share failed — fall through to anchor download
+      }
+    }
+    // Anchor download fallback (saves to Files, not Gallery — but better than nothing)
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
     return;
   }
 
-  // Try CORS blob download — works when backend serves with Cross-Origin-Resource-Policy
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (res.ok) {
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      return;
-    }
-  } catch {
-    // CORS not allowed or fetch failed — fall through
-  }
-
-  // Fallback: open in Telegram/system browser
+  // No blob (CORS unavailable) — Telegram native download or open link
+  if (tg?.downloadFile) { tg.downloadFile({ url, file_name: filename }); return; }
   if (tg?.openLink) { tg.openLink(url); return; }
   window.open(url, '_blank');
 }

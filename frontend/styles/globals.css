@@ -4,10 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Prevent body-level scroll (all scrolling happens inside app containers) ── */
+/* ─── Base scroll settings ────────────────────────────────────────────────── */
+/* overflow:hidden is intentionally NOT set here — the landing page needs to
+   scroll freely. The (app) layout uses position:fixed containers to contain
+   scroll independently, so body overflow does not affect the app UI. */
 html, body {
   height: 100%;
-  overflow: hidden;
   overscroll-behavior: none;
 }
 

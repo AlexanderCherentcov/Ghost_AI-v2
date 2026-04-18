@@ -53,6 +53,7 @@ export async function buildApp() {
     // Production domains — always allowed regardless of env vars
     'https://ghostlineai.ru',
     'https://www.ghostlineai.ru',
+    'https://miniapp.ghostlineai.ru',
   ].filter(Boolean));
 
   // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted.
@@ -150,6 +151,40 @@ export async function buildApp() {
     reply.header('Cache-Control', 'public, max-age=31536000');
     // Allow cross-origin embedding (Helmet defaults to same-origin which blocks <img> from frontend domain)
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    return reply.send(fs.createReadStream(filepath));
+  });
+
+  // ── Static video serving (generated videos saved to disk) ─────────────────
+  // Supports HTTP Range requests so <video> seeking works on mobile/Telegram.
+  fastify.get('/videos/:filename', async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    if (filename.includes('/') || filename.includes('..')) {
+      return reply.code(400).send({ error: 'Invalid filename' });
+    }
+    const filepath = path.join(process.cwd(), 'uploads', 'videos', filename);
+    if (!fs.existsSync(filepath)) return reply.code(404).send({ error: 'Not found' });
+
+    const stat = fs.statSync(filepath);
+    const total = stat.size;
+    const rangeHeader = (request.headers as Record<string, string>).range;
+
+    reply.header('Accept-Ranges', 'bytes');
+    reply.header('Content-Type', 'video/mp4');
+    reply.header('Cache-Control', 'public, max-age=31536000');
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (rangeHeader) {
+      const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : total - 1;
+      const chunkSize = end - start + 1;
+      reply.code(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${total}`);
+      reply.header('Content-Length', String(chunkSize));
+      return reply.send(fs.createReadStream(filepath, { start, end }));
+    }
+
+    reply.header('Content-Length', String(total));
     return reply.send(fs.createReadStream(filepath));
   });
 

@@ -292,6 +292,26 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return { ...tokens, isNew: !user.onboardingDone };
   });
 
+  // ── Bot: get user info by Telegram ID (plan, name) ───────────────────────
+  fastify.get('/bot/user-info', async (request, reply) => {
+    const secret = (request.headers['x-bot-secret'] ?? '') as string;
+    if (secret !== (process.env.BOT_SECRET ?? '')) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const { tgId } = request.query as { tgId?: string };
+    if (!tgId) return reply.code(400).send({ error: 'tgId required' });
+
+    const user = await prisma.user.findFirst({
+      where: { telegramId: tgId },
+      select: { plan: true, name: true },
+    });
+
+    return {
+      plan: user?.plan ?? 'FREE',
+      name: user?.name ?? null,
+    };
+  });
+
   // ── Telegram OAuth verify (called from frontend after oauth.telegram.org) ─
   fastify.post('/auth/telegram/verify', async (request, reply) => {
     const body = request.body as Record<string, string>;

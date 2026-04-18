@@ -18,10 +18,34 @@ const bot = new Bot(BOT_TOKEN);
 // ─── Rate limit map for auth ───────────────────────────────────────────────────
 const authRateLimit = new Map<number, number>(); // userId -> lastAuthTime
 
+// ─── Plan label helper ─────────────────────────────────────────────────────────
+
+const PLAN_LABELS: Record<string, string> = {
+  FREE:     '🆓 Бесплатный',
+  TRIAL:    '🔮 Пробный',
+  BASIC:    '⚡ Basic',
+  STANDARD: '🌟 Standard',
+  PRO:      '🚀 Pro',
+  ULTRA:    '💎 Ultra',
+  TEAM:     '👥 Team',
+};
+
+async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string | null }> {
+  try {
+    const res = await axios.get(`${API_URL}/api/bot/user-info`, {
+      params: { tgId: String(tgId) },
+      headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
+    });
+    return { plan: res.data.plan ?? 'FREE', dbName: res.data.name ?? null };
+  } catch {
+    return { plan: 'FREE', dbName: null };
+  }
+}
+
 // ─── /start ────────────────────────────────────────────────────────────────────
 
 bot.command('start', async (ctx) => {
-  const name = ctx.from?.first_name ?? 'пользователь';
+  const tgName = ctx.from?.first_name ?? 'пользователь';
   const payload = ctx.match; // text after /start
 
   // ── Auth via bot link ──────────────────────────────────────────────────────
@@ -69,6 +93,14 @@ bot.command('start', async (ctx) => {
     }
   }
 
+  // ── Fetch user plan from backend ──────────────────────────────────────────
+  const { plan, dbName } = ctx.from
+    ? await getUserPlan(ctx.from.id)
+    : { plan: 'FREE', dbName: null };
+
+  const displayName = dbName ?? tgName;
+  const planLabel   = PLAN_LABELS[plan] ?? plan;
+
   const keyboard = new InlineKeyboard()
     .webApp('🤖 Открыть GhostLine', MINIAPP_URL)
     .row()
@@ -76,16 +108,12 @@ bot.command('start', async (ctx) => {
     .url('💬 Чат', `${FRONTEND_URL}/chat`);
 
   await ctx.reply(
-    `👻 *Привет, ${name}!*\n\nДобро пожаловать в *GhostLine AI* — твой личный ИИ-помощник.\n\n` +
-    `🔮 Что умею:\n` +
-    `• 💬 Отвечать на вопросы и вести диалог\n` +
-    `• 🖼 Генерировать изображения\n` +
-    `• 🎵 Создавать музыку\n` +
-    `• 🎬 Генерировать видео\n` +
-    `• 🧠 Глубокий анализ и размышления\n\n` +
-    `Нажми кнопку ниже, чтобы начать 👇`,
+    `✨ *Твой личный ИИ\\-ассистент*\n\n` +
+    `Привет, *${displayName}*\\!\n` +
+    `Я готов к работе\\. Задавай вопросы, создавай изображения или генерируй видео в едином потоке\\.\n\n` +
+    `📦 Тариф: *${planLabel}*`,
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       reply_markup: keyboard,
     }
   );

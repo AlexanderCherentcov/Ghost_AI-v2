@@ -44,17 +44,18 @@ export async function initAuth(initData: string): Promise<{
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = loadToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
+  // Only set Content-Type when sending a body (DELETE without body shouldn't have it)
+  if (options.body) headers['Content-Type'] = 'application/json';
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}/api${path}`, { ...options, headers });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw Object.assign(new Error(err.error), { status: res.status, code: err.code });
+    throw Object.assign(new Error(err.error ?? 'Request failed'), { status: res.status, code: err.code });
   }
 
   if (res.status === 204) return undefined as unknown as T;

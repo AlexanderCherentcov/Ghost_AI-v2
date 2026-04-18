@@ -3,19 +3,25 @@
  * (Amsterdam VPS) to bypass geo-restrictions from Russian IP.
  *
  * Set in .env:
- *   HTTPS_PROXY=socks5://user:pass@194.33.35.73:1080   ← SOCKS5 proxy
- *   HTTPS_PROXY=http://user:pass@host:3128              ← HTTP proxy
+ *   HTTPS_PROXY=http://user:pass@194.33.35.73:8888   ← HTTP proxy (tinyproxy)
  *
- * Uses undici ProxyAgent set as global dispatcher — intercepts ALL fetch()
- * calls in Node 18+ (OpenAI SDK, OpenRouter, GoAPI, any raw fetch).
+ * Uses undici ProxyAgent as global dispatcher — intercepts ALL fetch() calls
+ * in Node 18+ (OpenAI SDK, OpenRouter, GoAPI, raw fetch).
  * Prisma/Redis TCP connections are NOT affected (they don't use fetch).
+ *
+ * NOTE: undici ProxyAgent supports only HTTP/HTTPS proxy URLs (not SOCKS5).
  */
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 
 export function setupProxy(): void {
-  const proxyUrl = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY ?? process.env.SOCKS_PROXY;
+  const proxyUrl = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY;
   if (!proxyUrl) return;
+
+  if (proxyUrl.startsWith('socks')) {
+    console.warn('[Proxy] SOCKS5 not supported by undici ProxyAgent — use HTTP proxy (http://host:port). Proxy disabled.');
+    return;
+  }
 
   try {
     setGlobalDispatcher(

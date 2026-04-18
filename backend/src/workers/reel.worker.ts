@@ -58,35 +58,40 @@ export function startReelWorker() {
       const options: KlingVideoOptions = { duration, aspectRatio, enableAudio, imageUrl, cameraPreset, negativePrompt, cfgScale };
       const externalUrl = await generateVideoKling(prompt, options);
 
-      // Download video to local disk so it persists and users can download it
-      let mediaUrl = externalUrl;
-      try {
-        const filename = await saveVideoToDisk(externalUrl);
-        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
-        mediaUrl = `${API_BASE}/videos/${filename}`;
-      } catch (err: any) {
-        console.warn('[ReelWorker] Failed to save video to disk, using external URL:', err.message);
-      }
-
+      // Mark done immediately with external URL — user sees result without waiting for disk download
       await prisma.generateJob.update({
         where: { id: jobId },
-        data: { status: 'done', mediaUrl },
+        data: { status: 'done', mediaUrl: externalUrl },
       });
 
-      // Save assistant message with video to chat history
+      // Save assistant message with external URL
+      let messageId: string | undefined;
       if (chatId) {
-        await prisma.message.create({
-          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'reel', tokensCost: 0, mediaUrl },
-        }).catch((e) => console.error('[ReelWorker] Failed to save assistant message:', e.message));
+        const msg = await prisma.message.create({
+          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'reel', tokensCost: 0, mediaUrl: externalUrl },
+        }).catch((e) => { console.error('[ReelWorker] Failed to save assistant message:', e.message); return null; });
+        messageId = msg?.id;
       }
 
-      // Cache for future identical text-to-video prompts
-      // Skip cache for image-to-video (unique per image)
       if (!imageUrl) {
-        setMediaCached('reel', prompt, mediaUrl).catch(() => {});
+        setMediaCached('reel', prompt, externalUrl).catch(() => {});
       }
 
-      return { mediaUrl };
+      // Download to server disk in background — once saved, update DB to permanent local URL
+      saveVideoToDisk(externalUrl).then(async (filename) => {
+        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+        const localUrl = `${API_BASE}/videos/${filename}`;
+        await prisma.generateJob.update({ where: { id: jobId }, data: { mediaUrl: localUrl } }).catch(() => {});
+        if (messageId) {
+          await prisma.message.update({ where: { id: messageId }, data: { mediaUrl: localUrl } }).catch(() => {});
+        }
+        if (!imageUrl) setMediaCached('reel', prompt, localUrl).catch(() => {});
+        console.info(`[ReelWorker] Video saved to disk: ${filename}`);
+      }).catch((err: any) => {
+        console.warn('[ReelWorker] Background disk save failed, keeping external URL:', err.message);
+      });
+
+      return { mediaUrl: externalUrl };
     },
     {
       connection: bullmqConnection,

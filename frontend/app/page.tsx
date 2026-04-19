@@ -335,13 +335,21 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-[var(--border)] py-8 px-6">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <GhostIcon size={18} className="text-accent" />
-            <span className="text-sm text-[rgba(255,255,255,0.3)]">GhostLine AI · {new Date().getFullYear()}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <GhostIcon size={18} className="text-accent" />
+              <span className="text-sm text-[rgba(255,255,255,0.3)]">GhostLine AI · {new Date().getFullYear()}</span>
+            </div>
+            <a
+              href="mailto:xxghostlinex@gmail.com"
+              className="text-xs text-[rgba(255,255,255,0.2)] hover:text-[rgba(255,255,255,0.4)] transition-colors"
+            >
+              xxghostlinex@gmail.com
+            </a>
           </div>
           <div className="flex items-center gap-6 text-sm text-[rgba(255,255,255,0.3)]">
-            <Link href="/privacy" className="hover:text-white transition-colors">Политика</Link>
-            <Link href="/terms" className="hover:text-white transition-colors">Условия</Link>
+            <Link href="/privacy" className="hover:text-white transition-colors">Политика конфиденциальности</Link>
+            <Link href="/terms" className="hover:text-white transition-colors">Условия использования</Link>
             <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="hover:text-white transition-colors">
               Telegram
             </a>

@@ -162,6 +162,16 @@ async function downloadFile(url: string, ext = 'mp4') {
   }
 }
 
+// ─── AI Disclaimer ───────────────────────────────────────────────────────────
+
+function AiDisclaimer() {
+  return (
+    <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.18)' }}>
+      Контент создан нейросетью. Сервис не несёт ответственности за достоверность или содержание сгенерированных данных.
+    </p>
+  );
+}
+
 // ─── Generating placeholder ───────────────────────────────────────────────────
 
 function GeneratingPlaceholder({ mode }: { mode: string }) {
@@ -232,27 +242,30 @@ function MediaContent({
 
   if (mode === 'vision') {
     return (
-      <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
-        <img
-          src={mediaUrl}
-          alt="Generated"
-          className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-          loading="lazy"
-          onClick={onOpenImage}
-          title="Нажмите для просмотра"
-        />
-        <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
-          <button
-            onClick={() => downloadFile(mediaUrl, 'jpg')}
-            className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
-          </button>
+      <div className="space-y-1.5">
+        <div className="rounded-xl overflow-hidden border border-[var(--border)] max-w-sm">
+          <img
+            src={mediaUrl}
+            alt="Generated"
+            className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+            loading="lazy"
+            onClick={onOpenImage}
+            title="Нажмите для просмотра"
+          />
+          <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
+            <button
+              onClick={() => downloadFile(mediaUrl, 'jpg')}
+              className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 1v7M3.5 5.5L6 8l2.5-2.5M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
+            </button>
+          </div>
         </div>
+        <AiDisclaimer />
       </div>
     );
   }
@@ -266,7 +279,12 @@ function MediaContent({
   }
 
   if (mode === 'reel') {
-    return <VideoCard mediaUrl={mediaUrl} onOpen={onOpenVideo} />;
+    return (
+      <div className="space-y-1.5">
+        <VideoCard mediaUrl={mediaUrl} onOpen={onOpenVideo} />
+        <AiDisclaimer />
+      </div>
+    );
   }
 
   return null;

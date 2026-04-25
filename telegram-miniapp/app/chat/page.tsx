@@ -334,21 +334,22 @@ function ChatApp() {
 
   // Init: load chat by ?id param, or last chat, or create new
   useEffect(() => {
-    const idParam = searchParams.get('id');
-    if (idParam) {
-      setChatId(idParam);
-      apiRequest<{ messages: Message[] }>(`/chats/${idParam}/messages`)
+    // Helper: load messages for a known chat id and resume any pending generation
+    function loadChat(id: string) {
+      setChatId(id);
+      localStorage.setItem('tg_lastChatId', id);
+      apiRequest<{ messages: Message[] }>(`/chats/${id}/messages`)
         .then(({ messages: msgs }) => {
           setMessages(msgs);
           // Resume pending generation job after page refresh
-          const stored = localStorage.getItem(`pending_gen_${idParam}`);
+          const stored = localStorage.getItem(`pending_gen_${id}`);
           if (!stored) return;
           try {
             const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: string; prompt: string };
             const alreadyDone = msgs.some(
               (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
             );
-            if (alreadyDone) { localStorage.removeItem(`pending_gen_${idParam}`); return; }
+            if (alreadyDone) { localStorage.removeItem(`pending_gen_${id}`); return; }
             const placeholderId = `resumed-${Date.now()}`;
             setMessages((prev) => [
               ...prev,
@@ -361,12 +362,12 @@ function ChatApp() {
                 setMessages((prev) => prev.map((m) =>
                   m.id === placeholderId ? { ...m, content: prompt, mediaUrl: job.mediaUrl, mode } : m
                 ));
-                localStorage.removeItem(`pending_gen_${idParam}`);
+                localStorage.removeItem(`pending_gen_${id}`);
               } else if (job.status === 'failed') {
                 setMessages((prev) => prev.map((m) =>
                   m.id === placeholderId ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать'}` } : m
                 ));
-                localStorage.removeItem(`pending_gen_${idParam}`);
+                localStorage.removeItem(`pending_gen_${id}`);
               } else {
                 await new Promise((r) => setTimeout(r, mode === 'reel' ? 3000 : 2000));
                 return pollResume();
@@ -374,20 +375,41 @@ function ChatApp() {
             };
             pollResume().finally(() => setGeneratingVideo(false));
           } catch {
-            localStorage.removeItem(`pending_gen_${idParam}`);
+            localStorage.removeItem(`pending_gen_${id}`);
           }
         })
+        .catch(() => {
+          // Chat no longer exists — create a fresh one
+          localStorage.removeItem('tg_lastChatId');
+          createNewChat();
+        });
+    }
+
+    function createNewChat() {
+      apiRequest<{ id: string }>('/chats', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'chat' }),
+      })
+        .then((chat) => {
+          setChatId(chat.id);
+          localStorage.setItem('tg_lastChatId', chat.id);
+        })
         .catch(() => {});
+    }
+
+    const idParam = searchParams.get('id');
+    if (idParam) {
+      loadChat(idParam);
       return;
     }
 
-    // Always start a fresh chat when opening the app without a specific ?id
-    apiRequest<{ id: string }>('/chats', {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'chat' }),
-    })
-      .then((chat) => setChatId(chat.id))
-      .catch(() => {});
+    // Restore last session chat, or create a new one
+    const lastId = localStorage.getItem('tg_lastChatId');
+    if (lastId) {
+      loadChat(lastId);
+    } else {
+      createNewChat();
+    }
   }, []);
 
   // WS with auto-reconnect
@@ -711,6 +733,7 @@ function ChatApp() {
         });
         activeChatId = chat.id;
         setChatId(chat.id);
+        localStorage.setItem('tg_lastChatId', chat.id);
       } catch {
         return;
       }

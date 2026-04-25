@@ -68,12 +68,11 @@ export default function ChatPage() {
   const name = user?.name?.split(' ')[0] ?? 'Ghost';
   const firstName = name.charAt(0).toUpperCase() + name.slice(1);
 
-  // Redirect to last opened chat unless user intentionally navigated here (New Chat)
+  // Clear active chat state so sidebar doesn't highlight a stale chat
   useEffect(() => {
-    const isNewChat = sessionStorage.getItem('newChat');
-    if (isNewChat) { sessionStorage.removeItem('newChat'); return; }
-    const lastId = localStorage.getItem('lastChatId');
-    if (lastId) router.replace(`/chat/${lastId}`);
+    sessionStorage.removeItem('newChat');
+    useChatStore.getState().setActiveChat(null);
+    useChatStore.getState().setMessages([]);
   }, []);
 
   async function handleSend(prompt: string, file?: File) {

@@ -1,7 +1,7 @@
 import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateImageFlux } from '../services/providers/openrouter.js';
+import { generateImageFlux, OR_MODELS } from '../services/providers/openrouter.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 import fs from 'node:fs';
@@ -39,7 +39,9 @@ export function startVisionWorker() {
         data: { status: 'processing' },
       });
 
-      let mediaUrl = await generateImageFlux(prompt, undefined, sourceImageUrl);
+      // For image editing use fluxFill (supports image-to-image); plain generation uses Gemini flash
+      const model = sourceImageUrl ? OR_MODELS.fluxFill : OR_MODELS.flux;
+      let mediaUrl = await generateImageFlux(prompt, model, sourceImageUrl);
 
       // Always serve from our own server — avoids CORS/expiry issues with external CDN URLs
       if (mediaUrl.startsWith('data:')) {

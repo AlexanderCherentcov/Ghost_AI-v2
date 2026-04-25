@@ -80,10 +80,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const requestType: import('../services/tokens.js').RequestType = sourceImageUrl ? 'image_edit' : 'image_generate';
       await checkAndDeduct(userId, requestType);
 
-      // Save user message to chat history
+      // Save user message to chat history (include source image so history shows what was edited)
       if (chatId) {
         await prisma.message.create({
-          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0 },
+          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: sourceImageUrl ?? null },
         }).catch((e) => console.error('[generate/vision] Failed to save user message:', e.message));
       }
 

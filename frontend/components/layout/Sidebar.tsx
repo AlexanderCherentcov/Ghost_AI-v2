@@ -66,7 +66,9 @@ export function Sidebar() {
   const grouped = groupChats(chats);
 
   function handleNewChat() {
-    sessionStorage.setItem('newChat', '1');
+    // Clear store so sidebar doesn't keep highlighting the old chat
+    useChatStore.getState().setActiveChat(null);
+    useChatStore.getState().setMessages([]);
     router.push('/chat');
   }
 
@@ -78,7 +80,8 @@ export function Sidebar() {
       removeChat(chatId);
       if (pathname === `/chat/${chatId}`) {
         localStorage.removeItem('lastChatId');
-        sessionStorage.setItem('newChat', '1');
+        useChatStore.getState().setActiveChat(null);
+        useChatStore.getState().setMessages([]);
         router.push('/chat');
       }
     } catch {

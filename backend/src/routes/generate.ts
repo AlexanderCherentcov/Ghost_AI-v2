@@ -5,6 +5,7 @@ import { checkResets, checkAndDeduct } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
+import { generateLipSync } from '../services/providers/goapi.js';
 import { encrypt } from '../lib/crypto.js';
 import crypto from 'crypto';
 
@@ -256,6 +257,47 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       });
 
       return reply.code(202).send({ jobId: job.id });
+    },
+  });
+
+  // ── Lip Sync ──────────────────────────────────────────────────────────────
+  // Накладывает аудио на видео — губы персонажа двигаются под голос/музыку.
+  // Цена: $0.10/генерация (Kling Lip Sync через GoAPI)
+  fastify.post('/generate/lipsync', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { userId } = request.user;
+      const { videoUrl, audioUrl, chatId } = z.object({
+        videoUrl: z.string().url(),
+        audioUrl: z.string().url(),
+        chatId:   z.string().optional(),
+      }).parse(request.body);
+
+      // Только платные планы
+      const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      if (userPlan?.plan === 'FREE' || userPlan?.plan === 'BASIC') {
+        return reply.code(403).send({ error: 'Lip Sync доступен начиная со тарифа Стандарт.', code: 'PLAN_RESTRICTED' });
+      }
+
+      // Rate limit (1/мин)
+      if (!await checkVideoRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      await checkResets(userId);
+      await checkAndDeduct(userId, 'video_generate', 1);
+
+      const resultUrl = await generateLipSync(videoUrl, audioUrl).catch((err: any) => {
+        throw Object.assign(new Error(err.message), { statusCode: 502 });
+      });
+
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'assistant', content: encrypt('lip sync'), mode: 'reel', tokensCost: 0, mediaUrl: resultUrl },
+        }).catch(() => {});
+      }
+
+      return { mediaUrl: resultUrl };
     },
   });
 

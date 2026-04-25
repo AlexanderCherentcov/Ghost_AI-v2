@@ -6,10 +6,12 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoKling, type KlingVideoOptions } from '../services/providers/kling.js';
+import { generateVideoKling, generateVideoHunyuan, type KlingVideoOptions } from '../services/providers/goapi.js';
+import { routeVideo } from '../services/video-router.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
+// ── Video сохраняем на наш сервер — GoAPI хранит файлы только 3 дня ───────────
 async function saveVideoToDisk(url: string): Promise<string> {
   const dir = path.join(process.cwd(), 'uploads', 'videos');
   mkdirSync(dir, { recursive: true });
@@ -48,43 +50,85 @@ export function startReelWorker() {
   const worker = new Worker<ReelJob>(
     'reel',
     async (job: Job<ReelJob>) => {
-      const { jobId, userId, prompt, chatId, duration, aspectRatio, enableAudio, imageUrl, cameraPreset, negativePrompt, cfgScale } = job.data;
+      const {
+        jobId, userId, prompt, chatId,
+        duration = 5, aspectRatio = '16:9',
+        enableAudio = false, imageUrl,
+        cameraPreset, negativePrompt, cfgScale,
+      } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      const options: KlingVideoOptions = { duration, aspectRatio, enableAudio, imageUrl, cameraPreset, negativePrompt, cfgScale };
-      const externalUrl = await generateVideoKling(prompt, options);
+      // ── Роутер выбирает модель автоматически ──────────────────────────────────
+      const route = routeVideo(prompt, !!imageUrl, duration, aspectRatio);
+      console.info(`[ReelWorker] ${route.reason} | cost $${route.costUsd}`);
 
-      // Mark done immediately with external URL — user sees result without waiting for disk download
+      let externalUrl: string;
+
+      if (route.model === 'kling_std') {
+        // Kling V-2.5 — для людей, лиц, сложных сцен, 10s
+        const opts: KlingVideoOptions = {
+          duration, aspectRatio, enableAudio, imageUrl,
+          cameraPreset, negativePrompt, cfgScale,
+        };
+        externalUrl = await generateVideoKling(prompt, opts);
+      } else {
+        // Hunyuan — fast / standard / img2video
+        externalUrl = await generateVideoHunyuan(
+          prompt,
+          route.hunyuanMode ?? 'fast',
+          imageUrl,
+          aspectRatio,
+        );
+      }
+
+      // ── Сразу помечаем done с внешним URL — пользователь видит результат ──────
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'done', mediaUrl: externalUrl },
       });
 
-      // Save assistant message with external URL
+      // ── Сохраняем сообщение в историю чата ───────────────────────────────────
       let messageId: string | undefined;
       if (chatId) {
         const msg = await prisma.message.create({
-          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'reel', tokensCost: 0, mediaUrl: externalUrl },
-        }).catch((e) => { console.error('[ReelWorker] Failed to save assistant message:', e.message); return null; });
+          data: {
+            chatId, userId, role: 'assistant',
+            content: encrypt(prompt), mode: 'reel',
+            tokensCost: 0, mediaUrl: externalUrl,
+          },
+        }).catch((e) => {
+          console.error('[ReelWorker] Failed to save assistant message:', e.message);
+          return null;
+        });
         messageId = msg?.id;
       }
 
+      // ── Кешируем только text-to-video без кастомных настроек ─────────────────
       if (!imageUrl) {
         setMediaCached('reel', prompt, externalUrl).catch(() => {});
       }
 
-      // Download to server disk in background — once saved, update DB to permanent local URL
+      // ── Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!) ─────────
       saveVideoToDisk(externalUrl).then(async (filename) => {
         const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
         const localUrl = `${API_BASE}/videos/${filename}`;
-        await prisma.generateJob.update({ where: { id: jobId }, data: { mediaUrl: localUrl } }).catch(() => {});
+
+        await prisma.generateJob.update({
+          where: { id: jobId },
+          data: { mediaUrl: localUrl },
+        }).catch(() => {});
+
         if (messageId) {
-          await prisma.message.update({ where: { id: messageId }, data: { mediaUrl: localUrl } }).catch(() => {});
+          await prisma.message.update({
+            where: { id: messageId },
+            data: { mediaUrl: localUrl },
+          }).catch(() => {});
         }
+
         if (!imageUrl) setMediaCached('reel', prompt, localUrl).catch(() => {});
         console.info(`[ReelWorker] Video saved to disk: ${filename}`);
       }).catch((err: any) => {
@@ -113,6 +157,6 @@ export function startReelWorker() {
     console.info(`[ReelWorker] Job ${job.id} completed`);
   });
 
-  console.info('[ReelWorker] Started (GoAPI Kling V2.5)');
+  console.info('[ReelWorker] Started (GoAPI Smart Router: Hunyuan Fast/STD/img2video + Kling V2.5)');
   return worker;
 }

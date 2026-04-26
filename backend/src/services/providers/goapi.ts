@@ -180,8 +180,8 @@ export async function generateVideoHunyuan(
 }
 
 // ─── DiffRhythm music generation ──────────────────────────────────────────────
-// base:  $0.02  — быстрая генерация, 95 сек
-// full:  $0.02  — полный трек, 4 мин 45 сек
+// txt2audio-base: $0.02 — ~95 сек
+// txt2audio-full: $0.02 — ~4:45
 
 export type DiffRhythmMode = 'base' | 'full';
 
@@ -189,12 +189,12 @@ export async function generateMusicDiffRhythm(
   prompt: string,
   mode: DiffRhythmMode = 'base',
 ): Promise<string> {
-  const taskType = mode === 'full' ? 'full-version' : 'base-generation';
+  const taskType = mode === 'full' ? 'txt2audio-full' : 'txt2audio-base';
   const taskId = await createTask('Qubico/diffrhythm', taskType, {
-    lyrics: prompt,
-    style: prompt,
+    lyrics: '',
+    style_prompt: prompt,
   });
-  const data = await pollTask(taskId, 120, 5_000);
+  const data = await pollTask(taskId, 180, 5_000);
   const output = data?.data?.output ?? data?.output;
   const url: string | undefined =
     output?.audio_url ??
@@ -205,15 +205,15 @@ export async function generateMusicDiffRhythm(
   return url;
 }
 
-// ─── Udio music generation ─────────────────────────────────────────────────────
-// $0.05 за трек (~32 сек), высокое качество
+// ─── Udio music generation (music-u) ──────────────────────────────────────────
+// $0.05 за трек, высокое качество
 
-export async function generateMusicUdio(prompt: string, duration = 30): Promise<string> {
-  const taskId = await createTask('Qubico/udio', 'generate', {
-    prompt,
-    duration,
+export async function generateMusicUdio(prompt: string, _duration = 30): Promise<string> {
+  const taskId = await createTask('music-u', 'generate_music', {
+    gpt_description_prompt: prompt,
+    lyrics_type: 'instrumental',
   });
-  const data = await pollTask(taskId, 120, 5_000);
+  const data = await pollTask(taskId, 180, 5_000);
   const output = data?.data?.output ?? data?.output;
   const url: string | undefined =
     output?.audio_url ??

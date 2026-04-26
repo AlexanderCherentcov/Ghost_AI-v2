@@ -190,7 +190,7 @@ export async function generateMusicDiffRhythm(
   mode: DiffRhythmMode = 'base',
 ): Promise<string> {
   const taskType = mode === 'full' ? 'full-version' : 'base-generation';
-  const taskId = await createTask('diffrhythm', taskType, {
+  const taskId = await createTask('Qubico/diffrhythm', taskType, {
     lyrics: prompt,
     style: prompt,
   });
@@ -209,7 +209,7 @@ export async function generateMusicDiffRhythm(
 // $0.05 за трек (~32 сек), высокое качество
 
 export async function generateMusicUdio(prompt: string, duration = 30): Promise<string> {
-  const taskId = await createTask('udio', 'generate', {
+  const taskId = await createTask('Qubico/udio', 'generate', {
     prompt,
     duration,
   });

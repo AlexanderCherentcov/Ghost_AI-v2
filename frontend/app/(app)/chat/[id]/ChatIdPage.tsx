@@ -177,6 +177,11 @@ export default function ChatConversationPage() {
 
   // URL последнего сгенерированного изображения — для редактирования без повторной загрузки
   const lastGeneratedImageRef = useRef<string | null>(null);
+  // Синхронные ref-guards против двойного запуска генерации (state-updates async, refs sync)
+  const generatingVideoRef = useRef(false);
+  const generatingMusicRef = useRef(false);
+  // Предотвращает повторный auto-send для того же чата
+  const autoSentChatRef = useRef<string | null>(null);
 
   // Load messages + resume any pending generation job after page refresh
   useEffect(() => {
@@ -260,6 +265,7 @@ export default function ChatConversationPage() {
   // Auto-send initial prompt — waits until history is loaded (messagesReady) to avoid race condition
   useEffect(() => {
     if (!messagesReady) return; // wait for history to load before auto-sending
+    if (autoSentChatRef.current === id) return; // already auto-sent for this chat
 
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
@@ -277,6 +283,7 @@ export default function ChatConversationPage() {
     const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
+    autoSentChatRef.current = id; // mark this chat as auto-sent before async work
     ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialMusicDuration','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
@@ -392,6 +399,8 @@ export default function ChatConversationPage() {
   // ── Video generation ─────────────────────────────────────────────────────────
   const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions, imageUrl?: string) => {
     if (!accessToken || !messagesReady) return;
+    if (generatingVideoRef.current) return;
+    generatingVideoRef.current = true;
     setGeneratingVideo(true);
 
     addMessage({
@@ -470,6 +479,7 @@ export default function ChatConversationPage() {
       }
     } finally {
       localStorage.removeItem(`pending_gen_${id}`);
+      generatingVideoRef.current = false;
       setGeneratingVideo(false);
     }
   }, [accessToken, messagesReady]);
@@ -477,6 +487,8 @@ export default function ChatConversationPage() {
   // ── Music generation ─────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number) => {
     if (!accessToken || !messagesReady) return;
+    if (generatingMusicRef.current) return;
+    generatingMusicRef.current = true;
     setGeneratingMusic(true);
 
     addMessage({
@@ -547,6 +559,7 @@ export default function ChatConversationPage() {
         showToast(err.message ?? 'Ошибка генерации музыки', 'error');
       }
     } finally {
+      generatingMusicRef.current = false;
       setGeneratingMusic(false);
     }
   }, [accessToken, messagesReady]);

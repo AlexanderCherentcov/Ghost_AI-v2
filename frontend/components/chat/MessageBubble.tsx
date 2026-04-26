@@ -176,10 +176,11 @@ function AiDisclaimer() {
 
 function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
+  const isMusic = mode === 'sound';
   return (
     <div
       className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-4 ${
-        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : 'w-[260px] h-[260px]'
+        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : isMusic ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
       }`}
     >
       {/* Shimmer overlay */}
@@ -196,6 +197,12 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
           <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        </svg>
+      ) : isMusic ? (
+        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
+          <path d="M9 24V10l16-3v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="6" cy="24" r="3" stroke="currentColor" strokeWidth="1.5"/>
+          <circle cx="22" cy="21" r="3" stroke="currentColor" strokeWidth="1.5"/>
         </svg>
       ) : (
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
@@ -216,11 +223,16 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
       </div>
       <div className="flex flex-col items-center gap-1 px-4 text-center">
         <span className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {isVideo ? 'Генерирую видео...' : 'Генерирую картинку...'}
+          {isVideo ? 'Генерирую видео...' : isMusic ? 'Создаю трек...' : 'Генерирую картинку...'}
         </span>
         {isVideo && (
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
             Обычно занимает 1–3 минуты
+          </span>
+        )}
+        {isMusic && (
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            Обычно занимает 1–2 минуты
           </span>
         )}
       </div>

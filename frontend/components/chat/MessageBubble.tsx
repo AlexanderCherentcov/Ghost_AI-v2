@@ -271,11 +271,7 @@ function MediaContent({
   }
 
   if (mode === 'sound') {
-    return (
-      <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4">
-        <audio controls src={mediaUrl} className="w-full" />
-      </div>
-    );
+    return <AudioCard mediaUrl={mediaUrl} />;
   }
 
   if (mode === 'reel') {
@@ -353,6 +349,130 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
             {typeof navigator !== 'undefined' && 'share' in navigator ? 'Сохранить' : 'Скачать'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Audio Card ───────────────────────────────────────────────────────────────
+
+function AudioCard({ mediaUrl }: { mediaUrl: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  function togglePlay() {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  }
+
+  function handleTimeUpdate() {
+    if (!audioRef.current) return;
+    const pct = audioRef.current.duration
+      ? (audioRef.current.currentTime / audioRef.current.duration) * 100
+      : 0;
+    setProgress(pct);
+  }
+
+  function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!audioRef.current) return;
+    const pct = Number(e.target.value);
+    audioRef.current.currentTime = (pct / 100) * audioRef.current.duration;
+    setProgress(pct);
+  }
+
+  function formatTime(s: number) {
+    if (!isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  const filename = mediaUrl.split('/').pop()?.split('?')[0] ?? 'track.mp3';
+
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 w-full max-w-sm">
+      <audio
+        ref={audioRef}
+        src={mediaUrl}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+      />
+
+      <div className="flex items-center gap-3">
+        {/* Play/Pause button */}
+        <button
+          onClick={togglePlay}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-accent text-white hover:opacity-90 transition-opacity"
+          aria-label={playing ? 'Пауза' : 'Воспроизвести'}
+        >
+          {playing ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="2" y="2" width="4" height="10" rx="1" fill="currentColor"/>
+              <rect x="8" y="2" width="4" height="10" rx="1" fill="currentColor"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 2l9 5-9 5V2z" fill="currentColor"/>
+            </svg>
+          )}
+        </button>
+
+        {/* Progress + time */}
+        <div className="flex-1 min-w-0">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={0.1}
+            value={progress}
+            onChange={handleSeek}
+            className="w-full h-1 rounded-full appearance-none cursor-pointer"
+            style={{
+              background: `linear-gradient(to right, var(--accent) ${progress}%, var(--bg-void) ${progress}%)`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+            <span>{formatTime((progress / 100) * duration)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Download */}
+        <a
+          href={mediaUrl}
+          download={filename}
+          onClick={(e) => {
+            // Use fetch+blob for cross-origin URLs to force download
+            if (!mediaUrl.startsWith(window.location.origin)) {
+              e.preventDefault();
+              fetch(mediaUrl)
+                .then((r) => r.blob())
+                .then((b) => {
+                  const url = URL.createObjectURL(b);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = filename; a.click();
+                  URL.revokeObjectURL(url);
+                })
+                .catch(() => { window.open(mediaUrl, '_blank'); });
+            }
+          }}
+          className="flex items-center justify-center w-8 h-8 rounded-lg opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
+          style={{ color: 'var(--text-secondary)' }}
+          title="Скачать"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8M4 6.5L7 9.5l3-3M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </a>
       </div>
     </div>
   );

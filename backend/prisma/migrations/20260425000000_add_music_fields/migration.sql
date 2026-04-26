@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "music_today" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "music_daily_limit" INTEGER NOT NULL DEFAULT 0;

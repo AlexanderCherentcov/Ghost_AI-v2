@@ -164,6 +164,7 @@ export default function ChatConversationPage() {
   const [limitType, setLimitType] = useState<LimitType>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [generatingMusic, setGeneratingMusic] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
 
@@ -254,6 +255,7 @@ export default function ChatConversationPage() {
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
     const initialVideoPrompt = sessionStorage.getItem('initialVideoPrompt');
+    const initialMusicPrompt = sessionStorage.getItem('initialMusicPrompt');
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
     const initialFileContent = sessionStorage.getItem('initialFileContent');
     const initialFileName    = sessionStorage.getItem('initialFileName');
@@ -261,16 +263,18 @@ export default function ChatConversationPage() {
     const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
 
-    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialImageUrl','initialFileContent',
+    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
       if (initialVideoPrompt) {
         handleGenerateVideo(initialVideoPrompt);
+      } else if (initialMusicPrompt) {
+        handleGenerateMusic(initialMusicPrompt);
       } else if (initialImagePrompt) {
         handleGenerateImage(initialImagePrompt);
       } else if (initialImageUrl) {
@@ -458,9 +462,84 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady]);
 
+  // ── Music generation ─────────────────────────────────────────────────────────
+  const handleGenerateMusic = useCallback(async (prompt: string) => {
+    if (!accessToken || !messagesReady) return;
+    setGeneratingMusic(true);
+
+    addMessage({
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      role: 'user',
+      content: prompt,
+      mode: 'sound',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    addMessage({
+      id: placeholderId,
+      role: 'assistant',
+      content: '',
+      mode: 'sound',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: '__loading__',
+      createdAt: new Date().toISOString(),
+    });
+
+    try {
+      const { jobId } = await api.generate.sound({ prompt, chatId: id });
+
+      const poll = async (): Promise<void> => {
+        if (!mountedRef.current) return;
+        const job = await api.generate.status(jobId);
+        if (!mountedRef.current) return;
+        if (job.status === 'done' && job.mediaUrl) {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
+              : m
+          ));
+        } else if (job.status === 'failed') {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 3000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      useChatStore.getState().setMessages(
+        useChatStore.getState().messages.map((m) =>
+          m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации музыки', mediaUrl: null } : m
+        )
+      );
+      if (err.code === 'LIMIT_MUSIC' || err.code === 'LIMIT_MUSIC_UNAVAILABLE') {
+        setLimitType('LIMIT_MUSIC' as LimitType);
+      } else if (err.code === 'PLAN_RESTRICTED') {
+        showToast('Генерация музыки доступна начиная с тарифа Пробный', 'error');
+        router.push('/billing');
+      } else {
+        showToast(err.message ?? 'Ошибка генерации музыки', 'error');
+      }
+    } finally {
+      setGeneratingMusic(false);
+    }
+  }, [accessToken, messagesReady]);
+
   // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions) => {
-    if ((isStreaming || generatingImage || generatingVideo) || !accessToken || !messagesReady) return;
+    if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
 
     // ── Mode-based routing ───────────────────────────────────────────────────
     if (chatMode === 'images' && !file) {
@@ -479,6 +558,10 @@ export default function ChatConversationPage() {
         }
       }
       return handleGenerateVideo(prompt, videoOptions);
+    }
+    if (chatMode === 'music') {
+      if (!prompt.trim()) return;
+      return handleGenerateMusic(prompt);
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────
@@ -660,9 +743,9 @@ export default function ChatConversationPage() {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, showToast]);
+  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
 
-  const busy = isStreaming || generatingImage || generatingVideo || !messagesReady;
+  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || !messagesReady;
 
   // isLoading = true when we're waiting for token OR waiting for messages from server
   const isLoading = !accessToken || !messagesReady;
@@ -671,7 +754,9 @@ export default function ChatConversationPage() {
     ? 'Опишите изображение...'
     : chatMode === 'video'
       ? 'Опишите видео...'
-      : 'Продолжайте диалог...';
+      : chatMode === 'music'
+        ? 'Опишите стиль или настроение музыки...'
+        : 'Продолжайте диалог...';
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

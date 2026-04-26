@@ -146,17 +146,17 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Check media cache first
+      // Check music limits
+      await checkAndDeduct(userId, 'music_generate', 1);
+
+      // Check media cache first (after deducting — cache hit still costs a generation)
       const mediaCached = await getMediaCached('sound', prompt);
       if (mediaCached.hit) {
-        // [H-04] Sound is a paid feature gated by plan check above — no image limit deduction
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'done', mediaUrl: mediaCached.url },
         });
         return reply.code(202).send({ jobId: job.id });
       }
-
-      // [H-04] Sound generation does not consume image quota
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'sound', prompt },

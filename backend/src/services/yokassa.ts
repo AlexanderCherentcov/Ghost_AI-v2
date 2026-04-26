@@ -27,7 +27,7 @@ export const PLANS = {
     label: 'Бесплатный',
     show_message_limit: true,
     std_messages_daily: 10, pro_messages_daily: 0,
-    images_daily: 3,   videos_daily: 0,  files_monthly: 0,
+    images_daily: 3,   videos_daily: 0,  music_daily: 0,  files_monthly: 0,
   },
   TRIAL: {
     price: 299, price_yearly: 299,
@@ -35,35 +35,35 @@ export const PLANS = {
     show_message_limit: true,
     duration_days: 7,            // особый срок: 7 дней вместо месяца
     std_messages_daily: 30, pro_messages_daily: 0,
-    images_daily: 5,   videos_daily: 1,  files_monthly: 0,
+    images_daily: 5,   videos_daily: 1,  music_daily: 1,  files_monthly: 0,
   },
   BASIC: {
     price: 699, price_yearly: 594,
     label: 'Базовый',
     show_message_limit: false,
     std_messages_daily: -1, pro_messages_daily: 0,
-    images_daily: 20,  videos_daily: 0,  files_monthly: 40,
+    images_daily: 20,  videos_daily: 0,  music_daily: 2,  files_monthly: 40,
   },
   STANDARD: {
     price: 1199, price_yearly: 1019,
     label: 'Стандарт',
     show_message_limit: false,
     std_messages_daily: -1, pro_messages_daily: 50,
-    images_daily: 30,  videos_daily: 1,  files_monthly: 150,
+    images_daily: 30,  videos_daily: 1,  music_daily: 5,  files_monthly: 150,
   },
   PRO: {
     price: 2490, price_yearly: 2117,
     label: 'Про',
     show_message_limit: false, // UI always shows ∞ — real cap enforced silently
     std_messages_daily: 200, pro_messages_daily: 200,
-    images_daily: 80,  videos_daily: 3,  files_monthly: 500,
+    images_daily: 80,  videos_daily: 3,  music_daily: 10, files_monthly: 500,
   },
   ULTRA: {
     price: 5490, price_yearly: 4667,
     label: 'Ультра',
     show_message_limit: false, // UI always shows ∞ — real cap enforced silently
     std_messages_daily: 400, pro_messages_daily: 400,
-    images_daily: 150, videos_daily: 5,  files_monthly: 1000,
+    images_daily: 150, videos_daily: 5,  music_daily: 20, files_monthly: 1000,
   },
 } as const;
 
@@ -182,6 +182,7 @@ export async function processWebhook(body: unknown): Promise<void> {
           pro_messages_daily: planInfo.pro_messages_daily,
           images_daily:       planInfo.images_daily,
           videos_daily:       planInfo.videos_daily,
+          music_daily:        planInfo.music_daily,
           files_monthly:      planInfo.files_monthly,
         },
         payment.plan,

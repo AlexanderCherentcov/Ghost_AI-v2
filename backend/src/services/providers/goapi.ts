@@ -174,6 +174,71 @@ export async function generateVideoHunyuan(
   return extractVideoUrl(data);
 }
 
+// ─── DiffRhythm music generation ──────────────────────────────────────────────
+// base:  $0.02  — быстрая генерация, 95 сек
+// full:  $0.02  — полный трек, 4 мин 45 сек
+
+export type DiffRhythmMode = 'base' | 'full';
+
+export async function generateMusicDiffRhythm(
+  prompt: string,
+  mode: DiffRhythmMode = 'base',
+): Promise<string> {
+  const taskType = mode === 'full' ? 'full-version' : 'base-generation';
+  const taskId = await createTask('diffrhythm', taskType, {
+    lyrics: prompt,
+    style: prompt,
+  });
+  const data = await pollTask(taskId, 120, 5_000);
+  const output = data?.data?.output ?? data?.output;
+  const url: string | undefined =
+    output?.audio_url ??
+    output?.url ??
+    data?.data?.task_result?.audio_url ??
+    data?.data?.task_result?.url;
+  if (!url) throw new Error(`No audio URL in DiffRhythm response: ${JSON.stringify(data).slice(0, 300)}`);
+  return url;
+}
+
+// ─── Udio music generation ─────────────────────────────────────────────────────
+// $0.05 за трек (~32 сек), высокое качество
+
+export async function generateMusicUdio(prompt: string): Promise<string> {
+  const taskId = await createTask('udio', 'generate', {
+    prompt,
+    duration: 32,
+  });
+  const data = await pollTask(taskId, 120, 5_000);
+  const output = data?.data?.output ?? data?.output;
+  const url: string | undefined =
+    output?.audio_url ??
+    output?.songs?.[0]?.song_path ??
+    output?.url ??
+    data?.data?.task_result?.audio_url ??
+    data?.data?.task_result?.url;
+  if (!url) throw new Error(`No audio URL in Udio response: ${JSON.stringify(data).slice(0, 300)}`);
+  return url;
+}
+
+// ─── MMAudio — add ambient sound to video ─────────────────────────────────────
+// $0.0005/сек — очень дёшево, добавляет атмосферный звук к немому видео
+
+export async function generateMMAudio(videoUrl: string, duration = 8): Promise<string> {
+  const taskId = await createTask('mmaudio', 'generate', {
+    video_url: videoUrl,
+    duration,
+  });
+  const data = await pollTask(taskId, 60, 3_000);
+  const output = data?.data?.output ?? data?.output;
+  const url: string | undefined =
+    output?.video_url ??
+    output?.url ??
+    data?.data?.task_result?.video_url ??
+    data?.data?.task_result?.url;
+  if (!url) throw new Error(`No video URL in MMAudio response: ${JSON.stringify(data).slice(0, 300)}`);
+  return url;
+}
+
 // ─── Kling Lip Sync ────────────────────────────────────────────────────────────
 // videoUrl — URL видео-файла
 // audioUrl — URL аудио-файла (mp3/wav)

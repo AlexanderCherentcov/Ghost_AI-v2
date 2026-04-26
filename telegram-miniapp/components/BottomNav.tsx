@@ -48,9 +48,21 @@ function IconAccount({ active }: { active: boolean }) {
   );
 }
 
+function IconMusic({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18V5l12-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="16" r="3" />
+    </svg>
+  );
+}
+
 const ITEMS = [
   { href: '/history', label: 'История', Icon: IconHistory },
   { href: '/chat',    label: 'Чат',     Icon: IconChat },
+  { href: '/music',   label: 'Музыка',  Icon: IconMusic },
   { href: '/balance', label: 'Тарифы',  Icon: IconPlans },
   { href: '/account', label: 'Аккаунт', Icon: IconAccount },
 ];

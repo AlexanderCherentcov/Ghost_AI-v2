@@ -12,6 +12,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,8 +23,11 @@ jobs:
         id: changes
         run: |
           CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          echo "backend=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "frontend=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
+          FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
+          echo "backend=$BACKEND" >> $GITHUB_OUTPUT
+          echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
+          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -31,6 +36,7 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_BACKEND,DEPLOY_FRONTEND
+          command_timeout: 10m
           script: |
             set -e
             cd /root/ghostline_v2
@@ -40,11 +46,13 @@ jobs:
             if [ "$DEPLOY_BACKEND" = "true" ]; then
               echo "→ Rebuilding backend..."
               docker compose up -d --build --no-deps backend
+              echo "→ Backend deployed"
             fi
 
             if [ "$DEPLOY_FRONTEND" = "true" ]; then
               echo "→ Rebuilding frontend..."
               docker compose up -d --build --no-deps frontend
+              echo "→ Frontend deployed"
             fi
 
             docker image prune -f

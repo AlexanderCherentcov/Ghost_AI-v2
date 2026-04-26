@@ -5,7 +5,8 @@ export type RequestType =
   | 'chat_pro'
   | 'image_generate'
   | 'image_edit'
-  | 'video_generate';
+  | 'video_generate'
+  | 'music_generate';
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ export async function checkResets(userId: string): Promise<void> {
     updates.pro_messages_today = 0;
     updates.images_today       = 0;
     updates.videos_today       = 0;
+    updates.music_today        = 0;
     updates.day_start          = now;
   }
 
@@ -72,11 +74,13 @@ export async function checkAndDeduct(
         pro_messages_today:       true,
         images_today:             true,
         videos_today:             true,
+        music_today:              true,
         files_used:               true,
         std_messages_daily_limit: true,
         pro_messages_daily_limit: true,
         images_daily_limit:       true,
         videos_daily_limit:       true,
+        music_daily_limit:        true,
         files_monthly_limit:      true,
       },
     });
@@ -93,6 +97,18 @@ export async function checkAndDeduct(
         throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
       }
       await tx.user.update({ where: { id: userId }, data: { videos_today: { increment: count } } });
+      return;
+    }
+
+    // ── Music ─────────────────────────────────────────────────────────────────
+    if (requestType === 'music_generate') {
+      if (user.music_daily_limit === 0) {
+        throw Object.assign(new Error('LIMIT_MUSIC_UNAVAILABLE'), { code: 'LIMIT_MUSIC_UNAVAILABLE' });
+      }
+      if (user.music_daily_limit !== -1 && user.music_today + count > user.music_daily_limit) {
+        throw Object.assign(new Error('LIMIT_MUSIC'), { code: 'LIMIT_MUSIC' });
+      }
+      await tx.user.update({ where: { id: userId }, data: { music_today: { increment: count } } });
       return;
     }
 
@@ -156,6 +172,8 @@ export async function refundCounter(
     // [M-08] Use updateMany with a floor-at-zero condition to avoid negative counters
     if (requestType === 'video_generate') {
       await prisma.$executeRaw`UPDATE "User" SET "videos_today" = GREATEST(0, "videos_today" - ${count}) WHERE id = ${userId}`;
+    } else if (requestType === 'music_generate') {
+      await prisma.$executeRaw`UPDATE "User" SET "music_today" = GREATEST(0, "music_today" - ${count}) WHERE id = ${userId}`;
     } else if (requestType === 'image_generate' || requestType === 'image_edit') {
       await prisma.$executeRaw`UPDATE "User" SET "images_today" = GREATEST(0, "images_today" - 1) WHERE id = ${userId}`;
     } else if (requestType === 'chat_pro') {
@@ -181,6 +199,7 @@ export interface PlanLimits {
   pro_messages_daily: number;
   images_daily:       number;
   videos_daily:       number;
+  music_daily:        number;
   files_monthly:      number;
 }
 
@@ -197,12 +216,14 @@ export async function applyPlanLimits(
       pro_messages_daily_limit: limits.pro_messages_daily,
       images_daily_limit:       limits.images_daily,
       videos_daily_limit:       limits.videos_daily,
+      music_daily_limit:        limits.music_daily,
       files_monthly_limit:      limits.files_monthly,
       // Reset counters on plan change
       std_messages_today: 0,
       pro_messages_today: 0,
       images_today:       0,
       videos_today:       0,
+      music_today:        0,
       files_used:         0,
       day_start:          now,
       period_start:       now,

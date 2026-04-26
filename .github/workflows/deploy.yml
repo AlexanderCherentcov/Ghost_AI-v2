@@ -6,14 +6,13 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'telegram-miniapp/**'
       - 'infra/docker-compose.yml'
       - '.github/workflows/deploy.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,11 +22,15 @@ jobs:
         id: changes
         run: |
           CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
           BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
           FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
+          MINIAPP=$(echo "$CHANGED" | grep -q '^telegram-miniapp/' && echo true || echo false)
           echo "backend=$BACKEND" >> $GITHUB_OUTPUT
           echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
-          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND"
+          echo "miniapp=$MINIAPP" >> $GITHUB_OUTPUT
+          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND, miniapp: $MINIAPP"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -35,24 +38,37 @@ jobs:
           host: 178.253.55.232
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND
-          command_timeout: 10m
+          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND,DEPLOY_MINIAPP
+          command_timeout: 15m
           script: |
             set -e
             cd /root/ghostline_v2
+
+            # Reset any local changes and pull latest
+            git reset --hard HEAD
             git pull origin master
+
             cd infra
 
             if [ "$DEPLOY_BACKEND" = "true" ]; then
               echo "→ Rebuilding backend..."
-              docker compose up -d --build --no-deps backend
+              docker compose build --no-cache backend
+              docker compose up -d --no-deps backend
               echo "→ Backend deployed"
             fi
 
             if [ "$DEPLOY_FRONTEND" = "true" ]; then
               echo "→ Rebuilding frontend..."
-              docker compose up -d --build --no-deps frontend
+              docker compose build --no-cache frontend
+              docker compose up -d --no-deps frontend
               echo "→ Frontend deployed"
+            fi
+
+            if [ "$DEPLOY_MINIAPP" = "true" ]; then
+              echo "→ Rebuilding miniapp..."
+              docker compose build --no-cache miniapp
+              docker compose up -d --no-deps miniapp
+              echo "→ Miniapp deployed"
             fi
 
             docker image prune -f
@@ -60,3 +76,4 @@ jobs:
         env:
           DEPLOY_BACKEND: ${{ steps.changes.outputs.backend }}
           DEPLOY_FRONTEND: ${{ steps.changes.outputs.frontend }}
+          DEPLOY_MINIAPP: ${{ steps.changes.outputs.miniapp }}

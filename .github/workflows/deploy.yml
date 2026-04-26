@@ -6,7 +6,6 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'telegram-miniapp/**'
       - 'infra/**'
       - '.github/workflows/deploy.yml'
 
@@ -26,11 +25,9 @@ jobs:
           echo "$CHANGED"
           BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
           FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
-          MINIAPP=$(echo "$CHANGED" | grep -q '^telegram-miniapp/' && echo true || echo false)
           echo "backend=$BACKEND" >> $GITHUB_OUTPUT
           echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
-          echo "miniapp=$MINIAPP" >> $GITHUB_OUTPUT
-          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND, miniapp: $MINIAPP"
+          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -38,7 +35,7 @@ jobs:
           host: 178.253.55.232
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND,DEPLOY_MINIAPP
+          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND
           command_timeout: 15m
           script: |
             set -e
@@ -64,16 +61,8 @@ jobs:
               echo "→ Frontend deployed"
             fi
 
-            if [ "$DEPLOY_MINIAPP" = "true" ]; then
-              echo "→ Rebuilding miniapp..."
-              docker compose build --no-cache miniapp
-              docker compose up -d --no-deps miniapp
-              echo "→ Miniapp deployed"
-            fi
-
             docker image prune -f
             echo "✅ Deploy done: $(date)"
         env:
           DEPLOY_BACKEND: ${{ steps.changes.outputs.backend }}
           DEPLOY_FRONTEND: ${{ steps.changes.outputs.frontend }}
-          DEPLOY_MINIAPP: ${{ steps.changes.outputs.miniapp }}

@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq';
 import { createWriteStream, mkdirSync, unlinkSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
@@ -11,12 +12,31 @@ import { routeAudio } from '../services/audio-router.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
-// ── Сохраняем аудио на диск — GoAPI хранит файлы только 3 дня ───────────────
+// ── Конвертирует FLAC → MP3 через ffmpeg ──────────────────────────────────────
+// Safari/iOS не поддерживает FLAC. GoAPI отдаёт .flac — конвертируем сразу.
+function tryConvertFlacToMp3(flacPath: string): string {
+  const mp3Path = flacPath.replace(/\.flac$/i, '.mp3');
+  try {
+    execFileSync('ffmpeg', [
+      '-i', flacPath,
+      '-q:a', '2',  // VBR ~190 kbps
+      '-y',
+      mp3Path,
+    ], { stdio: 'pipe', timeout: 120_000 });
+    try { unlinkSync(flacPath); } catch {}
+    return mp3Path;
+  } catch {
+    return flacPath; // ffmpeg недоступен — оставляем FLAC
+  }
+}
+
+// ── Сохраняем аудио на диск СИНХРОННО (до done) ──────────────────────────────
+// Внешний FLAC от GoAPI: Safari не играет + CORS блокирует скачивание.
+// Сохраняем сразу и конвертируем в MP3 — пользователь получает локальный URL.
 async function saveAudioToDisk(url: string): Promise<string> {
   const dir = path.join(process.cwd(), 'uploads', 'audio');
   mkdirSync(dir, { recursive: true });
 
-  // Определяем расширение из URL
   const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? 'mp3';
   const safeExt = ['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext) ? ext : 'mp3';
 
@@ -34,6 +54,13 @@ async function saveAudioToDisk(url: string): Promise<string> {
     try { unlinkSync(filepath); } catch {}
     throw err;
   }
+
+  // Конвертируем FLAC → MP3 для поддержки Safari/iOS
+  if (safeExt === 'flac') {
+    const converted = tryConvertFlacToMp3(filepath);
+    return path.basename(converted);
+  }
+
   return filename;
 }
 
@@ -57,7 +84,7 @@ export function startSoundWorker() {
         data: { status: 'processing' },
       });
 
-      // ── Выбор модели по режиму пользователя (fallback: авто-роутер) ────────
+      // ── Выбор модели по режиму пользователя ────────────────────────────────
       let externalUrl: string;
 
       if (musicMode === 'quality') {
@@ -67,7 +94,6 @@ export function startSoundWorker() {
         console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02`);
         externalUrl = await generateMusicDiffRhythm(prompt, 'full');
       } else {
-        // 'short' или неизвестный — авто-роутер
         const route = routeAudio(prompt);
         console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd}`);
         if (route.model === 'udio') {
@@ -77,55 +103,39 @@ export function startSoundWorker() {
         }
       }
 
-      // ── Сразу помечаем done с внешним URL — пользователь слышит результат ─
+      // ── Скачиваем и конвертируем СРАЗУ — пользователь получает локальный URL ─
+      let finalUrl = externalUrl;
+      try {
+        const filename = await saveAudioToDisk(externalUrl);
+        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+        finalUrl = `${API_BASE}/audio/${filename}`;
+        console.info(`[SoundWorker] Audio saved to disk: ${filename}`);
+      } catch (err: any) {
+        console.warn(`[SoundWorker] Disk save failed, using external URL: ${err.message}`);
+      }
+
+      // ── Помечаем done с локальным URL ──────────────────────────────────────
       await prisma.generateJob.update({
         where: { id: jobId },
-        data: { status: 'done', mediaUrl: externalUrl },
+        data: { status: 'done', mediaUrl: finalUrl },
       });
 
       // ── Сохраняем сообщение в историю чата ─────────────────────────────────
-      let messageId: string | undefined;
       if (chatId) {
-        const msg = await prisma.message.create({
+        await prisma.message.create({
           data: {
             chatId, userId, role: 'assistant',
             content: encrypt(prompt), mode: 'sound',
-            tokensCost: 0, mediaUrl: externalUrl,
+            tokensCost: 0, mediaUrl: finalUrl,
           },
         }).catch((e) => {
           console.error('[SoundWorker] Failed to save assistant message:', e.message);
-          return null;
         });
-        messageId = msg?.id;
       }
 
-      // Cache for future identical prompts
-      setMediaCached('sound', prompt, externalUrl).catch(() => {});
+      setMediaCached('sound', prompt, finalUrl).catch(() => {});
 
-      // ── Скачиваем аудио на сервер в фоне (GoAPI хранит только 3 дня!) ──────
-      saveAudioToDisk(externalUrl).then(async (filename) => {
-        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
-        const localUrl = `${API_BASE}/audio/${filename}`;
-
-        await prisma.generateJob.update({
-          where: { id: jobId },
-          data: { mediaUrl: localUrl },
-        }).catch(() => {});
-
-        if (messageId) {
-          await prisma.message.update({
-            where: { id: messageId },
-            data: { mediaUrl: localUrl },
-          }).catch(() => {});
-        }
-
-        setMediaCached('sound', prompt, localUrl).catch(() => {});
-        console.info(`[SoundWorker] Audio saved to disk: ${filename}`);
-      }).catch((err: any) => {
-        console.warn('[SoundWorker] Background disk save failed, keeping external URL:', err.message);
-      });
-
-      return { mediaUrl: externalUrl };
+      return { mediaUrl: finalUrl };
     },
     {
       connection: bullmqConnection,
@@ -147,6 +157,6 @@ export function startSoundWorker() {
     console.info(`[SoundWorker] Job ${job.id} completed`);
   });
 
-  console.info('[SoundWorker] Started (Audio Router: DiffRhythm Base/Full + Udio)');
+  console.info('[SoundWorker] Started (DiffRhythm + Udio, FLAC→MP3 via ffmpeg)');
   return worker;
 }

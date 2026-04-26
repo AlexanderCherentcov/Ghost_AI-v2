@@ -6,7 +6,13 @@ import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';
 import { apiRequest } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+type MusicMode = 'short' | 'long' | 'quality';
+
+const MUSIC_MODES: { key: MusicMode; label: string; hint: string }[] = [
+  { key: 'short',   label: 'Короткий',  hint: '~1:35' },
+  { key: 'long',    label: 'Длинный',   hint: '~4:45' },
+  { key: 'quality', label: 'Качество',  hint: '~0:32' },
+];
 
 interface Track {
   id: string;
@@ -171,6 +177,7 @@ function TrackCard({ track }: { track: Track }) {
 
 function MusicPageInner() {
   const [prompt, setPrompt] = useState('');
+  const [musicMode, setMusicMode] = useState<MusicMode>('short');
   const [tracks, setTracks] = useState<Track[]>([]);
   const [generating, setGenerating] = useState(false);
   const mountedRef = useRef(true);
@@ -192,9 +199,9 @@ function MusicPageInner() {
     setTracks((prev) => [newTrack, ...prev]);
 
     try {
-      const res = await apiRequest<{ jobId: string }>(`${API_URL}/generate/sound`, {
+      const res = await apiRequest<{ jobId: string }>('/generate/sound', {
         method: 'POST',
-        body: JSON.stringify({ prompt: text }),
+        body: JSON.stringify({ prompt: text, musicMode }),
       });
 
       const jobId = res.jobId;
@@ -202,7 +209,7 @@ function MusicPageInner() {
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
         const job = await apiRequest<{ status: string; mediaUrl?: string; error?: string }>(
-          `${API_URL}/generate/${jobId}`
+          `/generate/${jobId}`
         );
         if (!mountedRef.current) return;
 
@@ -282,6 +289,24 @@ function MusicPageInner() {
               </svg>
             )}
           </button>
+        </div>
+
+        {/* Mode selector */}
+        <div className="flex gap-2 mt-3">
+          {MUSIC_MODES.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMusicMode(m.key)}
+              className="flex-1 rounded-xl py-2 text-[12px] transition-all"
+              style={{
+                background: musicMode === m.key ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+                color: musicMode === m.key ? '#fff' : 'rgba(255,255,255,0.45)',
+              }}
+            >
+              <div className="font-medium">{m.label}</div>
+              <div className="text-[10px] opacity-70">{m.hint}</div>
+            </button>
+          ))}
         </div>
 
         <p className="text-[11px] mt-2 px-1" style={{ color: 'rgba(255,255,255,0.25)' }}>

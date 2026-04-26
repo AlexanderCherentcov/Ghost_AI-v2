@@ -24,6 +24,8 @@ const generateSchema = z.object({
   cameraPreset: z.string().optional(),
   negativePrompt: z.string().max(2500).optional(),
   cfgScale: z.number().min(0).max(1).optional(),
+  // Music-specific
+  musicMode: z.enum(['short', 'long', 'quality']).optional(),
 });
 
 export default async function generateRoutes(fastify: FastifyInstance) {
@@ -121,7 +123,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, duration, chatId } = generateSchema.parse(request.body);
+      const { prompt, duration, chatId, musicMode } = generateSchema.parse(request.body);
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -146,11 +148,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Check music limits
+      // Check media cache before deducting quota
+      const mediaCached = await getMediaCached('sound', prompt);
+
+      // Check music limits and deduct
       await checkAndDeduct(userId, 'music_generate', 1);
 
-      // Check media cache first (after deducting — cache hit still costs a generation)
-      const mediaCached = await getMediaCached('sound', prompt);
       if (mediaCached.hit) {
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'done', mediaUrl: mediaCached.url },
@@ -167,6 +170,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         userId,
         prompt,
         duration: duration ?? 15,
+        musicMode: musicMode ?? 'short',
         chatId: chatId ?? null,
       });
 

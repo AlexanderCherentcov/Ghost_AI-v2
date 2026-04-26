@@ -42,6 +42,7 @@ interface SoundJob {
   userId: string;
   prompt: string;
   duration: number;
+  musicMode?: 'short' | 'long' | 'quality';
   chatId?: string | null;
 }
 
@@ -49,23 +50,31 @@ export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, chatId } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', chatId } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      // ── Роутер выбирает модель автоматически ───────────────────────────────
-      const route = routeAudio(prompt);
-      console.info(`[SoundWorker] ${route.reason} | cost $${route.costUsd}`);
-
+      // ── Выбор модели по режиму пользователя (fallback: авто-роутер) ────────
       let externalUrl: string;
 
-      if (route.model === 'udio') {
+      if (musicMode === 'quality') {
+        console.info(`[SoundWorker] quality mode → Udio | cost $0.05`);
         externalUrl = await generateMusicUdio(prompt);
+      } else if (musicMode === 'long') {
+        console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02`);
+        externalUrl = await generateMusicDiffRhythm(prompt, 'full');
       } else {
-        externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base');
+        // 'short' или неизвестный — авто-роутер
+        const route = routeAudio(prompt);
+        console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd}`);
+        if (route.model === 'udio') {
+          externalUrl = await generateMusicUdio(prompt);
+        } else {
+          externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base');
+        }
       }
 
       // ── Сразу помечаем done с внешним URL — пользователь слышит результат ─

@@ -183,6 +183,7 @@ function ModelPill({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export type ChatMode = 'chat' | 'images' | 'video' | 'music';
+export type MusicMode = 'short' | 'long' | 'quality';
 
 const CHAT_MODES: { key: ChatMode; label: string }[] = [
   { key: 'chat',   label: 'Чат' },
@@ -192,7 +193,7 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
 ];
 
 interface InputBarProps {
-  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -205,6 +206,12 @@ interface InputBarProps {
   setChatMode?: (m: ChatMode) => void;
 }
 
+const MUSIC_MODES: { key: MusicMode; label: string; hint: string }[] = [
+  { key: 'short',   label: 'Короткий',  hint: '~1:35 · $0.02' },
+  { key: 'long',    label: 'Длинный',   hint: '~4:45 · $0.02' },
+  { key: 'quality', label: 'Качество',  hint: '~0:32 · $0.05' },
+];
+
 export function InputBar({
   onSend, onStop, disabled = false, isStreaming = false,
   placeholder, preferredModel, setPreferredModel, userPlan, onUpgradeRequired,
@@ -212,6 +219,7 @@ export function InputBar({
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [musicMode, setMusicMode] = useState<MusicMode>('short');
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',
@@ -230,7 +238,8 @@ export function InputBar({
     if (sendingRef.current) return;
     sendingRef.current = true;
     const opts = chatMode === 'video' ? videoOptions : undefined;
-    onSend(trimmed, attachedFile ?? undefined, opts);
+    const mMode = chatMode === 'music' ? musicMode : undefined;
+    onSend(trimmed, attachedFile ?? undefined, opts, mMode);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -265,6 +274,32 @@ export function InputBar({
   return (
     <div className="flex-shrink-0 px-4 pt-2 pb-0 lg:pb-4">
       <div className="max-w-[720px] mx-auto">
+
+        {/* Music mode panel */}
+        {chatMode === 'music' && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-wrap items-center gap-2 mb-2"
+          >
+            {MUSIC_MODES.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setMusicMode(m.key)}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                  musicMode === m.key
+                    ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                    : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                )}
+              >
+                {m.label}
+                <span className="opacity-50">{m.hint}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
 
         {/* Video options panel */}
         {chatMode === 'video' && (

@@ -10,6 +10,8 @@ export type LimitType =
   | 'LIMIT_IMAGES'
   | 'LIMIT_VIDEOS'
   | 'LIMIT_VIDEOS_UNAVAILABLE'
+  | 'LIMIT_MUSIC'
+  | 'LIMIT_MUSIC_UNAVAILABLE'
   | 'FREE_LOCKED'
   | null;
 
@@ -59,6 +61,20 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
     icon: '🎬',
     title: 'Видео недоступно',
     desc: 'Генерация видео доступна начиная со тарифа Стандарт.',
+    btn1: 'Посмотреть тарифы',
+    btn2: 'Закрыть',
+  },
+  LIMIT_MUSIC: {
+    icon: '🎵',
+    title: 'Лимит треков исчерпан',
+    desc: 'Вы использовали все треки на сегодня. Лимит обновится завтра.',
+    btn1: 'Перейти на следующий тариф',
+    btn2: 'Закрыть',
+  },
+  LIMIT_MUSIC_UNAVAILABLE: {
+    icon: '🎵',
+    title: 'Музыка недоступна',
+    desc: 'Генерация музыки доступна начиная с тарифа Пробный.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },

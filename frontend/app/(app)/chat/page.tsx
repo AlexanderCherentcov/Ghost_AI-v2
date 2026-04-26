@@ -75,7 +75,7 @@ export default function ChatPage() {
     useChatStore.getState().setMessages([]);
   }, []);
 
-  async function handleSend(prompt: string, file?: File) {
+  async function handleSend(prompt: string, file?: File, _videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode) {
     const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
 
@@ -89,6 +89,7 @@ export default function ChatPage() {
     // Music mode — store prompt and navigate
     if (chatMode === 'music') {
       sessionStorage.setItem('initialMusicPrompt', prompt);
+      if (musicMode) sessionStorage.setItem('initialMusicMode', musicMode);
       router.push(`/chat/${chat.id}`);
       return;
     }

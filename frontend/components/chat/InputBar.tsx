@@ -467,12 +467,12 @@ export function InputBar({
           />
 
           {/* Bottom toolbar */}
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-1">
-              {/* Attach / plus button — hidden in music mode */}
-              {chatMode !== 'music' && <button
+          <div className="flex items-center gap-1 mt-2 min-w-0">
+            {/* Attach / plus button — fixed left, hidden in music mode */}
+            {chatMode !== 'music' && (
+              <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 flex items-center justify-center transition-colors focus:outline-none rounded-md hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80"
+                className="w-7 h-7 flex-shrink-0 flex items-center justify-center transition-colors focus:outline-none rounded-md hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80"
                 style={{ color: 'var(--text-primary)' }}
                 title="Прикрепить файл"
                 type="button"
@@ -481,18 +481,20 @@ export function InputBar({
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-              </button>}
+              </button>
+            )}
 
-              {/* Chat mode tabs */}
-              {chatMode !== undefined && setChatMode && (
-                <div className="flex items-center gap-0.5 ml-1">
+            {/* Chat mode tabs — scrollable on mobile */}
+            {chatMode !== undefined && setChatMode && (
+              <div className="flex-1 overflow-x-auto scrollbar-none min-w-0">
+                <div className="flex items-center gap-0.5 w-max px-0.5">
                   {CHAT_MODES.map((m) => (
                     <button
                       key={m.key}
                       type="button"
                       onClick={() => setChatMode(m.key)}
                       className={cn(
-                        'px-2 py-0.5 rounded-md text-[12px] transition-colors',
+                        'px-2 py-0.5 rounded-md text-[12px] transition-colors whitespace-nowrap',
                         chatMode === m.key
                           ? 'bg-[var(--accent-dim)] text-accent font-medium'
                           : 'hover:opacity-80 opacity-40'
@@ -503,28 +505,32 @@ export function InputBar({
                     </button>
                   ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Model selector — only in chat mode */}
-              {setPreferredModel && (!chatMode || chatMode === 'chat') && (
+            {/* Model selector — only in chat mode */}
+            {setPreferredModel && (!chatMode || chatMode === 'chat') && (
+              <div className="flex-shrink-0">
                 <ModelPill
                   preferredModel={preferredModel}
                   setPreferredModel={setPreferredModel}
                   userPlan={userPlan}
                   onUpgradeRequired={onUpgradeRequired}
                 />
-              )}
+              </div>
+            )}
 
-              {/* Video settings — only in video mode */}
-              {chatMode === 'video' && (
+            {/* Video settings — only in video mode */}
+            {chatMode === 'video' && (
+              <div className="flex-shrink-0">
                 <VideoSettingsMenu
                   options={videoOptions}
                   onChange={setVideoOptions}
                 />
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Stop / Send */}
+            {/* Stop / Send — fixed right */}
             {isStreaming ? (
               <motion.button
                 onClick={onStop}

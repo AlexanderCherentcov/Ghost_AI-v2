@@ -22,7 +22,8 @@ interface Message {
 }
 
 type ModelChoice = 'haiku' | 'deepseek' | undefined;
-type ChatMode = 'chat' | 'images' | 'video';
+type ChatMode = 'chat' | 'images' | 'video' | 'music';
+type MusicMode = 'short' | 'long' | 'quality';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -267,6 +268,9 @@ function ChatApp() {
   const [modelOpen, setModelOpen] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
   const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [generatingMusic, setGeneratingMusic] = useState(false);
+  const [musicMode, setMusicMode] = useState<MusicMode>('short');
+  const [musicDuration, setMusicDuration] = useState(30);
   const [videoDuration, setVideoDuration] = useState<5 | 10>(5);
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [videoEnableAudio, setVideoEnableAudio] = useState(false);
@@ -598,6 +602,64 @@ function ChatApp() {
     }
   }, [tg, router, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoCameraPreset, videoNegativePrompt, videoCfgScale]);
 
+  // ── Music generation ─────────────────────────────────────────────────────────
+  const handleGenerateMusic = useCallback(async (prompt: string) => {
+    if (!prompt.trim()) return;
+    const generatingMusicRef_guard = generatingMusic;
+    if (generatingMusicRef_guard) return;
+    setGeneratingMusic(true);
+
+    const placeholderId = `gen-music-${Date.now()}`;
+    setMessages((msgs) => [
+      ...msgs,
+      { id: `u-${Date.now()}`, role: 'user', content: prompt },
+      { id: placeholderId, role: 'assistant', content: '⏳ Создаю трек...', mode: 'sound', mediaUrl: '__loading__' },
+    ]);
+
+    try {
+      const { jobId } = await apiRequest<{ jobId: string }>('/generate/sound', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt,
+          musicMode,
+          ...(chatId ? { chatId } : {}),
+          ...(musicMode === 'quality' ? { musicDuration } : {}),
+        }),
+      });
+
+      const poll = async (): Promise<void> => {
+        const job = await apiRequest<{ status: string; mediaUrl?: string; error?: string }>(`/generate/${jobId}`);
+        if (job.status === 'done' && job.mediaUrl) {
+          setMessages((msgs) => msgs.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, mode: 'sound' }
+              : m
+          ));
+          tg?.HapticFeedback.notificationOccurred('success');
+        } else if (job.status === 'failed') {
+          setMessages((msgs) => msgs.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: undefined }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 3000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      setMessages((msgs) => msgs.map((m) =>
+        m.id === placeholderId
+          ? { ...m, content: `❌ ${err.message ?? 'Ошибка генерации'}`, mediaUrl: undefined }
+          : m
+      ));
+    } finally {
+      setGeneratingMusic(false);
+    }
+  }, [generatingMusic, chatId, musicMode, musicDuration, tg]);
+
   // ── File selection ────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -608,12 +670,15 @@ function ChatApp() {
   // ── Chat send ─────────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
-    if ((!prompt && !selectedFile) || streaming || generatingVideo) return;
+    if ((!prompt && !selectedFile) || streaming || generatingVideo || generatingMusic) return;
     setInput('');
     const fileToSend = selectedFile;
     setSelectedFile(null);
 
     // ── Mode-based routing ───────────────────────────────────────────────────
+    if (chatMode === 'music') {
+      return handleGenerateMusic(prompt || 'atmospheric ambient music');
+    }
     if (chatMode === 'images' && !fileToSend) {
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
@@ -802,7 +867,14 @@ function ChatApp() {
     { key: 'chat',   label: 'Чат' },
     { key: 'images', label: 'Картинки' },
     { key: 'video',  label: 'Видео' },
+    { key: 'music',  label: 'Музыка' },
   ];
+  const MUSIC_MODES: { key: MusicMode; label: string }[] = [
+    { key: 'short',   label: 'Короткий' },
+    { key: 'long',    label: 'Длинный' },
+    { key: 'quality', label: 'Студия' },
+  ];
+  const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
   return (
     <div
@@ -920,12 +992,18 @@ function ChatApp() {
                         /* Generating placeholder */
                         <div
                           className="rounded-xl flex flex-col items-center justify-center gap-3 py-8"
-                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', minHeight: msg.mode === 'reel' ? 160 : 200 }}
+                          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', minHeight: msg.mode === 'reel' ? 160 : 180 }}
                         >
                           {msg.mode === 'reel' ? (
                             <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ color: 'rgba(123,92,240,0.5)' }}>
                               <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
                               <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                            </svg>
+                          ) : msg.mode === 'sound' ? (
+                            <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ color: 'rgba(123,92,240,0.5)' }}>
+                              <path d="M9 24V10l16-3v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              <circle cx="6" cy="24" r="3" stroke="currentColor" strokeWidth="1.5"/>
+                              <circle cx="22" cy="21" r="3" stroke="currentColor" strokeWidth="1.5"/>
                             </svg>
                           ) : (
                             <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ color: 'rgba(123,92,240,0.5)' }}>
@@ -942,15 +1020,18 @@ function ChatApp() {
                           </div>
                           <div className="text-center px-4">
                             <p className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                              {msg.mode === 'reel' ? 'Генерирую видео...' : 'Генерирую картинку...'}
+                              {msg.mode === 'reel' ? 'Генерирую видео...' : msg.mode === 'sound' ? 'Создаю трек...' : 'Генерирую картинку...'}
                             </p>
-                            {msg.mode === 'reel' && (
+                            {(msg.mode === 'reel' || msg.mode === 'sound') && (
                               <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
                                 Обычно занимает 1–3 минуты
                               </p>
                             )}
                           </div>
                         </div>
+                      ) : msg.mode === 'sound' ? (
+                        /* Audio player */
+                        <MiniAudioPlayer url={msg.mediaUrl} />
                       ) : (msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
                         <div>
                           <video
@@ -959,7 +1040,6 @@ function ChatApp() {
                             playsInline
                             className="rounded-xl w-full mb-2"
                           />
-                          {/* Download button for video */}
                           <button
                             type="button"
                             onClick={() => downloadMedia(msg.mediaUrl!, 'video')}
@@ -1072,24 +1152,59 @@ function ChatApp() {
           </div>
         )}
 
-        {/* Mode tabs */}
-        <div className="flex items-center gap-1 mb-2">
-          {CHAT_MODES.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setChatMode(key)}
-              className="px-3 py-1 rounded-lg text-[11px] font-medium transition-all"
-              style={{
-                background: chatMode === key ? 'rgba(123,92,240,0.25)' : 'transparent',
-                color: chatMode === key ? '#A78BFA' : 'rgba(255,255,255,0.35)',
-                border: chatMode === key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Mode tabs — scrollable */}
+        <div className="overflow-x-auto scrollbar-none mb-2">
+          <div className="flex items-center gap-1 w-max">
+            {CHAT_MODES.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setChatMode(key)}
+                className="px-3 py-1 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap"
+                style={{
+                  background: chatMode === key ? 'rgba(123,92,240,0.25)' : 'transparent',
+                  color: chatMode === key ? '#A78BFA' : 'rgba(255,255,255,0.35)',
+                  border: chatMode === key ? '1px solid rgba(123,92,240,0.4)' : '1px solid transparent',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Music options */}
+        {chatMode === 'music' && (
+          <div className="mb-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {MUSIC_MODES.map((m) => (
+                <button key={m.key} type="button" onClick={() => setMusicMode(m.key)}
+                  className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all"
+                  style={{
+                    background: musicMode === m.key ? 'rgba(123,92,240,0.2)' : 'transparent',
+                    color: musicMode === m.key ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                    border: musicMode === m.key ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >{m.label}</button>
+              ))}
+              {musicMode === 'quality' && (
+                <>
+                  <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: 11 }}>|</span>
+                  {MUSIC_DURATIONS.map((d) => (
+                    <button key={d} type="button" onClick={() => setMusicDuration(d)}
+                      className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all"
+                      style={{
+                        background: musicDuration === d ? 'rgba(123,92,240,0.2)' : 'transparent',
+                        color: musicDuration === d ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                        border: musicDuration === d ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >{d}с</button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Video options */}
         {chatMode === 'video' && (
@@ -1281,8 +1396,8 @@ function ChatApp() {
             value={input}
             onChange={(e) => { setInput(e.target.value); handleTextareaInput(); }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder={chatMode === 'images' ? 'Опишите изображение...' : chatMode === 'video' ? 'Опишите видео...' : 'Сообщение...'}
-            disabled={streaming || generatingVideo}
+            placeholder={chatMode === 'images' ? 'Опишите изображение...' : chatMode === 'video' ? 'Опишите видео...' : chatMode === 'music' ? 'Опишите трек или настроение...' : 'Сообщение...'}
+            disabled={streaming || generatingVideo || generatingMusic}
             rows={1}
             spellCheck={true}
             style={{ fontSize: '16px', minHeight: '36px' }}
@@ -1359,7 +1474,7 @@ function ChatApp() {
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!input.trim() && !selectedFile) || streaming || generatingVideo}
+              disabled={(!input.trim() && !selectedFile) || streaming || generatingVideo || generatingMusic}
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40"
               style={{
                 background: (input.trim() || selectedFile) && !streaming && !generatingVideo ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
@@ -1379,6 +1494,95 @@ function ChatApp() {
       </div>
 
       <BottomNav />
+    </div>
+  );
+}
+
+// ─── Mini Audio Player ────────────────────────────────────────────────────────
+
+function MiniAudioPlayer({ url }: { url: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  function togglePlay() {
+    if (!audioRef.current) return;
+    if (playing) audioRef.current.pause();
+    else audioRef.current.play().catch(() => {});
+  }
+
+  function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!audioRef.current) return;
+    const pct = Number(e.target.value);
+    audioRef.current.currentTime = (pct / 100) * audioRef.current.duration;
+    setProgress(pct);
+  }
+
+  function fmt(s: number) {
+    if (!isFinite(s)) return '0:00';
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  }
+
+  const filename = url.split('/').pop()?.split('?')[0] ?? 'track.mp3';
+
+  return (
+    <div className="rounded-xl p-3 w-full" style={{ background: 'rgba(123,92,240,0.1)', border: '1px solid rgba(123,92,240,0.25)' }}>
+      <audio
+        ref={audioRef}
+        src={url}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); }}
+        onTimeUpdate={() => {
+          if (!audioRef.current) return;
+          setProgress(audioRef.current.duration ? (audioRef.current.currentTime / audioRef.current.duration) * 100 : 0);
+        }}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+      />
+      <div className="flex items-center gap-3">
+        {/* Play/Pause */}
+        <button
+          onClick={togglePlay}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: '#7B5CF0' }}
+        >
+          {playing ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="2" y="2" width="4" height="10" rx="1" fill="white"/>
+              <rect x="8" y="2" width="4" height="10" rx="1" fill="white"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 2l9 5-9 5V2z" fill="white"/>
+            </svg>
+          )}
+        </button>
+        {/* Progress */}
+        <div className="flex-1 min-w-0">
+          <input
+            type="range" min={0} max={100} step={0.1} value={progress}
+            onChange={handleSeek}
+            className="w-full h-1 rounded-full appearance-none cursor-pointer"
+            style={{ background: `linear-gradient(to right, #7B5CF0 ${progress}%, rgba(255,255,255,0.15) ${progress}%)` }}
+          />
+          <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <span>{fmt((progress / 100) * duration)}</span>
+            <span>{fmt(duration)}</span>
+          </div>
+        </div>
+        {/* Download */}
+        <button
+          onClick={() => downloadMedia(url, 'image').catch(() => window.open(url, '_blank'))}
+          className="w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 opacity-50 active:opacity-100"
+          style={{ color: '#A78BFA' }}
+          title="Скачать"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8M4 6.5L7 9.5l3-3M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

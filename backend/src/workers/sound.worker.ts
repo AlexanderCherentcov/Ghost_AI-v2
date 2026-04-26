@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateMusicDiffRhythm, generateMusicUdio } from '../services/providers/goapi.js';
+import { generateMusicSuno } from '../services/providers/suno.js';
 import { routeAudio } from '../services/audio-router.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
@@ -68,16 +69,19 @@ interface SoundJob {
   jobId: string;
   userId: string;
   prompt: string;
-  musicMode?: 'short' | 'long' | 'quality';
+  musicMode?: 'short' | 'long' | 'quality' | 'suno';
   musicDuration?: number;
   chatId?: string | null;
+  sunoStyle?: string;
+  sunoTitle?: string;
+  sunoInstrumental?: boolean;
 }
 
 export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -87,7 +91,15 @@ export function startSoundWorker() {
       // ── Выбор модели по режиму пользователя ────────────────────────────────
       let externalUrl: string;
 
-      if (musicMode === 'quality') {
+      if (musicMode === 'suno') {
+        console.info(`[SoundWorker] suno mode → Suno API | style="${sunoStyle ?? ''}" instrumental=${sunoInstrumental ?? true}`);
+        externalUrl = await generateMusicSuno(prompt, {
+          style: sunoStyle,
+          title: sunoTitle,
+          instrumental: sunoInstrumental ?? true,
+          model: 'V4_5',
+        });
+      } else if (musicMode === 'quality') {
         console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);
         externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
       } else if (musicMode === 'long') {
@@ -157,6 +169,6 @@ export function startSoundWorker() {
     console.info(`[SoundWorker] Job ${job.id} completed`);
   });
 
-  console.info('[SoundWorker] Started (DiffRhythm + Udio, FLAC→MP3 via ffmpeg)');
+  console.info('[SoundWorker] Started (DiffRhythm + Udio + Suno, FLAC→MP3 via ffmpeg)');
   return worker;
 }

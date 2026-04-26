@@ -25,8 +25,12 @@ const generateSchema = z.object({
   negativePrompt: z.string().max(2500).optional(),
   cfgScale: z.number().min(0).max(1).optional(),
   // Music-specific
-  musicMode: z.enum(['short', 'long', 'quality']).optional(),
+  musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
   musicDuration: z.number().int().min(15).max(60).optional(),
+  // Suno-specific options
+  sunoStyle: z.string().max(200).optional(),
+  sunoTitle: z.string().max(100).optional(),
+  sunoInstrumental: z.boolean().optional(),
 });
 
 export default async function generateRoutes(fastify: FastifyInstance) {
@@ -124,7 +128,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, chatId, musicMode, musicDuration } = generateSchema.parse(request.body);
+      const { prompt, chatId, musicMode, musicDuration, sunoStyle, sunoTitle, sunoInstrumental } = generateSchema.parse(request.body);
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -173,6 +177,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         musicMode: musicMode ?? 'short',
         musicDuration: musicDuration,
         chatId: chatId ?? null,
+        sunoStyle: sunoStyle,
+        sunoTitle: sunoTitle,
+        sunoInstrumental: sunoInstrumental,
       });
 
       await prisma.generateJob.update({

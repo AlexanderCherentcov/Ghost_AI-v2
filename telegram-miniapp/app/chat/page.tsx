@@ -23,7 +23,7 @@ interface Message {
 
 type ModelChoice = 'haiku' | 'deepseek' | undefined;
 type ChatMode = 'chat' | 'images' | 'video' | 'music';
-type MusicMode = 'short' | 'long' | 'quality';
+type MusicMode = 'short' | 'long' | 'quality' | 'suno';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
@@ -271,6 +271,8 @@ function ChatApp() {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [musicMode, setMusicMode] = useState<MusicMode>('short');
   const [musicDuration, setMusicDuration] = useState(30);
+  const [sunoStyle, setSunoStyle] = useState('');
+  const [sunoInstrumental, setSunoInstrumental] = useState(true);
   const [videoDuration, setVideoDuration] = useState<5 | 10>(5);
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [videoEnableAudio, setVideoEnableAudio] = useState(false);
@@ -626,6 +628,10 @@ function ChatApp() {
           musicMode,
           ...(chatId ? { chatId } : {}),
           ...(musicMode === 'quality' ? { musicDuration } : {}),
+          ...(musicMode === 'suno' ? {
+            sunoInstrumental,
+            ...(sunoStyle.trim() ? { sunoStyle: sunoStyle.trim() } : {}),
+          } : {}),
         }),
       });
 
@@ -660,7 +666,7 @@ function ChatApp() {
     } finally {
       setGeneratingMusic(false);
     }
-  }, [generatingMusic, chatId, musicMode, musicDuration, tg]);
+  }, [generatingMusic, chatId, musicMode, musicDuration, sunoStyle, sunoInstrumental, tg]);
 
   // ── File selection ────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -875,6 +881,7 @@ function ChatApp() {
     { key: 'short',   label: 'Короткий' },
     { key: 'long',    label: 'Длинный' },
     { key: 'quality', label: 'Студия' },
+    { key: 'suno',    label: 'Suno' },
   ];
   const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
@@ -1205,6 +1212,35 @@ function ChatApp() {
                 </>
               )}
             </div>
+            {/* Suno-specific options */}
+            {musicMode === 'suno' && (
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                <input
+                  type="text"
+                  value={sunoStyle}
+                  onChange={(e) => setSunoStyle(e.target.value)}
+                  placeholder="Стиль: Jazz, Pop, Electronic..."
+                  maxLength={200}
+                  className="flex-1 min-w-[140px] px-2.5 py-1 rounded-lg text-[11px] bg-transparent outline-none"
+                  style={{
+                    border: '1px solid rgba(123,92,240,0.3)',
+                    color: 'rgba(255,255,255,0.7)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSunoInstrumental(v => !v)}
+                  className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap"
+                  style={{
+                    background: !sunoInstrumental ? 'rgba(123,92,240,0.2)' : 'transparent',
+                    color: !sunoInstrumental ? '#A78BFA' : 'rgba(255,255,255,0.38)',
+                    border: !sunoInstrumental ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  {sunoInstrumental ? '🔇 Без слов' : '🎤 Со словами'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

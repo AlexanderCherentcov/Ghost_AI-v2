@@ -113,6 +113,22 @@ services:
     networks:
       - ghost_net
 
+  # ── Telegram Mini App ─────────────────────────────────────────────────────────
+  miniapp:
+    build:
+      context: ../telegram-miniapp
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.ghostlineai.ru}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://api.ghostlineai.ru}
+        NEXT_PUBLIC_SUPPORT_GROUP_URL: ${NEXT_PUBLIC_SUPPORT_GROUP_URL:-https://t.me/GhostLineSupport_bot}
+    image: ghostline-miniapp:latest
+    restart: always
+    expose:
+      - '3001'
+    networks:
+      - ghost_net
+
   # ── Nginx (reverse proxy + SSL) ───────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
@@ -127,6 +143,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - miniapp
     networks:
       - ghost_net
 

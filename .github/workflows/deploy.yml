@@ -7,7 +7,7 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'telegram-miniapp/**'
-      - 'infra/docker-compose.yml'
+      - 'infra/**'
       - '.github/workflows/deploy.yml'
 
 jobs:

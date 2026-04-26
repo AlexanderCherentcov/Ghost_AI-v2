@@ -263,6 +263,20 @@ async function start() {
   await prisma.$connect();
   await redis.connect();
 
+  // Бэкфилл music_daily_limit для существующих пользователей (один раз при деплое)
+  await prisma.$executeRaw`
+    UPDATE "User" SET "music_daily_limit" = CASE
+      WHEN plan = 'TRIAL'    THEN 1
+      WHEN plan = 'BASIC'    THEN 2
+      WHEN plan = 'STANDARD' THEN 5
+      WHEN plan = 'PRO'      THEN 10
+      WHEN plan = 'ULTRA'    THEN 20
+      WHEN plan = 'TEAM'     THEN 20
+      ELSE 0
+    END
+    WHERE "music_daily_limit" = 0 AND plan != 'FREE'
+  `;
+
   // Initialize optional vector cache (requires pgvector + EMBEDDING_API_KEY)
   await initVectorCache();
 

@@ -382,8 +382,10 @@ function ChatApp() {
             localStorage.removeItem(`pending_gen_${id}`);
           }
         })
-        .catch(() => {
-          // Chat no longer exists — create a fresh one
+        .catch((err: any) => {
+          // 401 = JWT expired (auto re-auth in apiRequest also failed) — keep chatId
+          if (err?.status === 401) return;
+          // Chat no longer exists or other error — start fresh
           localStorage.removeItem('tg_lastChatId');
           createNewChat();
         });

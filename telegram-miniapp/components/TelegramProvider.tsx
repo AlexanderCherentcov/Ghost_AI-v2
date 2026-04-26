@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { TelegramWebApp } from '@/hooks/useTelegram';
+import { setInitData } from '@/lib/auth';
 
 const TgContext = createContext<TelegramWebApp | null>(null);
 
@@ -34,6 +35,8 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       app.setHeaderColor('#0A0A12');
       app.setBackgroundColor('#0A0A12');
       setTg(app);
+      // Cache initData so apiRequest can silently re-auth when JWT expires
+      if (app.initData) setInitData(app.initData);
     }
     setReady(true);
   }, []);

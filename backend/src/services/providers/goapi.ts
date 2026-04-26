@@ -146,9 +146,14 @@ export async function generateVideoHunyuan(
   mode: HunyuanMode = 'fast',
   imageUrl?: string,
   aspectRatio: '16:9' | '9:16' | '1:1' = '16:9',
+  negativePrompt?: string,
 ): Promise<string> {
   let taskType: string;
-  const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio };
+  const input: Record<string, unknown> = {
+    prompt,
+    aspect_ratio: aspectRatio,
+    ...(negativePrompt?.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
+  };
 
   switch (mode) {
     case 'fast':

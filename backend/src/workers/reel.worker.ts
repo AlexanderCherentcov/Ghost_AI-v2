@@ -66,13 +66,27 @@ export function startReelWorker() {
       const route = routeVideo(prompt, !!imageUrl, duration, aspectRatio);
       console.info(`[ReelWorker] ${route.reason} | cost $${route.costUsd}`);
 
+      // ── Авто-негативный промт: блокируем людей если они не нужны ───────────────
+      const HUMAN_KEYWORDS = [
+        'человек', 'люди', 'девушка', 'парень', 'мужчина', 'женщина', 'ребёнок', 'дети',
+        'лицо', 'портрет', 'персонаж',
+        'person', 'people', 'man', 'woman', 'girl', 'boy', 'child', 'face', 'portrait', 'character',
+        'human', 'figure', 'silhouette',
+      ];
+      const NO_HUMANS_NEGATIVE = 'people, person, human, man, woman, face, body, figure';
+      const promptLower = prompt.toLowerCase();
+      const userWantsHumans = HUMAN_KEYWORDS.some((kw) => promptLower.includes(kw));
+      const effectiveNegative = userWantsHumans
+        ? (negativePrompt ?? '')
+        : [negativePrompt, NO_HUMANS_NEGATIVE].filter(Boolean).join(', ');
+
       let externalUrl: string;
 
       if (route.model === 'kling_std') {
         // Kling V-2.5 — для людей, лиц, сложных сцен, 10s
         const opts: KlingVideoOptions = {
           duration, aspectRatio, enableAudio, imageUrl,
-          cameraPreset, negativePrompt, cfgScale,
+          cameraPreset, negativePrompt: effectiveNegative || undefined, cfgScale,
         };
         externalUrl = await generateVideoKling(prompt, opts);
       } else {
@@ -82,6 +96,7 @@ export function startReelWorker() {
           route.hunyuanMode ?? 'fast',
           imageUrl,
           aspectRatio,
+          effectiveNegative || undefined,
         );
       }
 

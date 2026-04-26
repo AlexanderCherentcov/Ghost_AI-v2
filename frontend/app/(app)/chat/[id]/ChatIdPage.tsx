@@ -175,6 +175,9 @@ export default function ChatConversationPage() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // URL последнего сгенерированного изображения — для редактирования без повторной загрузки
+  const lastGeneratedImageRef = useRef<string | null>(null);
+
   // Load messages + resume any pending generation job after page refresh
   useEffect(() => {
     // Wait for accessToken — it lives only in memory and is restored async
@@ -193,6 +196,12 @@ export default function ChatConversationPage() {
       .then(({ messages }) => {
         setMessages(messages);
         setMessagesReady(true);
+
+        // Restore last generated image URL so edit requests keep context after page reload
+        const lastImg = [...messages].reverse().find(
+          (m) => m.role === 'assistant' && m.mode === 'vision' && m.mediaUrl && m.mediaUrl !== '__loading__'
+        );
+        if (lastImg?.mediaUrl) lastGeneratedImageRef.current = lastImg.mediaUrl;
 
         // Resume pending generation job if the user refreshed mid-generation
         const stored = localStorage.getItem(`pending_gen_${id}`);
@@ -351,6 +360,7 @@ export default function ChatConversationPage() {
               ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 }
               : m
           ));
+          lastGeneratedImageRef.current = job.mediaUrl;
           // Counter updated on backend; no local balance update needed
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
@@ -547,6 +557,10 @@ export default function ChatConversationPage() {
 
     // ── Mode-based routing ───────────────────────────────────────────────────
     if (chatMode === 'images' && !file) {
+      // If user is editing the last generated image — pass it as source
+      if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
+        return handleGenerateImage(prompt, lastGeneratedImageRef.current);
+      }
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
@@ -590,6 +604,12 @@ export default function ChatConversationPage() {
         if (lastAssistant) {
           return handleGenerateImage(extractImagePrompt(lastAssistant.content));
         }
+      }
+
+      // 1b. Edit intent on last generated image (no file attached)
+      //     "сделай темнее", "добавь снег", "убери фон" → edit last image
+      if (isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
+        return handleGenerateImage(prompt, lastGeneratedImageRef.current);
       }
 
       // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.

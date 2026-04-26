@@ -6,7 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoKling, generateVideoHunyuan, type KlingVideoOptions } from '../services/providers/goapi.js';
+import { generateVideoKling, generateVideoHunyuan, generateMMAudio, type KlingVideoOptions } from '../services/providers/goapi.js';
 import { routeVideo } from '../services/video-router.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
@@ -83,6 +83,19 @@ export function startReelWorker() {
           imageUrl,
           aspectRatio,
         );
+      }
+
+      // ── MMAudio: добавляем атмосферный звук если не запрошен Kling Audio ────────
+      // Только для Hunyuan-видео (Kling с enableAudio=true уже имеет звук)
+      if (!enableAudio && route.model !== 'kling_std') {
+        try {
+          const videoWithAudio = await generateMMAudio(externalUrl, duration);
+          externalUrl = videoWithAudio;
+          console.info(`[ReelWorker] MMAudio added ambient sound to video`);
+        } catch (e: any) {
+          // MMAudio необязателен — продолжаем без звука
+          console.warn(`[ReelWorker] MMAudio failed (non-fatal): ${e.message}`);
+        }
       }
 
       // ── Сразу помечаем done с внешним URL — пользователь видит результат ──────

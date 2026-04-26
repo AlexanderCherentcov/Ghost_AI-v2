@@ -182,12 +182,13 @@ function ModelPill({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export type ChatMode = 'chat' | 'images' | 'video';
+export type ChatMode = 'chat' | 'images' | 'video' | 'music';
 
 const CHAT_MODES: { key: ChatMode; label: string }[] = [
   { key: 'chat',   label: 'Чат' },
   { key: 'images', label: 'Картинки' },
   { key: 'video',  label: 'Видео' },
+  { key: 'music',  label: 'Музыка' },
 ];
 
 interface InputBarProps {
@@ -383,7 +384,7 @@ export function InputBar({
           <input
             ref={fileInputRef}
             type="file"
-            accept={chatMode === 'video' ? 'image/*' : ACCEPT}
+            accept={chatMode === 'video' ? 'image/*' : chatMode === 'music' ? '' : ACCEPT}
             className="hidden"
             onChange={handleFileChange}
           />
@@ -408,8 +409,8 @@ export function InputBar({
           {/* Bottom toolbar */}
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-1">
-              {/* Attach / plus button */}
-              <button
+              {/* Attach / plus button — hidden in music mode */}
+              {chatMode !== 'music' && <button
                 onClick={() => fileInputRef.current?.click()}
                 className="w-7 h-7 flex items-center justify-center transition-colors focus:outline-none rounded-md hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80"
                 style={{ color: 'var(--text-primary)' }}
@@ -420,7 +421,7 @@ export function InputBar({
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-              </button>
+              </button>}
 
               {/* Chat mode tabs */}
               {chatMode !== undefined && setChatMode && (

@@ -53,6 +53,7 @@ model User {
   pro_messages_today      Int      @default(0)
   images_today            Int      @default(0)
   videos_today            Int      @default(0)
+  music_today             Int      @default(0)
   files_used              Int      @default(0)   // monthly
 
   // ── Daily / monthly limits (copied from PLANS on subscribe) ───────────────
@@ -61,6 +62,7 @@ model User {
   pro_messages_daily_limit Int     @default(0)
   images_daily_limit       Int     @default(3)
   videos_daily_limit       Int     @default(0)
+  music_daily_limit        Int     @default(0)
   files_monthly_limit      Int     @default(0)
 
   // ── Billing period ────────────────────────────────────────────────────────

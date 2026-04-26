@@ -50,6 +50,8 @@ export function Sidebar() {
   const imagesLimit = user?.images_daily_limit ?? 0;
   const videoUsed   = user?.videos_today ?? 0;
   const videoLimit  = user?.videos_daily_limit ?? 0;
+  const musicUsed   = user?.music_today ?? 0;
+  const musicLimit  = user?.music_daily_limit ?? 0;
   const stdToday    = user?.std_messages_today ?? 0;
   const stdLimit    = user?.std_messages_daily_limit ?? 10;
 
@@ -282,6 +284,20 @@ export function Sidebar() {
                   <div
                     className="h-full bg-accent/60 rounded-full"
                     style={{ width: `${Math.min((videoUsed / videoLimit) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {/* Music (BASIC+) */}
+            {musicLimit > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{musicUsed}/{musicLimit} треков</span>
+                </div>
+                <div className="h-1 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min((musicUsed / musicLimit) * 100, 100)}%`, background: 'rgba(123,92,240,0.5)' }}
                   />
                 </div>
               </div>

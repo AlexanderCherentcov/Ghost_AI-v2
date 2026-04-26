@@ -146,7 +146,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    sound: (data: { prompt: string; duration?: number }) =>
+    sound: (data: { prompt: string; duration?: number; chatId?: string }) =>
       request<{ jobId: string }>('/generate/sound', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -177,12 +177,14 @@ export interface User {
   pro_messages_today:       number;
   images_today:             number;
   videos_today:             number;
+  music_today:              number;
   files_used:               number;
   // Limits (-1 = unlimited)
   std_messages_daily_limit: number;
   pro_messages_daily_limit: number;
   images_daily_limit:       number;
   videos_daily_limit:       number;
+  music_daily_limit:        number;
   files_monthly_limit:      number;
   day_start:    string;
   period_start: string;

@@ -188,6 +188,30 @@ export async function buildApp() {
     return reply.send(fs.createReadStream(filepath));
   });
 
+  // ── Static audio serving (generated tracks saved to disk) ────────────────
+  fastify.get('/audio/:filename', async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    if (filename.includes('/') || filename.includes('..')) {
+      return reply.code(400).send({ error: 'Invalid filename' });
+    }
+    const filepath = path.join(process.cwd(), 'uploads', 'audio', filename);
+    if (!fs.existsSync(filepath)) return reply.code(404).send({ error: 'Not found' });
+
+    const stat = fs.statSync(filepath);
+    const ext = filename.split('.').pop()?.toLowerCase() ?? 'mp3';
+    const mimeMap: Record<string, string> = {
+      mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+      flac: 'audio/flac', m4a: 'audio/mp4',
+    };
+
+    reply.header('Accept-Ranges', 'bytes');
+    reply.header('Content-Type', mimeMap[ext] ?? 'audio/mpeg');
+    reply.header('Cache-Control', 'public, max-age=31536000');
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    reply.header('Content-Length', String(stat.size));
+    return reply.send(fs.createReadStream(filepath));
+  });
+
   // ── Health check ──────────────────────────────────────────────────────────
   fastify.get('/health', async () => ({
     status: 'ok',

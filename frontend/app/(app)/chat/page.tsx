@@ -86,6 +86,13 @@ export default function ChatPage() {
       return;
     }
 
+    // Music mode — store prompt and navigate
+    if (chatMode === 'music') {
+      sessionStorage.setItem('initialMusicPrompt', prompt);
+      router.push(`/chat/${chat.id}`);
+      return;
+    }
+
     // Images mode — always generate image
     if (chatMode === 'images' && !file) {
       sessionStorage.setItem('initialImagePrompt', prompt || 'beautiful landscape');
@@ -132,7 +139,9 @@ export default function ChatPage() {
     ? 'Опишите изображение...'
     : chatMode === 'video'
       ? 'Опишите видео...'
-      : 'Спросите что-нибудь у GhostLine...';
+      : chatMode === 'music'
+        ? 'Опишите стиль или настроение музыки...'
+        : 'Спросите что-нибудь у GhostLine...';
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

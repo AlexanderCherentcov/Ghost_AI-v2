@@ -41,8 +41,8 @@ interface SoundJob {
   jobId: string;
   userId: string;
   prompt: string;
-  duration: number;
   musicMode?: 'short' | 'long' | 'quality';
+  musicDuration?: number;
   chatId?: string | null;
 }
 
@@ -50,7 +50,7 @@ export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, musicMode = 'short', chatId } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -61,8 +61,8 @@ export function startSoundWorker() {
       let externalUrl: string;
 
       if (musicMode === 'quality') {
-        console.info(`[SoundWorker] quality mode → Udio | cost $0.05`);
-        externalUrl = await generateMusicUdio(prompt);
+        console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);
+        externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
       } else if (musicMode === 'long') {
         console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02`);
         externalUrl = await generateMusicDiffRhythm(prompt, 'full');

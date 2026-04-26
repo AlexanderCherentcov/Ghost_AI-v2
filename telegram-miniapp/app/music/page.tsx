@@ -8,11 +8,13 @@ import { apiRequest } from '@/lib/auth';
 
 type MusicMode = 'short' | 'long' | 'quality';
 
-const MUSIC_MODES: { key: MusicMode; label: string; hint: string }[] = [
-  { key: 'short',   label: 'Короткий',  hint: '~1:35' },
-  { key: 'long',    label: 'Длинный',   hint: '~4:45' },
-  { key: 'quality', label: 'Качество',  hint: '~0:32' },
+const MUSIC_MODES: { key: MusicMode; label: string }[] = [
+  { key: 'short',   label: 'Короткий' },
+  { key: 'long',    label: 'Длинный'  },
+  { key: 'quality', label: 'Студия'   },
 ];
+
+const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
 interface Track {
   id: string;
@@ -178,6 +180,7 @@ function TrackCard({ track }: { track: Track }) {
 function MusicPageInner() {
   const [prompt, setPrompt] = useState('');
   const [musicMode, setMusicMode] = useState<MusicMode>('short');
+  const [studioDuration, setStudioDuration] = useState(30);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [generating, setGenerating] = useState(false);
   const mountedRef = useRef(true);
@@ -201,7 +204,11 @@ function MusicPageInner() {
     try {
       const res = await apiRequest<{ jobId: string }>('/generate/sound', {
         method: 'POST',
-        body: JSON.stringify({ prompt: text, musicMode }),
+        body: JSON.stringify({
+          prompt: text,
+          musicMode,
+          ...(musicMode === 'quality' ? { musicDuration: studioDuration } : {}),
+        }),
       });
 
       const jobId = res.jobId;
@@ -297,17 +304,36 @@ function MusicPageInner() {
             <button
               key={m.key}
               onClick={() => setMusicMode(m.key)}
-              className="flex-1 rounded-xl py-2 text-[12px] transition-all"
+              className="flex-1 rounded-xl py-2 text-[12px] font-medium transition-all"
               style={{
                 background: musicMode === m.key ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
                 color: musicMode === m.key ? '#fff' : 'rgba(255,255,255,0.45)',
               }}
             >
-              <div className="font-medium">{m.label}</div>
-              <div className="text-[10px] opacity-70">{m.hint}</div>
+              {m.label}
             </button>
           ))}
         </div>
+
+        {/* Duration selector — only for Студия */}
+        {musicMode === 'quality' && (
+          <div className="flex gap-2 mt-2">
+            {MUSIC_DURATIONS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setStudioDuration(d)}
+                className="flex-1 rounded-xl py-1.5 text-[12px] font-medium transition-all"
+                style={{
+                  background: studioDuration === d ? 'rgba(123,92,240,0.3)' : 'rgba(255,255,255,0.04)',
+                  color: studioDuration === d ? 'var(--accent)' : 'rgba(255,255,255,0.35)',
+                  border: studioDuration === d ? '1px solid rgba(123,92,240,0.5)' : '1px solid transparent',
+                }}
+              >
+                {d}с
+              </button>
+            ))}
+          </div>
+        )}
 
         <p className="text-[11px] mt-2 px-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
           Подсказки: «спокойный джаз для работы», «электронный бит для спорта»

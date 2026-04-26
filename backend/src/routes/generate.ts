@@ -26,6 +26,7 @@ const generateSchema = z.object({
   cfgScale: z.number().min(0).max(1).optional(),
   // Music-specific
   musicMode: z.enum(['short', 'long', 'quality']).optional(),
+  musicDuration: z.number().int().min(15).max(60).optional(),
 });
 
 export default async function generateRoutes(fastify: FastifyInstance) {
@@ -123,7 +124,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, duration, chatId, musicMode } = generateSchema.parse(request.body);
+      const { prompt, chatId, musicMode, musicDuration } = generateSchema.parse(request.body);
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -169,8 +170,8 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
-        duration: duration ?? 15,
         musicMode: musicMode ?? 'short',
+        musicDuration: musicDuration,
         chatId: chatId ?? null,
       });
 

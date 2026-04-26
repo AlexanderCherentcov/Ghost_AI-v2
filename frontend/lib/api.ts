@@ -146,7 +146,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    sound: (data: { prompt: string; duration?: number; chatId?: string; musicMode?: 'short' | 'long' | 'quality' }) =>
+    sound: (data: { prompt: string; chatId?: string; musicMode?: 'short' | 'long' | 'quality'; musicDuration?: number }) =>
       request<{ jobId: string }>('/generate/sound', {
         method: 'POST',
         body: JSON.stringify(data),

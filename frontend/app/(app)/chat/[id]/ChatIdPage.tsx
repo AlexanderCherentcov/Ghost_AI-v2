@@ -257,6 +257,7 @@ export default function ChatConversationPage() {
     const initialVideoPrompt = sessionStorage.getItem('initialVideoPrompt');
     const initialMusicPrompt = sessionStorage.getItem('initialMusicPrompt');
     const initialMusicMode = (sessionStorage.getItem('initialMusicMode') ?? 'short') as MusicMode;
+    const initialMusicDuration = sessionStorage.getItem('initialMusicDuration') ? Number(sessionStorage.getItem('initialMusicDuration')) : undefined;
     const initialImageUrl    = sessionStorage.getItem('initialImageUrl');
     const initialFileContent = sessionStorage.getItem('initialFileContent');
     const initialFileName    = sessionStorage.getItem('initialFileName');
@@ -267,7 +268,7 @@ export default function ChatConversationPage() {
     const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialImageUrl','initialFileContent',
+    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialMusicDuration','initialImageUrl','initialFileContent',
      'initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
@@ -275,7 +276,7 @@ export default function ChatConversationPage() {
       if (initialVideoPrompt) {
         handleGenerateVideo(initialVideoPrompt);
       } else if (initialMusicPrompt) {
-        handleGenerateMusic(initialMusicPrompt, initialMusicMode);
+        handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration);
       } else if (initialImagePrompt) {
         handleGenerateImage(initialImagePrompt);
       } else if (initialImageUrl) {
@@ -464,7 +465,7 @@ export default function ChatConversationPage() {
   }, [accessToken, messagesReady]);
 
   // ── Music generation ─────────────────────────────────────────────────────────
-  const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short') => {
+  const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number) => {
     if (!accessToken || !messagesReady) return;
     setGeneratingMusic(true);
 
@@ -492,7 +493,7 @@ export default function ChatConversationPage() {
     });
 
     try {
-      const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode });
+      const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode, musicDuration });
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
@@ -541,7 +542,7 @@ export default function ChatConversationPage() {
   }, [accessToken, messagesReady]);
 
   // ── Main send handler ────────────────────────────────────────────────────────
-  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode) => {
+  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
 
     // ── Mode-based routing ───────────────────────────────────────────────────
@@ -564,7 +565,7 @@ export default function ChatConversationPage() {
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;
-      return handleGenerateMusic(prompt, musicMode ?? 'short');
+      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration);
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────

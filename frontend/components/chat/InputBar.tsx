@@ -192,8 +192,10 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
   { key: 'music',  label: 'Музыка' },
 ];
 
+const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
+
 interface InputBarProps {
-  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -206,10 +208,10 @@ interface InputBarProps {
   setChatMode?: (m: ChatMode) => void;
 }
 
-const MUSIC_MODES: { key: MusicMode; label: string; hint: string }[] = [
-  { key: 'short',   label: 'Короткий',  hint: '~1:35 · $0.02' },
-  { key: 'long',    label: 'Длинный',   hint: '~4:45 · $0.02' },
-  { key: 'quality', label: 'Качество',  hint: '~0:32 · $0.05' },
+const MUSIC_MODES: { key: MusicMode; label: string }[] = [
+  { key: 'short',   label: 'Короткий' },
+  { key: 'long',    label: 'Длинный'  },
+  { key: 'quality', label: 'Студия'   },
 ];
 
 export function InputBar({
@@ -220,6 +222,7 @@ export function InputBar({
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [musicMode, setMusicMode] = useState<MusicMode>('short');
+  const [musicDuration, setMusicDuration] = useState(30);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',
@@ -239,7 +242,8 @@ export function InputBar({
     sendingRef.current = true;
     const opts = chatMode === 'video' ? videoOptions : undefined;
     const mMode = chatMode === 'music' ? musicMode : undefined;
-    onSend(trimmed, attachedFile ?? undefined, opts, mMode);
+    const mDur = (chatMode === 'music' && musicMode === 'quality') ? musicDuration : undefined;
+    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -288,16 +292,37 @@ export function InputBar({
                 type="button"
                 onClick={() => setMusicMode(m.key)}
                 className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                  'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
                   musicMode === m.key
                     ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
                     : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
                 )}
               >
                 {m.label}
-                <span className="opacity-50">{m.hint}</span>
               </button>
             ))}
+
+            {/* Duration selector — only for Студия (Udio) */}
+            {musicMode === 'quality' && (
+              <>
+                <span className="text-[rgba(255,255,255,0.15)] text-[11px]">|</span>
+                {MUSIC_DURATIONS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setMusicDuration(d)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                      musicDuration === d
+                        ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                        : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                    )}
+                  >
+                    {d}с
+                  </button>
+                ))}
+              </>
+            )}
           </motion.div>
         )}
 

@@ -203,10 +203,10 @@ export async function generateMusicDiffRhythm(
 // ─── Udio music generation ─────────────────────────────────────────────────────
 // $0.05 за трек (~32 сек), высокое качество
 
-export async function generateMusicUdio(prompt: string): Promise<string> {
+export async function generateMusicUdio(prompt: string, duration = 30): Promise<string> {
   const taskId = await createTask('udio', 'generate', {
     prompt,
-    duration: 32,
+    duration,
   });
   const data = await pollTask(taskId, 120, 5_000);
   const output = data?.data?.output ?? data?.output;

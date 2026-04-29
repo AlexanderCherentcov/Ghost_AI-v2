@@ -226,7 +226,7 @@ export function InputBar({
   const [musicDuration, setMusicDuration] = useState(30);
   const [sunoStyle, setSunoStyle] = useState('');
   const [sunoTitle, setSunoTitle] = useState('');
-  const [sunoInstrumental, setSunoInstrumental] = useState(true);
+  const [sunoInstrumental, setSunoInstrumental] = useState(false);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',

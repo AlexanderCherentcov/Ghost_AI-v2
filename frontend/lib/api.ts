@@ -104,6 +104,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    createCaspers: (data: { amount: number }) =>
+      request<{ paymentId: string; paymentUrl: string; totalPrice: number }>('/payments/caspers/create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
     status: (yokassaId: string) =>
       request<{ status: string; plan: string | null }>(
@@ -187,25 +192,24 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  plan: 'FREE' | 'TRIAL' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
+  plan: 'FREE' | 'BASIC' | 'PRO' | 'VIP' | 'ULTRA';
   planExpiresAt: string | null;
   billing: 'MONTHLY' | 'YEARLY';
+  // Caspers
+  caspers_balance:    number;
+  caspers_monthly:    number;
   // Daily counters
-  std_messages_today:       number;
-  pro_messages_today:       number;
-  images_today:             number;
-  videos_today:             number;
-  music_today:              number;
-  files_used:               number;
-  // Limits (-1 = unlimited)
-  std_messages_daily_limit: number;
-  pro_messages_daily_limit: number;
-  images_daily_limit:       number;
-  videos_daily_limit:       number;
-  music_daily_limit:        number;
-  files_monthly_limit:      number;
+  std_messages_today: number;
+  pro_messages_today: number;
+  // FREE tier weekly counters
+  images_this_week:   number;
+  music_this_week:    number;
+  videos_this_week:   number;
+  // Period timestamps
   day_start:    string;
+  week_start:   string;
   period_start: string;
+  // Profile
   purposes: string[];
   responseStyle: string;
   onboardingDone: boolean;
@@ -263,12 +267,8 @@ export interface PlanInfo {
   price: number;
   price_yearly: number;
   label: string;
-  show_message_limit: boolean;
-  std_messages_daily: number;
-  pro_messages_daily: number;
-  images_daily: number;
-  videos_daily: number;
-  files_monthly: number;
+  caspers_monthly: number;
+  pro_free_daily: number;
 }
 export interface PlansResponse {
   plans: Record<string, PlanInfo>;

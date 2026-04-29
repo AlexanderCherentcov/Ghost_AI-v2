@@ -35,9 +35,8 @@ export default function HistoryPage() {
 
   const plan = user?.plan ?? 'FREE';
   const stdToday = user?.std_messages_today ?? 0;
-  const stdLimit = user?.std_messages_daily_limit ?? 10;
-  const showMsgBar = (plan === 'FREE' || plan === 'TRIAL') && stdLimit !== -1;
-  const tokenPercent = showMsgBar ? Math.min((stdToday / stdLimit) * 100, 100) : 0;
+  const showMsgBar = plan === 'FREE';
+  const tokenPercent = showMsgBar ? Math.min((stdToday / 5) * 100, 100) : 0;
   const grouped = groupChats(chats);
 
   function handleNewChat() {
@@ -166,7 +165,7 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <TokenIcon size={12} className="text-accent" />
-            <span>{showMsgBar ? `${stdToday}/${stdLimit} сегодня` : 'Безлимитный'}</span>
+            <span>{showMsgBar ? `${stdToday}/5 сегодня` : (user?.caspers_balance != null ? `${user.caspers_balance} Caspers` : 'Безлимитный')}</span>
           </div>
           <Link href="/billing" className="text-[11px] text-accent">Тарифы</Link>
         </div>

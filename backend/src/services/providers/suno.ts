@@ -123,8 +123,11 @@ export async function generateMusicSuno(
     const status: string = (pollData.data?.status ?? '').toUpperCase();
 
     if (status === 'SUCCESS') {
-      // Log full response to understand actual structure
-      console.info(`[Suno] SUCCESS response: ${JSON.stringify(pollData.data).slice(0, 1000)}`);
+      // Log keys and non-param fields to understand actual structure
+      const d = pollData.data;
+      console.info(`[Suno] SUCCESS keys: ${JSON.stringify(Object.keys(d ?? {}))}`);
+      const { param: _p, ...rest } = d ?? {};
+      console.info(`[Suno] SUCCESS data (no param): ${JSON.stringify(rest).slice(0, 2000)}`);
 
       // Try multiple possible response paths from sunoapi.org
       const d = pollData.data;

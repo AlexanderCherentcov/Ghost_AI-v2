@@ -51,11 +51,14 @@ export async function generateMusicSuno(
   // Custom mode requires style + title
   const customMode = !!(style?.trim() || title?.trim());
 
+  const apiBase = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+
   const body: Record<string, unknown> = {
     prompt: prompt.slice(0, customMode ? 5000 : 500),
     model,
     customMode,
     instrumental,
+    callBackUrl: `${apiBase}/api/suno/callback`,
     ...(customMode && style?.trim() ? { style: style.trim() } : {}),
     ...(customMode && title?.trim() ? { title: title.trim() } : {}),
   };

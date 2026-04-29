@@ -77,7 +77,12 @@ export async function generateMusicSuno(
 
   const createData = (await createRes.json()) as any;
   if (createData.code !== 200) {
-    throw new Error(`Suno API error: ${createData.msg ?? JSON.stringify(createData).slice(0, 200)}`);
+    const msg: string = createData.msg ?? JSON.stringify(createData).slice(0, 200);
+    // Surface friendly messages for known Suno policy violations
+    if (msg.includes('artist name') || msg.includes('reference')) {
+      throw new Error('Suno не разрешает упоминать имена артистов в описании. Опишите стиль или жанр вместо конкретного исполнителя.');
+    }
+    throw new Error(`Suno API error: ${msg}`);
   }
 
   const taskId: string | undefined = createData.data?.taskId;

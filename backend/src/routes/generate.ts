@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { checkResets, checkAndDeduct } from '../services/tokens.js';
+import { checkResets, checkAndDeduct, refundCaspers, resolveVideoRequestType } from '../services/tokens.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
 import { encrypt } from '../lib/crypto.js';
+import { notifyApiError } from '../services/admin-notify.js';
 import crypto from 'crypto';
 
 const generateSchema = z.object({
@@ -28,7 +29,7 @@ const generateSchema = z.object({
   musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
   musicDuration: z.number().int().min(15).max(60).optional(),
   lyrics: z.string().max(10000).optional(),
-  styleAudio: z.string().url().max(2000).optional(), // DiffRhythm reference audio URL
+  styleAudio: z.string().url().max(2000).optional(),
   // Suno-specific options
   sunoStyle: z.string().max(200).optional(),
   sunoTitle: z.string().max(100).optional(),
@@ -37,8 +38,6 @@ const generateSchema = z.object({
 
 /**
  * Simulate generation delay for cache hits so the UI shows loading animation.
- * Completes the job in background after a realistic delay and optionally saves
- * an assistant message to chat history (for types that don't go through a worker).
  */
 function completeCachedJobAfterDelay(
   jobId: string,
@@ -97,7 +96,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // ── Image cache check ─────────────────────────────────────────────────
       const promptHash = crypto.createHash('sha256').update(prompt.trim().toLowerCase()).digest('hex');
 
-      // Has this user requested this exact prompt before?
       const userMadeThis = await prisma.userImageRequest.findUnique({
         where: { userId_promptHash: { userId, promptHash } },
       });
@@ -116,17 +114,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
           const job = await prisma.generateJob.create({
             data: { userId, mode: 'vision', prompt, status: 'processing' },
           });
-          // Simulate generation (5–9 s) so UI shows loading animation
           completeCachedJobAfterDelay(job.id, mediaCached.url, 5_000 + Math.random() * 4_000);
           return reply.code(202).send({ jobId: job.id });
         }
       }
 
       // ── New generation — check limits and deduct ──────────────────────────
-      const requestType: import('../services/tokens.js').RequestType = sourceImageUrl ? 'image_edit' : 'image_generate';
-      await checkAndDeduct(userId, requestType);
+      const requestType = sourceImageUrl ? 'image_edit' : 'image_generate';
+      try {
+        await checkAndDeduct(userId, requestType);
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_IMAGES' });
+      }
 
-      // Save user message to chat history (include source image so history shows what was edited)
+      // Save user message to chat history
       if (chatId) {
         await prisma.message.create({
           data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: sourceImageUrl ?? null },
@@ -147,6 +148,17 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         chatId: chatId ?? null,
         size: effectiveSize,
         ...(sourceImageUrl ? { sourceImageUrl } : {}),
+      }).catch(async (err: any) => {
+        // Queue error: refund and notify admin
+        await refundCaspers(userId, requestType).catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'image_gen',
+          error: err.message,
+        }).catch(() => {});
+        throw err;
       });
 
       await prisma.generateJob.update({
@@ -154,7 +166,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         data: { bullJobId: bullJob.id },
       });
 
-      // Track user's request (so they can regenerate same prompt later)
       await prisma.userImageRequest.create({ data: { userId, promptHash } }).catch(() => {});
 
       return reply.code(202).send({ jobId: job.id });
@@ -171,12 +182,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       // Reset counters if period ended
       await checkResets(userId);
 
-      // FREE plan: no sound generation
-      const userPlanS = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (userPlanS?.plan === 'FREE') {
-        return reply.code(403).send({ error: 'Обновите тариф для генерации музыки.', code: 'PLAN_RESTRICTED' });
-      }
-
       // Per-user rate limit
       if (!await checkGenRateLimit(userId)) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
@@ -191,18 +196,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Check media cache before deducting quota
-      const mediaCached = await getMediaCached('sound', prompt);
-
       // Check music limits and deduct
-      await checkAndDeduct(userId, 'music_generate', 1);
+      try {
+        await checkAndDeduct(userId, 'music_generate', 1);
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_MUSIC' });
+      }
+
+      // Check media cache after deducting
+      const mediaCached = await getMediaCached('sound', prompt);
 
       if (mediaCached.hit) {
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'processing' },
         });
-        // Simulate generation (8–14 s) so UI shows loading animation;
-        // also persist the assistant message so it survives page refresh.
         completeCachedJobAfterDelay(
           job.id, mediaCached.url, 8_000 + Math.random() * 6_000,
           chatId ? { chatId, userId, prompt, mode: 'sound' } : undefined,
@@ -226,6 +233,16 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         sunoStyle: sunoStyle,
         sunoTitle: sunoTitle,
         sunoInstrumental: sunoInstrumental,
+      }).catch(async (err: any) => {
+        await refundCaspers(userId, 'music_generate').catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'music_gen',
+          error: err.message,
+        }).catch(() => {});
+        throw err;
       });
 
       await prisma.generateJob.update({
@@ -244,16 +261,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, chatId, videoModel, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt } = generateSchema.parse(request.body);
 
-      const videoCount = 1;
+      const effectiveModel = videoModel ?? 'standard';
+      const effectiveDuration = videoDuration ?? '8s';
+      const videoRequestType = resolveVideoRequestType(effectiveModel, effectiveDuration);
 
       // Reset counters if period ended
       await checkResets(userId);
-
-      // FREE / BASIC: no video generation
-      const userPlanR = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (userPlanR?.plan === 'FREE' || userPlanR?.plan === 'BASIC') {
-        return reply.code(403).send({ error: 'Генерация видео доступна начиная со тарифа Стандарт.', code: 'LIMIT_VIDEOS_UNAVAILABLE' });
-      }
 
       // Per-user video rate limit (1/min)
       if (!await checkVideoRateLimit(userId)) {
@@ -273,7 +286,11 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       if (!videoImageUrl) {
         const mediaCached = await getMediaCached('reel', prompt);
         if (mediaCached.hit) {
-          await checkAndDeduct(userId, 'video_generate', videoCount);
+          try {
+            await checkAndDeduct(userId, videoRequestType);
+          } catch (err: any) {
+            return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
+          }
           const job = await prisma.generateJob.create({
             data: { userId, mode: 'reel', prompt, status: 'processing' },
           });
@@ -285,7 +302,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         }
       }
 
-      await checkAndDeduct(userId, 'video_generate', videoCount);
+      // Check limits and deduct
+      try {
+        await checkAndDeduct(userId, videoRequestType);
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
+      }
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'reel', prompt },
@@ -296,13 +318,24 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         userId,
         prompt,
         chatId: chatId ?? null,
-        videoModel: videoModel ?? 'standard',
-        duration: videoDuration ?? '8s',
+        videoModel: effectiveModel,
+        duration: effectiveDuration,
         aspectRatio: videoAspectRatio ?? '16:9',
         enableAudio: videoEnableAudio ?? false,
         resolution: videoResolution ?? '720p',
         imageUrl: videoImageUrl ?? null,
         negativePrompt,
+      }).catch(async (err: any) => {
+        await refundCaspers(userId, videoRequestType).catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'video_gen',
+          error: err.message,
+          context: `model=${effectiveModel} duration=${effectiveDuration}`,
+        }).catch(() => {});
+        throw err;
       });
 
       await prisma.generateJob.update({
@@ -315,8 +348,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
   });
 
   // ── Lip Sync ──────────────────────────────────────────────────────────────
-  // Накладывает аудио на видео — губы персонажа двигаются под голос/музыку.
-  // Цена: $0.10/генерация (Kling Lip Sync через GoAPI)
   fastify.post('/generate/lipsync', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -329,8 +360,8 @@ export default async function generateRoutes(fastify: FastifyInstance) {
 
       // Только платные планы
       const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (userPlan?.plan === 'FREE' || userPlan?.plan === 'BASIC') {
-        return reply.code(403).send({ error: 'Lip Sync доступен начиная со тарифа Стандарт.', code: 'PLAN_RESTRICTED' });
+      if (userPlan?.plan === 'FREE') {
+        return reply.code(403).send({ error: 'Генерация провалась, попробуйте позже', code: 'PLAN_RESTRICTED' });
       }
 
       // Rate limit (1/мин)
@@ -339,11 +370,29 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       await checkResets(userId);
-      await checkAndDeduct(userId, 'video_generate', 1);
 
-      const resultUrl = await generateLipSync(videoUrl, audioUrl).catch((err: any) => {
-        throw Object.assign(new Error(err.message), { statusCode: 502 });
-      });
+      // Deduct as standard 4s video
+      try {
+        await checkAndDeduct(userId, 'video_std_4s', 1);
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
+      }
+
+      let resultUrl: string;
+      try {
+        resultUrl = await generateLipSync(videoUrl, audioUrl);
+      } catch (err: any) {
+        await refundCaspers(userId, 'video_std_4s').catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'video_gen',
+          error: err.message,
+          context: 'lipsync',
+        }).catch(() => {});
+        return reply.code(502).send({ error: 'Генерация провалась, попробуйте позже' });
+      }
 
       if (chatId) {
         await prisma.message.create({
@@ -374,7 +423,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         mode: job.mode,
         prompt: job.prompt,
         mediaUrl: job.mediaUrl,
-        error: job.error,
+        error: job.error ? 'Генерация провалась, попробуйте позже' : null,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       };

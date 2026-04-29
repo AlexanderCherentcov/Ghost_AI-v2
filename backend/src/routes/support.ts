@@ -45,14 +45,13 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           name: true,
           email: true,
           plan: true,
-          std_messages_today:       true,
-          pro_messages_today:       true,
-          images_today:             true,
-          videos_today:             true,
-          std_messages_daily_limit: true,
-          pro_messages_daily_limit: true,
-          images_daily_limit:       true,
-          videos_daily_limit:       true,
+          caspers_balance:    true,
+          caspers_monthly:    true,
+          std_messages_today: true,
+          pro_messages_today: true,
+          images_this_week:   true,
+          music_this_week:    true,
+          videos_this_week:   true,
         },
       });
       if (user) {
@@ -61,14 +60,13 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
         userEmail = user.email ?? userEmail;
         userPlan  = user.plan;
         usage = [
-          `💬 Сообщения: ${user.std_messages_today}/${user.std_messages_daily_limit === -1 ? '∞' : user.std_messages_daily_limit}`,
-          user.pro_messages_daily_limit > 0
-            ? `⚡ Про: ${user.pro_messages_today}/${user.pro_messages_daily_limit}`
+          `💬 Сообщения сегодня: ${user.std_messages_today}`,
+          user.pro_messages_today > 0
+            ? `⚡ Про сегодня: ${user.pro_messages_today}`
             : '',
-          `🖼 Картинки: ${user.images_today}/${user.images_daily_limit}`,
-          user.videos_daily_limit > 0
-            ? `🎬 Видео: ${user.videos_today}/${user.videos_daily_limit}`
-            : '',
+          `Caspers: ${user.caspers_balance}/${user.caspers_monthly}/мес`,
+          user.plan === 'FREE' ? `🖼 Картинки/нед: ${user.images_this_week}/5` : '',
+          user.plan === 'FREE' ? `🎬 Видео/нед: ${user.videos_this_week}/3` : '',
         ].filter(Boolean).join('\n');
       }
     } catch {

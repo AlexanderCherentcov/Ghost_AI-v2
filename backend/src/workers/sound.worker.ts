@@ -92,39 +92,34 @@ export function startSoundWorker() {
       // ── Выбор модели по режиму пользователя ────────────────────────────────
       let externalUrl: string;
 
-      if (musicMode === 'suno') {
-        // ── Suno: explicit mode ────────────────────────────────────────────────
-        console.info(`[SoundWorker] suno → Suno V5.5 | style="${sunoStyle ?? ''}" instrumental=${sunoInstrumental ?? false}`);
-        externalUrl = await generateMusicSuno(prompt, {
-          style: sunoStyle,
-          title: sunoTitle,
-          instrumental: sunoInstrumental ?? false,
-          lyrics,
-          model: 'V5_5',
-        });
-      } else if (musicMode === 'quality') {
+      if (musicMode === 'quality') {
         // ── Quality: Udio ──────────────────────────────────────────────────────
         console.info(`[SoundWorker] quality → Udio | duration ${musicDuration ?? 30}s`);
         externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
-      } else if (lyrics?.trim()) {
-        // ── Short/Long WITH lyrics → always Suno ──────────────────────────────
-        // DiffRhythm ignores complex style_prompt — Suno V5.5 follows style accurately.
-        // prompt becomes the Suno style description; lyrics become the song body.
-        console.info(`[SoundWorker] ${musicMode} + lyrics → Suno V5.5 (DiffRhythm ignores style_prompt)`);
-        externalUrl = await generateMusicSuno(prompt, {
-          instrumental: false,
-          lyrics,
-          model: 'V5_5',
-        });
       } else {
-        // ── Short/Long WITHOUT lyrics → DiffRhythm (background / instrumental) ─
-        const isDiffFull = musicMode === 'long';
-        const route = isDiffFull ? { model: 'diffrhythm' as const, diffRhythmMode: 'full' as const, reason: 'long/no-lyrics', costUsd: 0.02 } : routeAudio(prompt);
-        console.info(`[SoundWorker] ${musicMode}/no-lyrics → ${route.reason} | $${route.costUsd}`);
-        if (route.model === 'udio') {
-          externalUrl = await generateMusicUdio(prompt);
-        } else {
-          externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base');
+        // ── Все остальные режимы (short / long / suno) → Suno V5.5 ─────────────
+        // DiffRhythm не следует style_prompt — используем только как аварийный фолбэк.
+        const sunoStyleArg  = musicMode === 'suno' ? sunoStyle  : undefined;
+        const sunoTitleArg  = musicMode === 'suno' ? sunoTitle  : undefined;
+        const sunoInstrArg  = musicMode === 'suno' ? (sunoInstrumental ?? false) : false;
+        const diffMode      = musicMode === 'long' ? 'full' : 'base';
+
+        console.info(`[SoundWorker] ${musicMode} → Suno V5.5 | style="${sunoStyleArg ?? prompt.slice(0, 60)}" instrumental=${sunoInstrArg}`);
+
+        try {
+          externalUrl = await generateMusicSuno(prompt, {
+            style: sunoStyleArg,
+            title: sunoTitleArg,
+            instrumental: sunoInstrArg,
+            lyrics,
+            model: 'V5_5',
+          });
+        } catch (sunoErr: any) {
+          // Fallback to DiffRhythm only if Suno fails and there are no lyrics
+          // (DiffRhythm can't follow style but works for simple background music)
+          if (lyrics?.trim()) throw sunoErr; // lyrics require Suno — propagate error
+          console.warn(`[SoundWorker] Suno failed, falling back to DiffRhythm: ${sunoErr.message}`);
+          externalUrl = await generateMusicDiffRhythm(prompt, diffMode);
         }
       }
 

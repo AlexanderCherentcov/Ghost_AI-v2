@@ -97,7 +97,7 @@ export function startSoundWorker() {
           style: sunoStyle,
           title: sunoTitle,
           instrumental: sunoInstrumental ?? true,
-          model: 'V4_5',
+          model: 'V5_5',
         });
       } else if (musicMode === 'quality') {
         console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);

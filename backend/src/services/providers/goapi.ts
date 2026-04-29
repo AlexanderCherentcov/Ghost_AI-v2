@@ -189,14 +189,40 @@ export type DiffRhythmMode = 'base' | 'full';
  * Auto-assign timestamps to plain lyrics lines.
  * DiffRhythm requires format: [MM:SS.ms] line
  * We spread lines evenly starting at 10s.
+ *
+ * Filters out:
+ *  - Section headers: [Chorus], [Verse 1], etc.
+ *  - Instrumental directions: (flute solo), (string swell), etc.
  */
 function formatLyricsWithTimestamps(lyrics: string, mode: DiffRhythmMode): string {
   const totalSeconds = mode === 'full' ? 270 : 85; // leave headroom
   const startAt = 10;
+
+  // If lyrics already have timestamps like [00:10.00] — pass through as-is,
+  // only stripping pure instrumental-direction lines in parentheses.
+  const hasTimestamps = /^\[\d{2}:\d{2}\.\d{2}\]/m.test(lyrics);
+  if (hasTimestamps) {
+    return lyrics
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => {
+        if (!l) return false;
+        // Strip lines that are purely instrumental directions (e.g. [00:10.00] (Ney flute solo))
+        const withoutTs = l.replace(/^\[\d{2}:\d{2}\.\d{2}\]\s*/, '');
+        return !/^\(.*\)\s*$/.test(withoutTs);
+      })
+      .join('\n');
+  }
+
   const lines = lyrics
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !l.startsWith('[') /* skip section headers like [Chorus] */);
+    .filter((l) => {
+      if (!l) return false;
+      if (l.startsWith('[')) return false; // section headers like [Chorus]
+      if (/^\(.*\)\s*$/.test(l)) return false; // pure instrumental directions like (flute solo)
+      return true;
+    });
 
   if (lines.length === 0) return '';
 

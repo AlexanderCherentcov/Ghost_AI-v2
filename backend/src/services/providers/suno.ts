@@ -131,19 +131,13 @@ export async function generateMusicSuno(
       for (const k of keys) { if (k !== 'param') filtered[k] = d[k]; }
       console.info(`[Suno] SUCCESS data (no param): ${JSON.stringify(filtered).slice(0, 2000)}`);
 
-      // Try multiple possible response paths from sunoapi.org
-      const songs: any[] =
-        d?.response?.data ??        // documented path
-        d?.response?.clips ??       // alternative
-        d?.clips ??                 // flat
-        d?.data ??                  // flat alt
-        [];
+      // Actual sunoapi.org structure: data.response.sunoData[].audioUrl
+      const songs: any[] = d?.response?.sunoData ?? d?.response?.data ?? d?.response?.clips ?? [];
 
       const audioUrl: string | undefined =
-        songs[0]?.audio_url ??
-        songs[0]?.audioUrl ??
-        songs[0]?.audio ??
-        d?.response?.audio_url ??
+        songs[0]?.sourceAudioUrl ??   // direct Suno CDN URL (preferred)
+        songs[0]?.audioUrl ??         // proxy URL
+        songs[0]?.audio_url ??        // legacy snake_case
         d?.audio_url;
 
       if (!audioUrl) {

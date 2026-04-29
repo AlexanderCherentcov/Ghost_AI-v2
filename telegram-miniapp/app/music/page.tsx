@@ -6,12 +6,13 @@ import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';
 import { apiRequest } from '@/lib/auth';
 
-type MusicMode = 'short' | 'long' | 'quality';
+type MusicMode = 'short' | 'long' | 'quality' | 'suno';
 
 const MUSIC_MODES: { key: MusicMode; label: string }[] = [
   { key: 'short',   label: 'Короткий' },
   { key: 'long',    label: 'Длинный'  },
   { key: 'quality', label: 'Студия'   },
+  { key: 'suno',    label: 'Suno'     },
 ];
 
 const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
@@ -181,6 +182,9 @@ function MusicPageInner() {
   const [prompt, setPrompt] = useState('');
   const [musicMode, setMusicMode] = useState<MusicMode>('short');
   const [studioDuration, setStudioDuration] = useState(30);
+  const [sunoStyle, setSunoStyle] = useState('');
+  const [sunoTitle, setSunoTitle] = useState('');
+  const [sunoInstrumental, setSunoInstrumental] = useState(true);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [generating, setGenerating] = useState(false);
   const mountedRef = useRef(true);
@@ -208,6 +212,11 @@ function MusicPageInner() {
           prompt: text,
           musicMode,
           ...(musicMode === 'quality' ? { musicDuration: studioDuration } : {}),
+          ...(musicMode === 'suno' ? {
+            sunoStyle: sunoStyle.trim() || undefined,
+            sunoTitle: sunoTitle.trim() || undefined,
+            sunoInstrumental,
+          } : {}),
         }),
       });
 
@@ -242,7 +251,7 @@ function MusicPageInner() {
     } finally {
       if (mountedRef.current) setGenerating(false);
     }
-  }, [prompt, generating]);
+  }, [prompt, generating, musicMode, studioDuration, sunoStyle, sunoTitle, sunoInstrumental]);
 
   return (
     <div className="flex flex-col min-h-svh" style={{ background: 'var(--bg-void)' }}>
@@ -332,6 +341,44 @@ function MusicPageInner() {
                 {d}с
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Suno options */}
+        {musicMode === 'suno' && (
+          <div className="flex flex-col gap-2 mt-2">
+            <input
+              value={sunoStyle}
+              onChange={(e) => setSunoStyle(e.target.value)}
+              placeholder="Стиль (напр. Jazz, Electronic)"
+              maxLength={200}
+              className="w-full rounded-xl px-3 py-2 text-[13px] outline-none bg-transparent placeholder:opacity-30"
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+            />
+            <input
+              value={sunoTitle}
+              onChange={(e) => setSunoTitle(e.target.value)}
+              placeholder="Название трека (необязательно)"
+              maxLength={100}
+              className="w-full rounded-xl px-3 py-2 text-[13px] outline-none bg-transparent placeholder:opacity-30"
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+            />
+            <button
+              onClick={() => setSunoInstrumental((v) => !v)}
+              className="flex items-center gap-2 text-[12px] transition-opacity"
+              style={{ color: 'rgba(255,255,255,0.55)' }}
+            >
+              <div
+                className="w-9 h-5 rounded-full flex items-center transition-all"
+                style={{ background: sunoInstrumental ? 'var(--accent)' : 'rgba(255,255,255,0.12)', padding: '2px' }}
+              >
+                <div
+                  className="w-4 h-4 rounded-full bg-white transition-transform"
+                  style={{ transform: sunoInstrumental ? 'translateX(16px)' : 'translateX(0)' }}
+                />
+              </div>
+              Инструментал (без вокала)
+            </button>
           </div>
         )}
 

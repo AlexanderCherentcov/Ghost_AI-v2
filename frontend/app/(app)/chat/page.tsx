@@ -75,7 +75,7 @@ export default function ChatPage() {
     useChatStore.getState().setMessages([]);
   }, []);
 
-  async function handleSend(prompt: string, file?: File, _videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number) {
+  async function handleSend(prompt: string, file?: File, _videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean) {
     const chat = await api.chats.create({ mode: 'chat' });
     addChat(chat);
 
@@ -91,6 +91,9 @@ export default function ChatPage() {
       sessionStorage.setItem('initialMusicPrompt', prompt);
       if (musicMode) sessionStorage.setItem('initialMusicMode', musicMode);
       if (musicDuration) sessionStorage.setItem('initialMusicDuration', String(musicDuration));
+      if (sunoStyle) sessionStorage.setItem('initialSunoStyle', sunoStyle);
+      if (sunoTitle) sessionStorage.setItem('initialSunoTitle', sunoTitle);
+      if (sunoInstrumental !== undefined) sessionStorage.setItem('initialSunoInstrumental', String(sunoInstrumental));
       router.push(`/chat/${chat.id}`);
       return;
     }

@@ -12,12 +12,10 @@ datasource db {
 
 enum Plan {
   FREE
-  TRIAL
   BASIC
-  STANDARD
   PRO
+  VIP
   ULTRA
-  TEAM
 }
 
 enum Billing {
@@ -48,25 +46,22 @@ model User {
   planExpiresAt DateTime?
   billing       Billing   @default(MONTHLY)
 
+  // ── Caspers balance ───────────────────────────────────────────────────────
+  caspers_balance  Int      @default(0)   // current spendable balance
+  caspers_monthly  Int      @default(0)   // amount granted per billing period
+
   // ── Daily counters (reset at day_start + 1 day) ───────────────────────────
-  std_messages_today      Int      @default(0)
-  pro_messages_today      Int      @default(0)
-  images_today            Int      @default(0)
-  videos_today            Int      @default(0)
-  music_today             Int      @default(0)
-  files_used              Int      @default(0)   // monthly
+  std_messages_today  Int      @default(0)
+  pro_messages_today  Int      @default(0)
 
-  // ── Daily / monthly limits (copied from PLANS on subscribe) ───────────────
-  // -1 = unlimited
-  std_messages_daily_limit Int     @default(10)
-  pro_messages_daily_limit Int     @default(0)
-  images_daily_limit       Int     @default(3)
-  videos_daily_limit       Int     @default(0)
-  music_daily_limit        Int     @default(0)
-  files_monthly_limit      Int     @default(0)
+  // ── FREE tier weekly counters (reset at week_start + 7 days) ─────────────
+  images_this_week  Int      @default(0)
+  music_this_week   Int      @default(0)
+  videos_this_week  Int      @default(0)
 
-  // ── Billing period ────────────────────────────────────────────────────────
+  // ── Timestamps for period resets ─────────────────────────────────────────
   day_start    DateTime  @default(now())
+  week_start   DateTime  @default(now())
   period_start DateTime  @default(now())
 
   // ── Onboarding ────────────────────────────────────────────────────────────
@@ -75,10 +70,11 @@ model User {
   onboardingDone Boolean  @default(false)
 
   // ── Relations ─────────────────────────────────────────────────────────────
-  messages      Message[]
-  chats         Chat[]
-  payments      Payment[]
-  imageRequests UserImageRequest[]
+  messages          Message[]
+  chats             Chat[]
+  payments          Payment[]
+  imageRequests     UserImageRequest[]
+  casperTransactions CasperTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,8 +125,21 @@ model Payment {
   amount        Float
   status        PaymentStatus @default(PENDING)
   plan          Plan?
+  paymentType   String        @default("subscription") // "subscription" | "caspers"
+  casperAmount  Int?          // for casper top-up purchases
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model CasperTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Int      // positive = credit, negative = debit
+  reason    String   // 'plan_grant' | 'topup' | 'chat_pro' | 'image' | 'video_std_4s' etc.
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
 }

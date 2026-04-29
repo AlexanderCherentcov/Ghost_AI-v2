@@ -195,7 +195,7 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
 const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
 interface InputBarProps {
-  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, styleAudio?: string) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -229,7 +229,6 @@ export function InputBar({
   const [sunoInstrumental, setSunoInstrumental] = useState(false);
   const [lyrics, setLyrics] = useState('');
   const [showLyrics, setShowLyrics] = useState(false);
-  const [styleAudio, setStyleAudio] = useState('');
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',
@@ -254,8 +253,7 @@ export function InputBar({
     const sTitle = (chatMode === 'music' && musicMode === 'suno') ? sunoTitle.trim() || undefined : undefined;
     const sInstr = (chatMode === 'music' && musicMode === 'suno') ? sunoInstrumental : undefined;
     const lyr = (chatMode === 'music' && (musicMode === 'short' || musicMode === 'long')) ? lyrics.trim() || undefined : undefined;
-    const sAudio = (chatMode === 'music' && (musicMode === 'short' || musicMode === 'long')) ? styleAudio.trim() || undefined : undefined;
-    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur, sStyle, sTitle, sInstr, lyr, sAudio);
+    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur, sStyle, sTitle, sInstr, lyr);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -352,18 +350,6 @@ export function InputBar({
                 >
                   🎤 Текст песни
                 </button>
-                <input
-                  value={styleAudio}
-                  onChange={(e) => setStyleAudio(e.target.value)}
-                  placeholder="URL эталонного аудио (необяз.)"
-                  className="px-2.5 py-1 rounded-lg text-[11px] outline-none border"
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'var(--text-primary)',
-                    borderColor: styleAudio.trim() ? 'rgba(123,92,240,0.5)' : 'var(--border)',
-                    width: '200px',
-                  }}
-                />
               </>
             )}
 

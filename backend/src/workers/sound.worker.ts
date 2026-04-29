@@ -72,6 +72,7 @@ interface SoundJob {
   musicMode?: 'short' | 'long' | 'quality' | 'suno';
   musicDuration?: number;
   chatId?: string | null;
+  lyrics?: string;
   sunoStyle?: string;
   sunoTitle?: string;
   sunoInstrumental?: boolean;
@@ -81,7 +82,7 @@ export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, lyrics, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -103,15 +104,15 @@ export function startSoundWorker() {
         console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);
         externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
       } else if (musicMode === 'long') {
-        console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02`);
-        externalUrl = await generateMusicDiffRhythm(prompt, 'full');
+        console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics}`);
+        externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics);
       } else {
         const route = routeAudio(prompt);
-        console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd}`);
+        console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd} | lyrics=${!!lyrics}`);
         if (route.model === 'udio') {
           externalUrl = await generateMusicUdio(prompt);
         } else {
-          externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base');
+          externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics);
         }
       }
 

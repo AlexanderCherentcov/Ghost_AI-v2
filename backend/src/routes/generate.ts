@@ -27,6 +27,7 @@ const generateSchema = z.object({
   // Music-specific
   musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
   musicDuration: z.number().int().min(15).max(60).optional(),
+  lyrics: z.string().max(10000).optional(),
   // Suno-specific options
   sunoStyle: z.string().max(200).optional(),
   sunoTitle: z.string().max(100).optional(),
@@ -128,7 +129,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, chatId, musicMode, musicDuration, sunoStyle, sunoTitle, sunoInstrumental } = generateSchema.parse(request.body);
+      const { prompt, chatId, musicMode, musicDuration, lyrics, sunoStyle, sunoTitle, sunoInstrumental } = generateSchema.parse(request.body);
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -177,6 +178,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         musicMode: musicMode ?? 'short',
         musicDuration: musicDuration,
         chatId: chatId ?? null,
+        lyrics: lyrics,
         sunoStyle: sunoStyle,
         sunoTitle: sunoTitle,
         sunoInstrumental: sunoInstrumental,

@@ -146,7 +146,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    sound: (data: { prompt: string; chatId?: string; musicMode?: 'short' | 'long' | 'quality' | 'suno'; musicDuration?: number; lyrics?: string; sunoStyle?: string; sunoTitle?: string; sunoInstrumental?: boolean }) =>
+    sound: (data: { prompt: string; chatId?: string; musicMode?: 'short' | 'long' | 'quality' | 'suno'; musicDuration?: number; lyrics?: string; styleAudio?: string; sunoStyle?: string; sunoTitle?: string; sunoInstrumental?: boolean }) =>
       request<{ jobId: string }>('/generate/sound', {
         method: 'POST',
         body: JSON.stringify(data),

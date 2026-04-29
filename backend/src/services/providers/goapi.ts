@@ -242,6 +242,7 @@ export async function generateMusicDiffRhythm(
   prompt: string,
   mode: DiffRhythmMode = 'base',
   lyrics?: string,
+  styleAudio?: string,
 ): Promise<string> {
   const taskType = mode === 'full' ? 'txt2audio-full' : 'txt2audio-base';
 
@@ -253,6 +254,7 @@ export async function generateMusicDiffRhythm(
   const taskId = await createTask('Qubico/diffrhythm', taskType, {
     lyrics: formattedLyrics,
     style_prompt: prompt,
+    ...(styleAudio?.trim() ? { style_audio: styleAudio.trim() } : {}),
   });
   const data = await pollTask(taskId, 180, 5_000);
   const output = data?.data?.output ?? data?.output;

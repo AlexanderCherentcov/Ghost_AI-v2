@@ -185,13 +185,47 @@ export async function generateVideoHunyuan(
 
 export type DiffRhythmMode = 'base' | 'full';
 
+/**
+ * Auto-assign timestamps to plain lyrics lines.
+ * DiffRhythm requires format: [MM:SS.ms] line
+ * We spread lines evenly starting at 10s.
+ */
+function formatLyricsWithTimestamps(lyrics: string, mode: DiffRhythmMode): string {
+  const totalSeconds = mode === 'full' ? 270 : 85; // leave headroom
+  const startAt = 10;
+  const lines = lyrics
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('[') /* skip section headers like [Chorus] */);
+
+  if (lines.length === 0) return '';
+
+  const step = Math.max(3, Math.floor((totalSeconds - startAt) / lines.length));
+
+  return lines
+    .map((line, i) => {
+      const t = startAt + i * step;
+      const mm = String(Math.floor(t / 60)).padStart(2, '0');
+      const ss = String(t % 60).padStart(2, '0');
+      return `[${mm}:${ss}.00] ${line}`;
+    })
+    .join('\n');
+}
+
 export async function generateMusicDiffRhythm(
   prompt: string,
   mode: DiffRhythmMode = 'base',
+  lyrics?: string,
 ): Promise<string> {
   const taskType = mode === 'full' ? 'txt2audio-full' : 'txt2audio-base';
+
+  // Format lyrics with timestamps if provided
+  const formattedLyrics = lyrics?.trim()
+    ? formatLyricsWithTimestamps(lyrics.trim(), mode)
+    : '';
+
   const taskId = await createTask('Qubico/diffrhythm', taskType, {
-    lyrics: '',
+    lyrics: formattedLyrics,
     style_prompt: prompt,
   });
   const data = await pollTask(taskId, 180, 5_000);

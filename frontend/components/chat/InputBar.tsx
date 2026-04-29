@@ -195,7 +195,7 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
 const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
 interface InputBarProps {
-  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -227,6 +227,8 @@ export function InputBar({
   const [sunoStyle, setSunoStyle] = useState('');
   const [sunoTitle, setSunoTitle] = useState('');
   const [sunoInstrumental, setSunoInstrumental] = useState(false);
+  const [lyrics, setLyrics] = useState('');
+  const [showLyrics, setShowLyrics] = useState(false);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',
@@ -250,7 +252,8 @@ export function InputBar({
     const sStyle = (chatMode === 'music' && musicMode === 'suno') ? sunoStyle.trim() || undefined : undefined;
     const sTitle = (chatMode === 'music' && musicMode === 'suno') ? sunoTitle.trim() || undefined : undefined;
     const sInstr = (chatMode === 'music' && musicMode === 'suno') ? sunoInstrumental : undefined;
-    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur, sStyle, sTitle, sInstr);
+    const lyr = (chatMode === 'music' && (musicMode === 'short' || musicMode === 'long')) ? lyrics.trim() || undefined : undefined;
+    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur, sStyle, sTitle, sInstr, lyr);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -331,6 +334,25 @@ export function InputBar({
               </>
             )}
 
+            {/* Lyrics toggle — for short/long (DiffRhythm) modes */}
+            {(musicMode === 'short' || musicMode === 'long') && (
+              <>
+                <span className="text-[rgba(255,255,255,0.15)] text-[11px]">|</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLyrics((v) => !v)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                    showLyrics
+                      ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                      : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                  )}
+                >
+                  🎤 Текст песни
+                </button>
+              </>
+            )}
+
             {/* Suno options */}
             {musicMode === 'suno' && (
               <>
@@ -375,6 +397,32 @@ export function InputBar({
                 </button>
               </>
             )}
+          </motion.div>
+        )}
+
+        {/* Lyrics textarea — for DiffRhythm short/long modes */}
+        {chatMode === 'music' && (musicMode === 'short' || musicMode === 'long') && showLyrics && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-2"
+          >
+            <textarea
+              value={lyrics}
+              onChange={(e) => setLyrics(e.target.value)}
+              placeholder={'Текст песни (каждая строка — отдельная строфа)\n\nПример:\nWalking through the rain\nFeeling all the pain\nLooking for the light'}
+              rows={5}
+              maxLength={10000}
+              className="w-full rounded-xl px-3 py-2 text-[13px] outline-none resize-none placeholder:opacity-30 leading-relaxed"
+              style={{
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+              }}
+            />
+            <p className="text-[10px] mt-1 px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              Временны́е метки расставятся автоматически. Секции [Chorus], [Verse] и т.д. будут пропущены.
+            </p>
           </motion.div>
         )}
 

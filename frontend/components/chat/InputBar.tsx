@@ -183,7 +183,7 @@ function ModelPill({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export type ChatMode = 'chat' | 'images' | 'video' | 'music';
-export type MusicMode = 'short' | 'long' | 'quality';
+export type MusicMode = 'short' | 'long' | 'quality' | 'suno';
 
 const CHAT_MODES: { key: ChatMode; label: string }[] = [
   { key: 'chat',   label: 'Чат' },
@@ -195,7 +195,7 @@ const CHAT_MODES: { key: ChatMode; label: string }[] = [
 const MUSIC_DURATIONS = [15, 30, 45, 60] as const;
 
 interface InputBarProps {
-  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number) => void;
+  onSend: (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -212,6 +212,7 @@ const MUSIC_MODES: { key: MusicMode; label: string }[] = [
   { key: 'short',   label: 'Короткий' },
   { key: 'long',    label: 'Длинный'  },
   { key: 'quality', label: 'Студия'   },
+  { key: 'suno',    label: 'Suno'     },
 ];
 
 export function InputBar({
@@ -223,6 +224,9 @@ export function InputBar({
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [musicMode, setMusicMode] = useState<MusicMode>('short');
   const [musicDuration, setMusicDuration] = useState(30);
+  const [sunoStyle, setSunoStyle] = useState('');
+  const [sunoTitle, setSunoTitle] = useState('');
+  const [sunoInstrumental, setSunoInstrumental] = useState(true);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     duration: 5,
     aspectRatio: '16:9',
@@ -243,7 +247,10 @@ export function InputBar({
     const opts = chatMode === 'video' ? videoOptions : undefined;
     const mMode = chatMode === 'music' ? musicMode : undefined;
     const mDur = (chatMode === 'music' && musicMode === 'quality') ? musicDuration : undefined;
-    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur);
+    const sStyle = (chatMode === 'music' && musicMode === 'suno') ? sunoStyle.trim() || undefined : undefined;
+    const sTitle = (chatMode === 'music' && musicMode === 'suno') ? sunoTitle.trim() || undefined : undefined;
+    const sInstr = (chatMode === 'music' && musicMode === 'suno') ? sunoInstrumental : undefined;
+    onSend(trimmed, attachedFile ?? undefined, opts, mMode, mDur, sStyle, sTitle, sInstr);
     setValue('');
     setAttachedFile(null);
     if (textareaRef.current) {
@@ -321,6 +328,51 @@ export function InputBar({
                     {d}с
                   </button>
                 ))}
+              </>
+            )}
+
+            {/* Suno options */}
+            {musicMode === 'suno' && (
+              <>
+                <span className="text-[rgba(255,255,255,0.15)] text-[11px]">|</span>
+                <input
+                  value={sunoStyle}
+                  onChange={(e) => setSunoStyle(e.target.value)}
+                  placeholder="Стиль (Jazz, Electronic...)"
+                  maxLength={200}
+                  className="px-2.5 py-1 rounded-lg text-[11px] outline-none border"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'var(--text-primary)',
+                    borderColor: 'var(--border)',
+                    width: '160px',
+                  }}
+                />
+                <input
+                  value={sunoTitle}
+                  onChange={(e) => setSunoTitle(e.target.value)}
+                  placeholder="Название (необяз.)"
+                  maxLength={100}
+                  className="px-2.5 py-1 rounded-lg text-[11px] outline-none border"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'var(--text-primary)',
+                    borderColor: 'var(--border)',
+                    width: '140px',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSunoInstrumental((v) => !v)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border',
+                    sunoInstrumental
+                      ? 'bg-[rgba(123,92,240,0.2)] text-accent border-[rgba(123,92,240,0.4)]'
+                      : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
+                  )}
+                >
+                  {sunoInstrumental ? '🎹' : '🎤'} {sunoInstrumental ? 'Инструментал' : 'Вокал'}
+                </button>
               </>
             )}
           </motion.div>

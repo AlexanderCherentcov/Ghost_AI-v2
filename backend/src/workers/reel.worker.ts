@@ -6,8 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoKling, generateVideoHunyuan, generateMMAudio, type KlingVideoOptions } from '../services/providers/goapi.js';
-import { routeVideo } from '../services/video-router.js';
+import { generateVideoVeo3, type VeoModel, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
@@ -37,13 +36,12 @@ interface ReelJob {
   userId: string;
   prompt: string;
   chatId: string | null;
-  duration?: 5 | 10;
-  aspectRatio?: '16:9' | '9:16' | '1:1';
+  videoModel?: VeoModel;
+  duration?: VeoDuration;
+  aspectRatio?: '16:9' | '9:16';
   enableAudio?: boolean;
-  imageUrl?: string;
-  cameraPreset?: string;
+  resolution?: VeoResolution;
   negativePrompt?: string;
-  cfgScale?: number;
 }
 
 export function startReelWorker() {
@@ -52,9 +50,12 @@ export function startReelWorker() {
     async (job: Job<ReelJob>) => {
       const {
         jobId, userId, prompt, chatId,
-        duration = 5, aspectRatio = '16:9',
-        enableAudio = false, imageUrl,
-        cameraPreset, negativePrompt, cfgScale,
+        videoModel = 'standard',
+        duration = '8s',
+        aspectRatio = '16:9',
+        enableAudio = false,
+        resolution = '720p',
+        negativePrompt,
       } = job.data;
 
       await prisma.generateJob.update({
@@ -62,64 +63,24 @@ export function startReelWorker() {
         data: { status: 'processing' },
       });
 
-      // ── Роутер выбирает модель автоматически ──────────────────────────────────
-      const route = routeVideo(prompt, !!imageUrl, duration, aspectRatio);
-      console.info(`[ReelWorker] ${route.reason} | cost $${route.costUsd}`);
+      console.info(`[ReelWorker] Veo3 ${videoModel} | ${duration} | ${resolution} | audio=${enableAudio}`);
 
-      // ── Авто-негативный промт: блокируем людей если они не нужны ───────────────
-      const HUMAN_KEYWORDS = [
-        'человек', 'люди', 'девушка', 'парень', 'мужчина', 'женщина', 'ребёнок', 'дети',
-        'лицо', 'портрет', 'персонаж',
-        'person', 'people', 'man', 'woman', 'girl', 'boy', 'child', 'face', 'portrait', 'character',
-        'human', 'figure', 'silhouette',
-      ];
-      const NO_HUMANS_NEGATIVE = 'people, person, human, man, woman, face, body, figure';
-      const promptLower = prompt.toLowerCase();
-      const userWantsHumans = HUMAN_KEYWORDS.some((kw) => promptLower.includes(kw));
-      const effectiveNegative = userWantsHumans
-        ? (negativePrompt ?? '')
-        : [negativePrompt, NO_HUMANS_NEGATIVE].filter(Boolean).join(', ');
+      const externalUrl = await generateVideoVeo3(prompt, {
+        model: videoModel,
+        duration,
+        aspectRatio,
+        generateAudio: enableAudio,
+        resolution,
+        negativePrompt: negativePrompt || undefined,
+      });
 
-      let externalUrl: string;
-
-      if (route.model === 'kling_std') {
-        // Kling V-2.5 — для людей, лиц, сложных сцен, 10s
-        const opts: KlingVideoOptions = {
-          duration, aspectRatio, enableAudio, imageUrl,
-          cameraPreset, negativePrompt: effectiveNegative || undefined, cfgScale,
-        };
-        externalUrl = await generateVideoKling(prompt, opts);
-      } else {
-        // Hunyuan — fast / standard / img2video
-        externalUrl = await generateVideoHunyuan(
-          prompt,
-          route.hunyuanMode ?? 'fast',
-          imageUrl,
-          aspectRatio,
-          effectiveNegative || undefined,
-        );
-      }
-
-      // ── MMAudio: добавляем атмосферный звук если не запрошен Kling Audio ────────
-      // Только для Hunyuan-видео (Kling с enableAudio=true уже имеет звук)
-      if (!enableAudio && route.model !== 'kling_std') {
-        try {
-          const videoWithAudio = await generateMMAudio(externalUrl, duration);
-          externalUrl = videoWithAudio;
-          console.info(`[ReelWorker] MMAudio added ambient sound to video`);
-        } catch (e: any) {
-          // MMAudio необязателен — продолжаем без звука
-          console.warn(`[ReelWorker] MMAudio failed (non-fatal): ${e.message}`);
-        }
-      }
-
-      // ── Сразу помечаем done с внешним URL — пользователь видит результат ──────
+      // ── Сразу помечаем done с внешним URL ──────────────────────────────────
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'done', mediaUrl: externalUrl },
       });
 
-      // ── Сохраняем сообщение в историю чата ───────────────────────────────────
+      // ── Сохраняем сообщение в историю чата ─────────────────────────────────
       let messageId: string | undefined;
       if (chatId) {
         const msg = await prisma.message.create({
@@ -135,12 +96,10 @@ export function startReelWorker() {
         messageId = msg?.id;
       }
 
-      // ── Кешируем только text-to-video без кастомных настроек ─────────────────
-      if (!imageUrl) {
-        setMediaCached('reel', prompt, externalUrl).catch(() => {});
-      }
+      // ── Кешируем text-to-video ──────────────────────────────────────────────
+      setMediaCached('reel', prompt, externalUrl).catch(() => {});
 
-      // ── Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!) ─────────
+      // ── Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!) ───────
       saveVideoToDisk(externalUrl).then(async (filename) => {
         const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
         const localUrl = `${API_BASE}/videos/${filename}`;
@@ -157,10 +116,10 @@ export function startReelWorker() {
           }).catch(() => {});
         }
 
-        if (!imageUrl) setMediaCached('reel', prompt, localUrl).catch(() => {});
+        setMediaCached('reel', prompt, localUrl).catch(() => {});
         console.info(`[ReelWorker] Video saved to disk: ${filename}`);
       }).catch((err: any) => {
-        console.warn('[ReelWorker] Background disk save failed, keeping external URL:', err.message);
+        console.warn('[ReelWorker] Background disk save failed:', err.message);
       });
 
       return { mediaUrl: externalUrl };
@@ -185,6 +144,6 @@ export function startReelWorker() {
     console.info(`[ReelWorker] Job ${job.id} completed`);
   });
 
-  console.info('[ReelWorker] Started (GoAPI Smart Router: Hunyuan Fast/STD/img2video + Kling V2.5)');
+  console.info('[ReelWorker] Started (Veo3 Standard/Pro)');
   return worker;
 }

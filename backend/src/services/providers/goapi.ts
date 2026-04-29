@@ -179,6 +179,49 @@ export async function generateVideoHunyuan(
   return extractVideoUrl(data);
 }
 
+// ─── Veo3 video generation ────────────────────────────────────────────────────
+
+export type VeoModel = 'standard' | 'pro';
+export type VeoDuration = '4s' | '8s';
+export type VeoResolution = '720p' | '1080p';
+
+export interface Veo3Options {
+  model?: VeoModel;
+  duration?: VeoDuration;
+  resolution?: VeoResolution;
+  aspectRatio?: '16:9' | '9:16';
+  generateAudio?: boolean;
+  negativePrompt?: string;
+}
+
+export async function generateVideoVeo3(prompt: string, options: Veo3Options = {}): Promise<string> {
+  const {
+    model = 'standard',
+    duration = '8s',
+    resolution = '720p',
+    aspectRatio = '16:9',
+    generateAudio = false,
+    negativePrompt,
+  } = options;
+
+  const taskType = model === 'pro' ? 'veo3-video' : 'veo3-video-fast';
+
+  const input: Record<string, unknown> = {
+    prompt,
+    aspect_ratio: aspectRatio,
+    duration,
+    resolution,
+    generate_audio: generateAudio,
+    ...(negativePrompt?.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
+  };
+
+  console.info(`[Veo3] ${taskType} | ${duration} | ${resolution} | audio=${generateAudio}`);
+
+  const taskId = await createTask('veo3', taskType, input);
+  const data = await pollTask(taskId, 180, 5_000);
+  return extractVideoUrl(data);
+}
+
 // ─── DiffRhythm music generation ──────────────────────────────────────────────
 // txt2audio-base: $0.02 — ~95 сек
 // txt2audio-full: $0.02 — ~4:45

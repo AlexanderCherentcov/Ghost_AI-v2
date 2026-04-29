@@ -151,7 +151,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; chatId?: string; videoDuration?: 5 | 10; videoAspectRatio?: '16:9' | '9:16' | '1:1'; videoEnableAudio?: boolean; videoImageUrl?: string; cameraPreset?: string; negativePrompt?: string; cfgScale?: number }) =>
+    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; negativePrompt?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
         method: 'POST',
         body: JSON.stringify(data),

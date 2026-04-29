@@ -402,7 +402,7 @@ export default function ChatConversationPage() {
   }, [accessToken, user, messagesReady]);
 
   // ── Video generation ─────────────────────────────────────────────────────────
-  const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions, imageUrl?: string) => {
+  const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions) => {
     if (!accessToken || !messagesReady) return;
     if (generatingVideoRef.current) return;
     generatingVideoRef.current = true;
@@ -415,7 +415,7 @@ export default function ChatConversationPage() {
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: imageUrl ?? null,
+      mediaUrl: null,
       createdAt: new Date().toISOString(),
     });
 
@@ -435,13 +435,12 @@ export default function ChatConversationPage() {
       const { jobId } = await api.generate.reel({
         prompt,
         chatId: id,
+        videoModel: options?.videoModel,
         videoDuration: options?.duration,
         videoAspectRatio: options?.aspectRatio,
         videoEnableAudio: options?.enableAudio,
-        videoImageUrl: imageUrl,
-        cameraPreset: options?.cameraPreset,
+        videoResolution: options?.resolution,
         negativePrompt: options?.negativePrompt || undefined,
-        cfgScale: options?.cfgScale,
       });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));
 
@@ -582,17 +581,7 @@ export default function ChatConversationPage() {
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
-      if (!prompt.trim() && !file) return;
-      // If image attached, use as source frame (image-to-video)
-      if (file && getFileCategory(file) === 'image') {
-        try {
-          const imgUrl = await resizeImageToBase64(file);
-          return handleGenerateVideo(prompt || 'animate this image', videoOptions, imgUrl);
-        } catch {
-          showToast('Не удалось обработать изображение', 'error');
-          return;
-        }
-      }
+      if (!prompt.trim()) return;
       return handleGenerateVideo(prompt, videoOptions);
     }
     if (chatMode === 'music') {

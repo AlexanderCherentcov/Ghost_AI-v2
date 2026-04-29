@@ -17,13 +17,12 @@ const generateSchema = z.object({
   size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional(),
   sourceImageUrl: z.string().url().optional(), // for image editing mode
   // Video-specific options
-  videoDuration: z.union([z.literal(5), z.literal(10)]).optional(),
-  videoAspectRatio: z.enum(['16:9', '9:16', '1:1']).optional(),
+  videoModel: z.enum(['standard', 'pro']).optional(),
+  videoDuration: z.enum(['4s', '8s']).optional(),
+  videoAspectRatio: z.enum(['16:9', '9:16']).optional(),
   videoEnableAudio: z.boolean().optional(),
-  videoImageUrl: z.string().optional(), // image-to-video source frame (base64 or URL)
-  cameraPreset: z.string().optional(),
+  videoResolution: z.enum(['720p', '1080p']).optional(),
   negativePrompt: z.string().max(2500).optional(),
-  cfgScale: z.number().min(0).max(1).optional(),
   // Music-specific
   musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
   musicDuration: z.number().int().min(15).max(60).optional(),
@@ -242,10 +241,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoImageUrl, cameraPreset, negativePrompt, cfgScale } = generateSchema.parse(request.body);
+      const { prompt, chatId, videoModel, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, negativePrompt } = generateSchema.parse(request.body);
 
-      const vDuration = videoDuration ?? 5;
-      const videoCount = vDuration === 10 ? 2 : 1;
+      const videoCount = 1;
 
       // Reset counters if period ended
       await checkResets(userId);
@@ -270,32 +268,21 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Check media cache only for text-to-video with default settings
-      if (!videoImageUrl && vDuration === 5) {
-        const mediaCached = await getMediaCached('reel', prompt);
-        if (mediaCached.hit) {
-          await checkAndDeduct(userId, 'video_generate', videoCount);
-          const job = await prisma.generateJob.create({
-            data: { userId, mode: 'reel', prompt, status: 'processing' },
-          });
-          // Simulate generation (10–18 s) so UI shows loading animation;
-          // also persist the assistant message so it survives page refresh.
-          completeCachedJobAfterDelay(
-            job.id, mediaCached.url, 10_000 + Math.random() * 8_000,
-            chatId ? { chatId, userId, prompt, mode: 'reel' } : undefined,
-          );
-          return reply.code(202).send({ jobId: job.id });
-        }
+      // Cache check for text-to-video
+      const mediaCached = await getMediaCached('reel', prompt);
+      if (mediaCached.hit) {
+        await checkAndDeduct(userId, 'video_generate', videoCount);
+        const job = await prisma.generateJob.create({
+          data: { userId, mode: 'reel', prompt, status: 'processing' },
+        });
+        completeCachedJobAfterDelay(
+          job.id, mediaCached.url, 10_000 + Math.random() * 8_000,
+          chatId ? { chatId, userId, prompt, mode: 'reel' } : undefined,
+        );
+        return reply.code(202).send({ jobId: job.id });
       }
 
       await checkAndDeduct(userId, 'video_generate', videoCount);
-
-      // Save user message to chat history
-      if (chatId) {
-        await prisma.message.create({
-          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'reel', tokensCost: 0 },
-        }).catch((e) => console.error('[generate/reel] Failed to save user message:', e.message));
-      }
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'reel', prompt },
@@ -306,13 +293,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         userId,
         prompt,
         chatId: chatId ?? null,
-        duration: vDuration,
+        videoModel: videoModel ?? 'standard',
+        duration: videoDuration ?? '8s',
         aspectRatio: videoAspectRatio ?? '16:9',
         enableAudio: videoEnableAudio ?? false,
-        imageUrl: videoImageUrl,
-        cameraPreset,
+        resolution: videoResolution ?? '720p',
         negativePrompt,
-        cfgScale: cfgScale ?? 0.5,
       });
 
       await prisma.generateJob.update({

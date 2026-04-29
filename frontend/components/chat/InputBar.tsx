@@ -80,15 +80,15 @@ function formatSize(bytes: number): string {
 
 // ─── Video options ────────────────────────────────────────────────────────────
 
-export type CameraPreset = 'static' | 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'tilt_up' | 'tilt_down' | 'orbit';
+export type VideoModel = 'standard' | 'pro';
 
 export interface VideoOptions {
-  duration: 5 | 10;
-  aspectRatio: '16:9' | '9:16' | '1:1';
+  videoModel: VideoModel;
+  duration: '4s' | '8s';
+  aspectRatio: '16:9' | '9:16';
   enableAudio: boolean;
-  cameraPreset: CameraPreset;
+  resolution: '720p' | '1080p';
   negativePrompt: string;
-  cfgScale: number;
 }
 
 // ─── Model selector (inline in toolbar) ───────────────────────────────────────
@@ -230,12 +230,12 @@ export function InputBar({
   const [lyrics, setLyrics] = useState('');
   const [showLyrics, setShowLyrics] = useState(false);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
-    duration: 5,
+    videoModel: 'standard',
+    duration: '8s',
     aspectRatio: '16:9',
     enableAudio: false,
-    cameraPreset: 'static',
+    resolution: '720p',
     negativePrompt: '',
-    cfgScale: 0.5,
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -435,7 +435,7 @@ export function InputBar({
           >
             {/* Duration */}
             <div className="flex items-center gap-1">
-              {([5, 10] as const).map((d) => (
+              {(['4s', '8s'] as const).map((d) => (
                 <button
                   key={d}
                   type="button"
@@ -447,7 +447,7 @@ export function InputBar({
                       : 'text-[rgba(255,255,255,0.38)] border-[var(--border)] hover:text-[rgba(255,255,255,0.65)]'
                   )}
                 >
-                  {d}с
+                  {d}
                 </button>
               ))}
             </div>
@@ -456,7 +456,7 @@ export function InputBar({
 
             {/* Aspect ratio */}
             <div className="flex items-center gap-1">
-              {(['16:9', '9:16', '1:1'] as const).map((ar) => (
+              {(['16:9', '9:16'] as const).map((ar) => (
                 <button
                   key={ar}
                   type="button"
@@ -488,13 +488,6 @@ export function InputBar({
             >
               {videoOptions.enableAudio ? '🔊' : '🔇'} Звук
             </button>
-
-            {/* 10s warning */}
-            {videoOptions.duration === 10 && (
-              <span className="text-[10px]" style={{ color: 'rgba(255,200,80,0.7)' }}>
-                10с = 2 генерации видео
-              </span>
-            )}
           </motion.div>
         )}
 

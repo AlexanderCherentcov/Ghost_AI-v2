@@ -73,7 +73,6 @@ interface SoundJob {
   musicDuration?: number;
   chatId?: string | null;
   lyrics?: string;
-  styleAudio?: string; // URL of reference audio for DiffRhythm style_audio
   sunoStyle?: string;
   sunoTitle?: string;
   sunoInstrumental?: boolean;
@@ -83,7 +82,7 @@ export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, lyrics, styleAudio, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, lyrics, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
@@ -114,8 +113,8 @@ export function startSoundWorker() {
           console.info(`[SoundWorker] long mode + Cyrillic lyrics → Suno fallback (DiffRhythm doesn't support Russian)`);
           externalUrl = await generateMusicSuno(prompt, { instrumental: false, lyrics, model: 'V5_5' });
         } else {
-          console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics} | styleAudio=${!!styleAudio}`);
-          externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics, styleAudio);
+          console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics}`);
+          externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics);
         }
       } else {
         if (needsSunoFallback) {
@@ -127,7 +126,7 @@ export function startSoundWorker() {
           if (route.model === 'udio') {
             externalUrl = await generateMusicUdio(prompt);
           } else {
-            externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics, styleAudio);
+            externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics);
           }
         }
       }

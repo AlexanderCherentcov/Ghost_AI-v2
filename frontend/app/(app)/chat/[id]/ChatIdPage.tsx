@@ -440,6 +440,7 @@ export default function ChatConversationPage() {
         videoAspectRatio: options?.aspectRatio,
         videoEnableAudio: options?.enableAudio,
         videoResolution: options?.resolution,
+        videoImageUrl: options?.imageUrl || undefined,
         negativePrompt: options?.negativePrompt || undefined,
       });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));

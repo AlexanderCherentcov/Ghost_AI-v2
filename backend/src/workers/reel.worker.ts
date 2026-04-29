@@ -41,6 +41,7 @@ interface ReelJob {
   aspectRatio?: '16:9' | '9:16';
   enableAudio?: boolean;
   resolution?: VeoResolution;
+  imageUrl?: string | null;
   negativePrompt?: string;
 }
 
@@ -55,6 +56,7 @@ export function startReelWorker() {
         aspectRatio = '16:9',
         enableAudio = false,
         resolution = '720p',
+        imageUrl,
         negativePrompt,
       } = job.data;
 
@@ -63,7 +65,8 @@ export function startReelWorker() {
         data: { status: 'processing' },
       });
 
-      console.info(`[ReelWorker] Veo3 ${videoModel} | ${duration} | ${resolution} | audio=${enableAudio}`);
+      const genMode = imageUrl ? 'img2video' : 'txt2video';
+      console.info(`[ReelWorker] Veo3.1 ${videoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
 
       const externalUrl = await generateVideoVeo3(prompt, {
         model: videoModel,
@@ -71,6 +74,7 @@ export function startReelWorker() {
         aspectRatio,
         generateAudio: enableAudio,
         resolution,
+        imageUrl: imageUrl ?? undefined,
         negativePrompt: negativePrompt || undefined,
       });
 
@@ -96,8 +100,8 @@ export function startReelWorker() {
         messageId = msg?.id;
       }
 
-      // ── Кешируем text-to-video ──────────────────────────────────────────────
-      setMediaCached('reel', prompt, externalUrl).catch(() => {});
+      // ── Кешируем только text-to-video (image-to-video зависит от картинки) ─
+      if (!imageUrl) setMediaCached('reel', prompt, externalUrl).catch(() => {});
 
       // ── Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!) ───────
       saveVideoToDisk(externalUrl).then(async (filename) => {

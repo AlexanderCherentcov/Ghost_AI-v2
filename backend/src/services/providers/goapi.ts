@@ -179,7 +179,9 @@ export async function generateVideoHunyuan(
   return extractVideoUrl(data);
 }
 
-// ─── Veo3 video generation ────────────────────────────────────────────────────
+// ─── Veo3.1 video generation ──────────────────────────────────────────────────
+// Standard = veo3.1-video-fast, Pro = veo3.1-video
+// Supports both text-to-video and image-to-video (image_url)
 
 export type VeoModel = 'standard' | 'pro';
 export type VeoDuration = '4s' | '8s';
@@ -192,6 +194,8 @@ export interface Veo3Options {
   aspectRatio?: '16:9' | '9:16';
   generateAudio?: boolean;
   negativePrompt?: string;
+  /** Image URL for image-to-video generation */
+  imageUrl?: string;
 }
 
 export async function generateVideoVeo3(prompt: string, options: Veo3Options = {}): Promise<string> {
@@ -202,9 +206,10 @@ export async function generateVideoVeo3(prompt: string, options: Veo3Options = {
     aspectRatio = '16:9',
     generateAudio = false,
     negativePrompt,
+    imageUrl,
   } = options;
 
-  const taskType = model === 'pro' ? 'veo3-video' : 'veo3-video-fast';
+  const taskType = model === 'pro' ? 'veo3.1-video' : 'veo3.1-video-fast';
 
   const input: Record<string, unknown> = {
     prompt,
@@ -212,12 +217,14 @@ export async function generateVideoVeo3(prompt: string, options: Veo3Options = {
     duration,
     resolution,
     generate_audio: generateAudio,
+    ...(imageUrl ? { image_url: imageUrl } : {}),
     ...(negativePrompt?.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
   };
 
-  console.info(`[Veo3] ${taskType} | ${duration} | ${resolution} | audio=${generateAudio}`);
+  const mode = imageUrl ? 'img2video' : 'txt2video';
+  console.info(`[Veo3.1] ${taskType} | ${mode} | ${duration} | ${resolution} | audio=${generateAudio}`);
 
-  const taskId = await createTask('veo3', taskType, input);
+  const taskId = await createTask('veo3.1', taskType, input);
   const data = await pollTask(taskId, 180, 5_000);
   return extractVideoUrl(data);
 }

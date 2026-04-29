@@ -88,6 +88,7 @@ export interface VideoOptions {
   aspectRatio: '16:9' | '9:16';
   enableAudio: boolean;
   resolution: '720p' | '1080p';
+  imageUrl?: string;
   negativePrompt: string;
 }
 

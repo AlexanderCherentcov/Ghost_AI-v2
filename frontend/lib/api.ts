@@ -112,6 +112,24 @@ export const api = {
   },
 
   upload: {
+    /** Upload an image file. Returns a public URL for use in image-to-video. */
+    image: async (file: File): Promise<{ url: string; fileName: string }> => {
+      const form = new FormData();
+      form.append('file', file);
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const res = await fetch(`${API_URL}/api/upload/image`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
+      }
+      return res.json();
+    },
     /** Upload a file for text extraction. Returns extracted text + metadata. */
     extract: async (file: File): Promise<{ text: string; fileName: string; lang: string; truncated: boolean }> => {
       const form = new FormData();
@@ -151,7 +169,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; negativePrompt?: string }) =>
+    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; videoImageUrl?: string; negativePrompt?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
         method: 'POST',
         body: JSON.stringify(data),

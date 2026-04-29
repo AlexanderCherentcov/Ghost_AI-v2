@@ -22,6 +22,7 @@ const generateSchema = z.object({
   videoAspectRatio: z.enum(['16:9', '9:16']).optional(),
   videoEnableAudio: z.boolean().optional(),
   videoResolution: z.enum(['720p', '1080p']).optional(),
+  videoImageUrl: z.string().url().optional(), // image-to-video source
   negativePrompt: z.string().max(2500).optional(),
   // Music-specific
   musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
@@ -241,7 +242,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, chatId, videoModel, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, negativePrompt } = generateSchema.parse(request.body);
+      const { prompt, chatId, videoModel, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt } = generateSchema.parse(request.body);
 
       const videoCount = 1;
 
@@ -268,18 +269,20 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Cache check for text-to-video
-      const mediaCached = await getMediaCached('reel', prompt);
-      if (mediaCached.hit) {
-        await checkAndDeduct(userId, 'video_generate', videoCount);
-        const job = await prisma.generateJob.create({
-          data: { userId, mode: 'reel', prompt, status: 'processing' },
-        });
-        completeCachedJobAfterDelay(
-          job.id, mediaCached.url, 10_000 + Math.random() * 8_000,
-          chatId ? { chatId, userId, prompt, mode: 'reel' } : undefined,
-        );
-        return reply.code(202).send({ jobId: job.id });
+      // Cache check for text-to-video only (image-to-video skips cache)
+      if (!videoImageUrl) {
+        const mediaCached = await getMediaCached('reel', prompt);
+        if (mediaCached.hit) {
+          await checkAndDeduct(userId, 'video_generate', videoCount);
+          const job = await prisma.generateJob.create({
+            data: { userId, mode: 'reel', prompt, status: 'processing' },
+          });
+          completeCachedJobAfterDelay(
+            job.id, mediaCached.url, 10_000 + Math.random() * 8_000,
+            chatId ? { chatId, userId, prompt, mode: 'reel' } : undefined,
+          );
+          return reply.code(202).send({ jobId: job.id });
+        }
       }
 
       await checkAndDeduct(userId, 'video_generate', videoCount);
@@ -298,6 +301,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         aspectRatio: videoAspectRatio ?? '16:9',
         enableAudio: videoEnableAudio ?? false,
         resolution: videoResolution ?? '720p',
+        imageUrl: videoImageUrl ?? null,
         negativePrompt,
       });
 

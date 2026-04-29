@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
-import { applyPlanLimits } from './tokens.js';
+import { grantCaspers } from './tokens.js';
 import { notifyPayment } from './admin-notify.js';
 
 const YOKASSA_BASE = 'https://api.yookassa.ru/v3';
@@ -18,58 +18,74 @@ function yokassaHeaders(idempotencyKey: string) {
 }
 
 // ─── Plans ─────────────────────────────────────────────────────────────────────
-// std_messages_daily / pro_messages_daily: -1 = unlimited
-// All image/video limits are daily; files is monthly.
+// yearly = price * 12 * 0.8 (20% real discount, shown as 70% in UI)
 
 export const PLANS = {
   FREE: {
-    price: 0, price_yearly: 0,
+    price: 0,    price_yearly: 0,
     label: 'Бесплатный',
-    show_message_limit: true,
-    std_messages_daily: 10, pro_messages_daily: 0,
-    images_daily: 3,   videos_daily: 0,  music_daily: 0,  files_monthly: 0,
-  },
-  TRIAL: {
-    price: 299, price_yearly: 299,
-    label: 'Пробный',
-    show_message_limit: true,
-    duration_days: 7,            // особый срок: 7 дней вместо месяца
-    std_messages_daily: 30, pro_messages_daily: 0,
-    images_daily: 5,   videos_daily: 1,  music_daily: 1,  files_monthly: 0,
+    caspers_monthly: 0,
+    pro_free_daily: 0,
   },
   BASIC: {
-    price: 699, price_yearly: 594,
+    price: 790,  price_yearly: 7584,  // 790 * 12 * 0.8
     label: 'Базовый',
-    show_message_limit: false,
-    std_messages_daily: -1, pro_messages_daily: 0,
-    images_daily: 20,  videos_daily: 0,  music_daily: 2,  files_monthly: 40,
-  },
-  STANDARD: {
-    price: 1199, price_yearly: 1019,
-    label: 'Стандарт',
-    show_message_limit: false,
-    std_messages_daily: -1, pro_messages_daily: 50,
-    images_daily: 30,  videos_daily: 1,  music_daily: 5,  files_monthly: 150,
+    caspers_monthly: 300,
+    pro_free_daily: 0,
   },
   PRO: {
-    price: 2490, price_yearly: 2117,
+    price: 1690, price_yearly: 16224, // 1690 * 12 * 0.8
     label: 'Про',
-    show_message_limit: false, // UI always shows ∞ — real cap enforced silently
-    std_messages_daily: 200, pro_messages_daily: 200,
-    images_daily: 80,  videos_daily: 3,  music_daily: 10, files_monthly: 500,
+    caspers_monthly: 700,
+    pro_free_daily: 20,
+  },
+  VIP: {
+    price: 3990, price_yearly: 38304, // 3990 * 12 * 0.8
+    label: 'VIP',
+    caspers_monthly: 1800,
+    pro_free_daily: 50,
   },
   ULTRA: {
-    price: 5490, price_yearly: 4667,
+    price: 5990, price_yearly: 57504, // 5990 * 12 * 0.8
     label: 'Ультра',
-    show_message_limit: false, // UI always shows ∞ — real cap enforced silently
-    std_messages_daily: 400, pro_messages_daily: 400,
-    images_daily: 150, videos_daily: 5,  music_daily: 20, files_monthly: 1000,
+    caspers_monthly: 2800,
+    pro_free_daily: -1,
   },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
 
-// ─── Create payment ───────────────────────────────────────────────────────────
+// ─── Casper tiered pricing ────────────────────────────────────────────────────
+
+export function calculateCasperPrice(amount: number): number {
+  if (amount <= 0) return 0;
+
+  let total = 0;
+  let remaining = amount;
+  const tiers = [
+    { max: 100,  price: 3.0 },
+    { max: 100,  price: 2.9 },
+    { max: 100,  price: 2.8 },
+    { max: 100,  price: 2.7 },
+    { max: 100,  price: 2.6 },
+    { max: 100,  price: 2.5 },
+    { max: 100,  price: 2.4 },
+    { max: 100,  price: 2.3 },
+    { max: 100,  price: 2.2 },
+    { max: 100,  price: 2.1 },
+  ];
+
+  for (const tier of tiers) {
+    if (remaining <= 0) break;
+    const inTier = Math.min(remaining, tier.max);
+    total += inTier * tier.price;
+    remaining -= inTier;
+  }
+
+  return Math.round(total * 100) / 100;
+}
+
+// ─── Create subscription payment ─────────────────────────────────────────────
 
 export async function createPayment(
   userId: string,
@@ -92,7 +108,7 @@ export async function createPayment(
         confirmation: { type: 'redirect', return_url: returnUrl },
         capture: true,
         description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''} — GhostLine`,
-        metadata: { userId, plan: planKey, billing },
+        metadata: { userId, plan: planKey, billing, paymentType: 'subscription' },
       },
       { headers: yokassaHeaders(idempotencyKey), timeout: 15_000 }
     );
@@ -110,12 +126,77 @@ export async function createPayment(
       amount: totalPrice,
       status: 'PENDING',
       plan: planKey as any,
+      paymentType: 'subscription',
     },
   });
 
   return {
     paymentId:  data.id as string,
     paymentUrl: data.confirmation.confirmation_url as string,
+  };
+}
+
+// ─── Create Casper top-up payment ─────────────────────────────────────────────
+
+export async function createCasperPayment(
+  userId: string,
+  casperAmount: number,
+  returnUrl: string,
+) {
+  if (casperAmount < 1 || casperAmount > 1000) {
+    throw new Error('Количество Caspers должно быть от 1 до 1000');
+  }
+
+  // Only available for paid plans
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true },
+  });
+  if (!user || user.plan === 'FREE') {
+    throw Object.assign(
+      new Error('Докупка Caspers доступна только с активной подпиской'),
+      { code: 'PLAN_RESTRICTED' },
+    );
+  }
+
+  const totalPrice = calculateCasperPrice(casperAmount);
+  const idempotencyKey = crypto.randomUUID();
+
+  let data: any;
+  try {
+    const response = await axios.post(
+      `${YOKASSA_BASE}/payments`,
+      {
+        amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
+        confirmation: { type: 'redirect', return_url: returnUrl },
+        capture: true,
+        description: `Докупка ${casperAmount} Caspers — GhostLine`,
+        metadata: { userId, casperAmount: String(casperAmount), paymentType: 'caspers' },
+      },
+      { headers: yokassaHeaders(idempotencyKey), timeout: 15_000 }
+    );
+    data = response.data;
+  } catch (err: any) {
+    const detail = err?.response?.data ?? err?.message ?? 'unknown';
+    console.error('[yokassa] createCasperPayment failed:', detail);
+    throw new Error('Платёжный сервис недоступен');
+  }
+
+  await prisma.payment.create({
+    data: {
+      userId,
+      yokassaId: data.id,
+      amount: totalPrice,
+      status: 'PENDING',
+      paymentType: 'caspers',
+      casperAmount,
+    },
+  });
+
+  return {
+    paymentId:  data.id as string,
+    paymentUrl: data.confirmation.confirmation_url as string,
+    totalPrice,
   };
 }
 
@@ -146,47 +227,77 @@ export async function processWebhook(body: unknown): Promise<void> {
   const payment = await prisma.payment.findUnique({ where: { yokassaId: paymentId } });
   if (!payment) return;
 
-  // Notify admins about successful payment
   const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } });
-  const billing = event.object.metadata?.billing === 'yearly' ? 'yearly' : 'monthly';
-  notifyPayment({
-    userId:   payment.userId,
-    userName: payer?.name ?? null,
-    amount:   payment.amount,
-    plan:     payment.plan ?? 'unknown',
-    billing,
-  }).catch(() => {});
 
+  // ── Casper top-up payment ──────────────────────────────────────────────────
+  if (payment.paymentType === 'caspers' && payment.casperAmount) {
+    const casperAmount = payment.casperAmount;
+
+    await prisma.user.update({
+      where: { id: payment.userId },
+      data: { caspers_balance: { increment: casperAmount } },
+    });
+
+    await prisma.casperTransaction.create({
+      data: {
+        userId: payment.userId,
+        amount: casperAmount,
+        reason: 'topup',
+      },
+    });
+
+    notifyPayment({
+      userId:   payment.userId,
+      userName: payer?.name ?? null,
+      amount:   payment.amount,
+      plan:     `${casperAmount} Caspers (топап)`,
+      billing:  'one-time',
+    }).catch(() => {});
+
+    return;
+  }
+
+  // ── Subscription payment ───────────────────────────────────────────────────
   if (payment.plan) {
     const planInfo = PLANS[payment.plan as PlanKey];
     if (planInfo) {
       const billing = (event.object.metadata?.billing === 'yearly' ? 'YEARLY' : 'MONTHLY') as 'MONTHLY' | 'YEARLY';
       const expiresAt = new Date();
-      // TRIAL — 7 days; YEARLY — 1 year; default — 1 month
-      const durationDays = (planInfo as any).duration_days as number | undefined;
-      if (durationDays) {
-        expiresAt.setDate(expiresAt.getDate() + durationDays);
-      } else if (billing === 'YEARLY') {
+      if (billing === 'YEARLY') {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
       } else {
         expiresAt.setMonth(expiresAt.getMonth() + 1);
       }
+
       await prisma.user.update({
         where: { id: payment.userId },
-        data: { plan: payment.plan, planExpiresAt: expiresAt, billing },
-      });
-      await applyPlanLimits(
-        payment.userId,
-        {
-          std_messages_daily: planInfo.std_messages_daily,
-          pro_messages_daily: planInfo.pro_messages_daily,
-          images_daily:       planInfo.images_daily,
-          videos_daily:       planInfo.videos_daily,
-          music_daily:        planInfo.music_daily,
-          files_monthly:      planInfo.files_monthly,
+        data: {
+          plan: payment.plan,
+          planExpiresAt: expiresAt,
+          billing,
+          // Reset weekly counters on plan change
+          images_this_week: 0,
+          music_this_week: 0,
+          videos_this_week: 0,
+          week_start: new Date(),
         },
-        payment.plan,
+      });
+
+      // Grant fresh caspers for the new plan period
+      await grantCaspers(
+        payment.userId,
+        planInfo.caspers_monthly,
+        planInfo.caspers_monthly,
+        `plan_grant_${payment.plan.toLowerCase()}`,
       );
+
+      notifyPayment({
+        userId:   payment.userId,
+        userName: payer?.name ?? null,
+        amount:   payment.amount,
+        plan:     payment.plan,
+        billing:  billing.toLowerCase(),
+      }).catch(() => {});
     }
   }
 }

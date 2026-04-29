@@ -2,7 +2,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { OR_MODELS } from './providers/openrouter.js';
 
 export type Complexity = 'simple' | 'complex';
-export type Provider = 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
+export type Provider = 'cloudflare' | 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
 
 export interface RouterResult {
   provider: Provider;
@@ -92,7 +92,8 @@ export function route(
   logger?: FastifyBaseLogger,
   hasImage = false,
   plan?: string,
-  preferredModel?: 'haiku' | 'deepseek'
+  preferredModel?: 'haiku' | 'deepseek',
+  mode?: string,
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
 
@@ -107,9 +108,36 @@ export function route(
     };
   }
 
-  // Any paid plan + search intent → Perplexity Sonar (live web search)
+  // Std chat (mode === 'chat' or no mode specified, no image, no document) → Cloudflare AI
+  // Pro/think mode → OpenRouter
+  if (mode === 'chat' || (!mode && !hasDocument && !hasImage)) {
+    // Still use OpenRouter for search queries on paid plans with sonar
+    const isPaidPlan = plan !== 'FREE' && plan !== undefined;
+    if (isPaidPlan && isSearchQuery(prompt)) {
+      logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Search query → Sonar');
+      return {
+        provider: 'openrouter-sonar',
+        complexity: 'complex',
+        model: OR_MODELS.sonar,
+        fallbackModel: OR_MODELS.deepseek,
+        maxTokens: undefined,
+      };
+    }
+
+    // Default std chat → Cloudflare
+    logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare');
+    return {
+      provider: 'cloudflare',
+      complexity,
+      model: '@cf/meta/llama-3.1-8b-instruct-fast',
+      maxTokens: plan === 'FREE' ? 400 : undefined,
+    };
+  }
+
+  // Pro chat (mode === 'think') → OpenRouter
   const isPaid = plan !== 'FREE' && plan !== undefined;
-  const isPremium = plan === 'PRO' || plan === 'ULTRA';
+  const isPremium = plan === 'PRO' || plan === 'VIP' || plan === 'ULTRA';
+
   if (isPaid && !hasDocument && !hasImage && isSearchQuery(prompt)) {
     logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Search query → Sonar');
     return {
@@ -121,7 +149,7 @@ export function route(
     };
   }
 
-  // PRO / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
+  // PRO / VIP / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
   const useDeepSeek = preferredModel === 'deepseek'
     ? true
     : preferredModel === 'haiku'

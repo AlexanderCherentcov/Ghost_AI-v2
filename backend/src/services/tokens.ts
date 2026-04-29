@@ -5,194 +5,422 @@ export type RequestType =
   | 'chat_pro'
   | 'image_generate'
   | 'image_edit'
-  | 'video_generate'
+  | 'video_std_4s'
+  | 'video_std_8s'
+  | 'video_pro_4s'
+  | 'video_pro_8s'
   | 'music_generate';
+
+// ─── Casper costs per operation ───────────────────────────────────────────────
+
+export const CASPER_COSTS: Record<RequestType, number> = {
+  chat_std:      0,   // std chat is free on all plans
+  chat_pro:      1,
+  image_generate: 10,
+  image_edit:    10,
+  video_std_4s:  25,
+  video_std_8s:  40,
+  video_pro_4s:  50,
+  video_pro_8s:  90,
+  music_generate: 5,
+} as const;
+
+// ─── FREE tier weekly limits ──────────────────────────────────────────────────
+
+export const FREE_WEEKLY_LIMITS = {
+  images: 5,
+  music:  5,
+  videos: 3,
+} as const;
+
+// ─── FREE tier daily limits ───────────────────────────────────────────────────
+
+export const FREE_DAILY_LIMITS = {
+  std_messages: 5,
+} as const;
+
+// ─── Pro chat free quota per plan per day ─────────────────────────────────────
+// -1 = unlimited
+
+export const PRO_FREE_QUOTA: Record<string, number> = {
+  FREE:  0,
+  BASIC: 0,
+  PRO:   20,
+  VIP:   50,
+  ULTRA: -1,
+} as const;
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
 export function sanitizeInput(text: string): string {
   return text
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F​-‍﻿]/g, '')
     .trim()
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .slice(0, 16000);
 }
 
-// ─── Reset daily/monthly counters if period ended ─────────────────────────────
+// ─── Reset daily/weekly/monthly counters if period ended ──────────────────────
 
 export async function checkResets(userId: string): Promise<void> {
   const now = new Date();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { day_start: true, period_start: true },
+    select: {
+      plan: true,
+      day_start: true,
+      week_start: true,
+      period_start: true,
+      caspers_monthly: true,
+      caspers_balance: true,
+    },
   });
   if (!user) return;
 
   const updates: Record<string, unknown> = {};
 
-  // Daily reset
+  // Daily reset (std chat counter)
   const dayEnd = new Date(user.day_start);
   dayEnd.setDate(dayEnd.getDate() + 1);
   if (now >= dayEnd) {
     updates.std_messages_today = 0;
     updates.pro_messages_today = 0;
-    updates.images_today       = 0;
-    updates.videos_today       = 0;
-    updates.music_today        = 0;
-    updates.day_start          = now;
+    updates.day_start = now;
   }
 
-  // Monthly reset (files only)
+  // Weekly reset (FREE tier image/music/video counters)
+  const weekEnd = new Date(user.week_start);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  if (now >= weekEnd) {
+    updates.images_this_week = 0;
+    updates.music_this_week = 0;
+    updates.videos_this_week = 0;
+    updates.week_start = now;
+  }
+
+  // Monthly caspers grant: when period_start + 30 days passed
   const periodEnd = new Date(user.period_start);
   periodEnd.setDate(periodEnd.getDate() + 30);
-  if (now >= periodEnd) {
-    updates.files_used    = 0;
-    updates.period_start  = now;
+  if (now >= periodEnd && user.caspers_monthly > 0) {
+    // Add monthly caspers to balance
+    updates.caspers_balance = user.caspers_balance + user.caspers_monthly;
+    updates.period_start = now;
   }
 
   if (Object.keys(updates).length > 0) {
     await prisma.user.update({ where: { id: userId }, data: updates });
+
+    // Log casper grant if applicable
+    if (updates.caspers_balance !== undefined && user.caspers_monthly > 0) {
+      await prisma.casperTransaction.create({
+        data: {
+          userId,
+          amount: user.caspers_monthly,
+          reason: 'plan_grant_monthly',
+        },
+      }).catch(() => {});
+    }
   }
 }
 
-// ─── Check limits & deduct counters (call BEFORE API request) ─────────────────
-// hasFile: also check/deduct files_used when true
+// ─── Resolve video request type from model + duration ─────────────────────────
+
+export function resolveVideoRequestType(
+  model: 'standard' | 'pro' = 'standard',
+  duration: '4s' | '8s' = '8s',
+): RequestType {
+  if (model === 'pro') {
+    return duration === '4s' ? 'video_pro_4s' : 'video_pro_8s';
+  }
+  return duration === '4s' ? 'video_std_4s' : 'video_std_8s';
+}
+
+// ─── Check limits & deduct (unified for both FREE and paid tiers) ──────────────
 
 export async function checkAndDeduct(
   userId: string,
   requestType: RequestType,
-  count = 1,
-  hasFile = false,
+  _count = 1,
+  _hasFile = false,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { id: userId },
       select: {
         plan: true,
-        std_messages_today:       true,
-        pro_messages_today:       true,
-        images_today:             true,
-        videos_today:             true,
-        music_today:              true,
-        files_used:               true,
-        std_messages_daily_limit: true,
-        pro_messages_daily_limit: true,
-        images_daily_limit:       true,
-        videos_daily_limit:       true,
-        music_daily_limit:        true,
-        files_monthly_limit:      true,
+        caspers_balance: true,
+        std_messages_today: true,
+        pro_messages_today: true,
+        images_this_week: true,
+        music_this_week: true,
+        videos_this_week: true,
       },
     });
     if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
-    const updates: Record<string, unknown> = {};
+    const plan = user.plan as string;
+    const cost = CASPER_COSTS[requestType];
 
-    // ── Videos ────────────────────────────────────────────────────────────────
-    if (requestType === 'video_generate') {
-      if (user.videos_daily_limit === 0) {
-        throw Object.assign(new Error('LIMIT_VIDEOS_UNAVAILABLE'), { code: 'LIMIT_VIDEOS_UNAVAILABLE' });
-      }
-      if (user.videos_daily_limit !== -1 && user.videos_today + count > user.videos_daily_limit) {
-        throw Object.assign(new Error('LIMIT_VIDEOS'), { code: 'LIMIT_VIDEOS' });
-      }
-      await tx.user.update({ where: { id: userId }, data: { videos_today: { increment: count } } });
-      return;
-    }
-
-    // ── Music ─────────────────────────────────────────────────────────────────
-    if (requestType === 'music_generate') {
-      if (user.music_daily_limit === 0) {
-        throw Object.assign(new Error('LIMIT_MUSIC_UNAVAILABLE'), { code: 'LIMIT_MUSIC_UNAVAILABLE' });
-      }
-      if (user.music_daily_limit !== -1 && user.music_today + count > user.music_daily_limit) {
-        throw Object.assign(new Error('LIMIT_MUSIC'), { code: 'LIMIT_MUSIC' });
-      }
-      await tx.user.update({ where: { id: userId }, data: { music_today: { increment: count } } });
-      return;
-    }
-
-    // ── Images ────────────────────────────────────────────────────────────────
-    if (requestType === 'image_generate' || requestType === 'image_edit') {
-      if (user.images_daily_limit === 0) {
-        throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
-      }
-      if (user.images_daily_limit !== -1 && user.images_today + 1 > user.images_daily_limit) {
-        throw Object.assign(new Error('LIMIT_IMAGES'), { code: 'LIMIT_IMAGES' });
-      }
-      await tx.user.update({ where: { id: userId }, data: { images_today: { increment: 1 } } });
-      return;
-    }
-
-    // ── Pro messages ───────────────────────────────────────────────────────────
-    if (requestType === 'chat_pro') {
-      if (user.pro_messages_daily_limit === 0) {
-        throw Object.assign(new Error('LIMIT_PRO_UNAVAILABLE'), { code: 'LIMIT_PRO_UNAVAILABLE' });
-      }
-      if (user.pro_messages_daily_limit !== -1 && user.pro_messages_today + 1 > user.pro_messages_daily_limit) {
-        throw Object.assign(new Error('LIMIT_PRO_MESSAGES'), { code: 'LIMIT_PRO_MESSAGES' });
-      }
-      updates.pro_messages_today = { increment: 1 };
-    }
-
-    // ── Std messages ───────────────────────────────────────────────────────────
+    // ── std chat ──────────────────────────────────────────────────────────────
     if (requestType === 'chat_std') {
-      const stdLimit = user.std_messages_daily_limit;
-      if (stdLimit !== -1 && user.std_messages_today >= stdLimit) {
-        const code = user.plan === 'FREE' ? 'LIMIT_FREE_MESSAGES' : 'LIMIT_STD_MESSAGES';
-        throw Object.assign(new Error(code), { code });
+      if (plan === 'FREE') {
+        if (user.std_messages_today >= FREE_DAILY_LIMITS.std_messages) {
+          throw Object.assign(
+            new Error('Лимит бесплатных сообщений исчерпан'),
+            { code: 'LIMIT_FREE_MESSAGES' },
+          );
+        }
+        await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
+      } else {
+        // Paid plans: std chat is always free (no deduction)
+        await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
       }
-      updates.std_messages_today = { increment: 1 };
+      return;
     }
 
-    // ── File attachment check — [C-04] skip when files_monthly_limit === -1 ───
-    if (hasFile) {
-      if (user.files_monthly_limit === 0) {
-        throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
+    // ── pro chat ──────────────────────────────────────────────────────────────
+    if (requestType === 'chat_pro') {
+      const freeQuota = PRO_FREE_QUOTA[plan] ?? 0;
+
+      if (freeQuota === 0 && plan !== 'ULTRA') {
+        // No free pro quota — check if FREE plan (pro unavailable)
+        if (plan === 'FREE' || plan === 'BASIC') {
+          // Check caspers
+          if (user.caspers_balance < cost) {
+            throw Object.assign(
+              new Error('Недостаточно Caspers для про-сообщения'),
+              { code: 'LIMIT_PRO_UNAVAILABLE' },
+            );
+          }
+        }
       }
-      if (user.files_monthly_limit !== -1 && user.files_used >= user.files_monthly_limit) {
-        throw Object.assign(new Error('LIMIT_FILES'), { code: 'LIMIT_FILES' });
+
+      // Check free quota first (PRO/VIP plans have daily free pro messages)
+      if (freeQuota === -1) {
+        // ULTRA: unlimited pro — just track
+        await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
+        return;
       }
-      updates.files_used = { increment: 1 };
+
+      if (freeQuota > 0 && user.pro_messages_today < freeQuota) {
+        // Use free quota
+        await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
+        return;
+      }
+
+      // Deduct from caspers
+      if (user.caspers_balance < cost) {
+        throw Object.assign(
+          new Error('Недостаточно Caspers'),
+          { code: 'LIMIT_PRO_MESSAGES' },
+        );
+      }
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          caspers_balance: { decrement: cost },
+          pro_messages_today: { increment: 1 },
+        },
+      });
+      await tx.casperTransaction.create({
+        data: { userId, amount: -cost, reason: 'chat_pro' },
+      });
+      return;
     }
 
-    await tx.user.update({ where: { id: userId }, data: updates });
+    // ── image generation ──────────────────────────────────────────────────────
+    if (requestType === 'image_generate' || requestType === 'image_edit') {
+      if (plan === 'FREE') {
+        if (user.images_this_week >= FREE_WEEKLY_LIMITS.images) {
+          throw Object.assign(
+            new Error('Лимит картинок на этой неделе исчерпан'),
+            { code: 'LIMIT_IMAGES' },
+          );
+        }
+        await tx.user.update({ where: { id: userId }, data: { images_this_week: { increment: 1 } } });
+        return;
+      }
+      // Paid plans: deduct caspers
+      if (user.caspers_balance < cost) {
+        throw Object.assign(
+          new Error('Недостаточно Caspers для генерации изображения'),
+          { code: 'LIMIT_IMAGES' },
+        );
+      }
+      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
+      await tx.casperTransaction.create({
+        data: { userId, amount: -cost, reason: requestType },
+      });
+      return;
+    }
+
+    // ── music generation ──────────────────────────────────────────────────────
+    if (requestType === 'music_generate') {
+      if (plan === 'FREE') {
+        if (user.music_this_week >= FREE_WEEKLY_LIMITS.music) {
+          throw Object.assign(
+            new Error('Лимит треков на этой неделе исчерпан'),
+            { code: 'LIMIT_MUSIC' },
+          );
+        }
+        await tx.user.update({ where: { id: userId }, data: { music_this_week: { increment: 1 } } });
+        return;
+      }
+      // Paid plans: deduct caspers
+      if (user.caspers_balance < cost) {
+        throw Object.assign(
+          new Error('Недостаточно Caspers для генерации музыки'),
+          { code: 'LIMIT_MUSIC' },
+        );
+      }
+      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
+      await tx.casperTransaction.create({
+        data: { userId, amount: -cost, reason: 'music_generate' },
+      });
+      return;
+    }
+
+    // ── video generation ──────────────────────────────────────────────────────
+    if (
+      requestType === 'video_std_4s' ||
+      requestType === 'video_std_8s' ||
+      requestType === 'video_pro_4s' ||
+      requestType === 'video_pro_8s'
+    ) {
+      if (plan === 'FREE') {
+        if (user.videos_this_week >= FREE_WEEKLY_LIMITS.videos) {
+          throw Object.assign(
+            new Error('Лимит видео на этой неделе исчерпан'),
+            { code: 'LIMIT_VIDEOS' },
+          );
+        }
+        await tx.user.update({ where: { id: userId }, data: { videos_this_week: { increment: 1 } } });
+        return;
+      }
+      // Paid plans: deduct caspers
+      if (user.caspers_balance < cost) {
+        throw Object.assign(
+          new Error('Недостаточно Caspers для генерации видео'),
+          { code: 'LIMIT_VIDEOS' },
+        );
+      }
+      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
+      await tx.casperTransaction.create({
+        data: { userId, amount: -cost, reason: requestType },
+      });
+      return;
+    }
   });
 }
 
-// ─── Refund on API error ──────────────────────────────────────────────────────
+// ─── Refund caspers on API error ──────────────────────────────────────────────
 
-export async function refundCounter(
+export async function refundCaspers(
   userId: string,
   requestType: RequestType,
-  count = 1,
-  hasFile = false,
 ): Promise<void> {
   try {
-    // [M-08] Use updateMany with a floor-at-zero condition to avoid negative counters
-    if (requestType === 'video_generate') {
-      await prisma.$executeRaw`UPDATE "User" SET "videos_today" = GREATEST(0, "videos_today" - ${count}) WHERE id = ${userId}`;
-    } else if (requestType === 'music_generate') {
-      await prisma.$executeRaw`UPDATE "User" SET "music_today" = GREATEST(0, "music_today" - ${count}) WHERE id = ${userId}`;
-    } else if (requestType === 'image_generate' || requestType === 'image_edit') {
-      await prisma.$executeRaw`UPDATE "User" SET "images_today" = GREATEST(0, "images_today" - 1) WHERE id = ${userId}`;
-    } else if (requestType === 'chat_pro') {
-      await prisma.$executeRaw`UPDATE "User" SET "pro_messages_today" = GREATEST(0, "pro_messages_today" - 1) WHERE id = ${userId}`;
-      if (hasFile) {
-        await prisma.$executeRaw`UPDATE "User" SET "files_used" = GREATEST(0, "files_used" - 1) WHERE id = ${userId}`;
-      }
-    } else {
-      await prisma.$executeRaw`UPDATE "User" SET "std_messages_today" = GREATEST(0, "std_messages_today" - 1) WHERE id = ${userId}`;
-      if (hasFile) {
-        await prisma.$executeRaw`UPDATE "User" SET "files_used" = GREATEST(0, "files_used" - 1) WHERE id = ${userId}`;
-      }
+    const cost = CASPER_COSTS[requestType];
+    if (cost === 0) return; // nothing to refund
+
+    // Check if the user actually had caspers deducted (i.e. not FREE tier limits)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true },
+    });
+    if (!user) return;
+
+    const plan = user.plan as string;
+
+    // FREE plan users don't have caspers deducted for images/music/videos
+    const isFreeWeeklyOp =
+      requestType === 'image_generate' ||
+      requestType === 'image_edit' ||
+      requestType === 'music_generate' ||
+      requestType === 'video_std_4s' ||
+      requestType === 'video_std_8s' ||
+      requestType === 'video_pro_4s' ||
+      requestType === 'video_pro_8s';
+
+    if (plan === 'FREE' && isFreeWeeklyOp) return;
+
+    // For pro chat: only refund if caspers were actually deducted (not free quota)
+    if (requestType === 'chat_pro') {
+      // Best-effort: just refund cost
     }
+
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "caspers_balance" = "caspers_balance" + ${cost}
+      WHERE id = ${userId}
+    `;
+
+    await prisma.casperTransaction.create({
+      data: { userId, amount: cost, reason: `refund_${requestType}` },
+    }).catch(() => {});
   } catch {
     // Refund is best-effort
   }
 }
 
-// ─── Apply plan limits (call on subscription webhook) ────────────────────────
+// ─── Legacy alias for compatibility ──────────────────────────────────────────
+
+export const refundCounter = refundCaspers;
+
+// ─── Deduct caspers directly (used by yokassa.ts) ────────────────────────────
+
+export async function deductCaspers(
+  userId: string,
+  amount: number,
+  reason: string,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { caspers_balance: true },
+    });
+    if (!user) throw new Error('User not found');
+    if (user.caspers_balance < amount) {
+      throw Object.assign(new Error('Недостаточно Caspers'), { code: 'INSUFFICIENT_CASPERS' });
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: { caspers_balance: { decrement: amount } },
+    });
+    await tx.casperTransaction.create({
+      data: { userId, amount: -amount, reason },
+    });
+  });
+}
+
+// ─── Grant caspers (used on plan purchase/renewal) ───────────────────────────
+
+export async function grantCaspers(
+  userId: string,
+  amount: number,
+  monthly: number,
+  reason: string,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      caspers_balance: amount,
+      caspers_monthly: monthly,
+      period_start: new Date(),
+      // Reset daily counters on plan change
+      std_messages_today: 0,
+      pro_messages_today: 0,
+      day_start: new Date(),
+    },
+  });
+  await prisma.casperTransaction.create({
+    data: { userId, amount, reason },
+  }).catch(() => {});
+}
+
+// ─── Legacy: kept for type compatibility with chat.ts ─────────────────────────
+// (chat.ts imports this but uses the new checkAndDeduct above)
 
 export interface PlanLimits {
   std_messages_daily: number;
@@ -201,32 +429,4 @@ export interface PlanLimits {
   videos_daily:       number;
   music_daily:        number;
   files_monthly:      number;
-}
-
-export async function applyPlanLimits(
-  userId: string,
-  limits: PlanLimits,
-  _planName: string,
-): Promise<void> {
-  const now = new Date();
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      std_messages_daily_limit: limits.std_messages_daily,
-      pro_messages_daily_limit: limits.pro_messages_daily,
-      images_daily_limit:       limits.images_daily,
-      videos_daily_limit:       limits.videos_daily,
-      music_daily_limit:        limits.music_daily,
-      files_monthly_limit:      limits.files_monthly,
-      // Reset counters on plan change
-      std_messages_today: 0,
-      pro_messages_today: 0,
-      images_today:       0,
-      videos_today:       0,
-      music_today:        0,
-      files_used:         0,
-      day_start:          now,
-      period_start:       now,
-    },
-  });
 }

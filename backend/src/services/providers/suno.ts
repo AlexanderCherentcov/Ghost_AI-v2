@@ -123,11 +123,27 @@ export async function generateMusicSuno(
     const status: string = (pollData.data?.status ?? '').toUpperCase();
 
     if (status === 'SUCCESS') {
-      // data.response.data is an array of songs — take the first
-      const songs: any[] = pollData.data?.response?.data ?? [];
-      const audioUrl: string | undefined = songs[0]?.audio_url;
+      // Log full response to understand actual structure
+      console.info(`[Suno] SUCCESS response: ${JSON.stringify(pollData.data).slice(0, 1000)}`);
+
+      // Try multiple possible response paths from sunoapi.org
+      const d = pollData.data;
+      const songs: any[] =
+        d?.response?.data ??        // documented path
+        d?.response?.clips ??       // alternative
+        d?.clips ??                 // flat
+        d?.data ??                  // flat alt
+        [];
+
+      const audioUrl: string | undefined =
+        songs[0]?.audio_url ??
+        songs[0]?.audioUrl ??
+        songs[0]?.audio ??
+        d?.response?.audio_url ??
+        d?.audio_url;
+
       if (!audioUrl) {
-        throw new Error(`Suno SUCCESS but no audio_url: ${JSON.stringify(pollData.data).slice(0, 300)}`);
+        throw new Error(`Suno SUCCESS but no audio_url: ${JSON.stringify(d).slice(0, 500)}`);
       }
       console.info(`[Suno] Done: ${audioUrl}`);
       return audioUrl;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -15,6 +15,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, accessToken } = useAuthStore();
   const { setChats } = useChatStore();
   const { sidebarOpen } = useUIStore();
+  // Tracks the user ID for which chats have already been fetched.
+  // Prevents duplicate requests on token refresh while ensuring the list
+  // loads after page refresh (when accessToken arrives asynchronously).
+  const loadedChatsForRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -26,11 +30,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, isLoading, router]);
 
   useEffect(() => {
-    if (user?.id && accessToken) {
-      api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]); // только при смене пользователя, не при каждом обновлении токена
+    if (!user?.id || !accessToken) return;
+    if (loadedChatsForRef.current === user.id) return; // already loaded for this user
+    loadedChatsForRef.current = user.id;
+    api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
+  }, [user?.id, accessToken]);
 
   // ── Telegram Mini App: notify ready + expand ──────────────────────────────
   useEffect(() => {

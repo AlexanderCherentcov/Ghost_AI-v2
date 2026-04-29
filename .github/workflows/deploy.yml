@@ -9,6 +9,9 @@ on:
       - 'infra/**'
       - '.github/workflows/deploy.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -41,9 +44,10 @@ jobs:
             set -e
             cd /root/ghostline_v2
 
-            # Reset any local changes and pull latest
-            git reset --hard HEAD
-            git pull origin master
+            # Fix any broken remote refs, then hard-reset to latest master
+            git remote prune origin
+            git fetch origin master
+            git reset --hard origin/master
 
             cd infra
 

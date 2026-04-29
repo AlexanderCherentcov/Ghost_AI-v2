@@ -37,15 +37,34 @@ const generateSchema = z.object({
 
 /**
  * Simulate generation delay for cache hits so the UI shows loading animation.
- * Completes the job in background after a realistic delay.
+ * Completes the job in background after a realistic delay and optionally saves
+ * an assistant message to chat history (for types that don't go through a worker).
  */
-function completeCachedJobAfterDelay(jobId: string, mediaUrl: string, delayMs: number) {
+function completeCachedJobAfterDelay(
+  jobId: string,
+  mediaUrl: string,
+  delayMs: number,
+  chatMsg?: { chatId: string; userId: string; prompt: string; mode: string },
+) {
   setTimeout(async () => {
     try {
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'done', mediaUrl },
       });
+      if (chatMsg) {
+        await prisma.message.create({
+          data: {
+            chatId: chatMsg.chatId,
+            userId: chatMsg.userId,
+            role: 'assistant',
+            content: encrypt(chatMsg.prompt),
+            mode: chatMsg.mode,
+            tokensCost: 0,
+            mediaUrl,
+          },
+        }).catch(() => {});
+      }
     } catch {}
   }, delayMs);
 }
@@ -182,8 +201,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         const job = await prisma.generateJob.create({
           data: { userId, mode: 'sound', prompt, status: 'processing' },
         });
-        // Simulate generation (8–14 s) so UI shows loading animation
-        completeCachedJobAfterDelay(job.id, mediaCached.url, 8_000 + Math.random() * 6_000);
+        // Simulate generation (8–14 s) so UI shows loading animation;
+        // also persist the assistant message so it survives page refresh.
+        completeCachedJobAfterDelay(
+          job.id, mediaCached.url, 8_000 + Math.random() * 6_000,
+          chatId ? { chatId, userId, prompt, mode: 'sound' } : undefined,
+        );
         return reply.code(202).send({ jobId: job.id });
       }
 
@@ -255,8 +278,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
           const job = await prisma.generateJob.create({
             data: { userId, mode: 'reel', prompt, status: 'processing' },
           });
-          // Simulate generation (10–18 s) so UI shows loading animation
-          completeCachedJobAfterDelay(job.id, mediaCached.url, 10_000 + Math.random() * 8_000);
+          // Simulate generation (10–18 s) so UI shows loading animation;
+          // also persist the assistant message so it survives page refresh.
+          completeCachedJobAfterDelay(
+            job.id, mediaCached.url, 10_000 + Math.random() * 8_000,
+            chatId ? { chatId, userId, prompt, mode: 'reel' } : undefined,
+          );
           return reply.code(202).send({ jobId: job.id });
         }
       }

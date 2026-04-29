@@ -132,7 +132,6 @@ export async function generateMusicSuno(
       console.info(`[Suno] SUCCESS data (no param): ${JSON.stringify(filtered).slice(0, 2000)}`);
 
       // Try multiple possible response paths from sunoapi.org
-      const d = pollData.data;
       const songs: any[] =
         d?.response?.data ??        // documented path
         d?.response?.clips ??       // alternative

@@ -184,7 +184,7 @@ function MusicPageInner() {
   const [studioDuration, setStudioDuration] = useState(30);
   const [sunoStyle, setSunoStyle] = useState('');
   const [sunoTitle, setSunoTitle] = useState('');
-  const [sunoInstrumental, setSunoInstrumental] = useState(true);
+  const [sunoInstrumental, setSunoInstrumental] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [generating, setGenerating] = useState(false);
   const mountedRef = useRef(true);

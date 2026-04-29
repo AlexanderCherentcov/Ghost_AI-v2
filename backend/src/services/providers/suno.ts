@@ -71,16 +71,26 @@ export async function generateMusicSuno(
   });
 
   if (!createRes.ok) {
-    const err = await createRes.text().catch(() => createRes.statusText);
-    throw new Error(`Suno create failed (${createRes.status}): ${err}`);
+    const errText = await createRes.text().catch(() => createRes.statusText);
+    // Try to parse JSON error body
+    let parsedErr: any = null;
+    try { parsedErr = JSON.parse(errText); } catch {}
+    const errMsg: string = parsedErr?.msg ?? errText;
+    if (errMsg.toLowerCase().includes('artist name')) {
+      const match = errMsg.match(/artist name\s+(\S+)/i);
+      const word = match?.[1] ? ` («${match[1]}»)` : '';
+      throw new Error(`Suno заблокировал слово в тексте${word} — оно похоже на имя артиста. Замените это слово в lyrics и попробуйте снова.`);
+    }
+    throw new Error(`Suno create failed (${createRes.status}): ${errMsg}`);
   }
 
   const createData = (await createRes.json()) as any;
   if (createData.code !== 200) {
     const msg: string = createData.msg ?? JSON.stringify(createData).slice(0, 200);
-    // Surface friendly messages for known Suno policy violations
-    if (msg.includes('artist name') || msg.includes('reference')) {
-      throw new Error('Suno не разрешает упоминать имена артистов в описании. Опишите стиль или жанр вместо конкретного исполнителя.');
+    if (msg.toLowerCase().includes('artist name')) {
+      const match = msg.match(/artist name\s+(\S+)/i);
+      const word = match?.[1] ? ` («${match[1]}»)` : '';
+      throw new Error(`Suno заблокировал слово в тексте${word} — оно похоже на имя артиста. Замените это слово в lyrics и попробуйте снова.`);
     }
     throw new Error(`Suno API error: ${msg}`);
   }

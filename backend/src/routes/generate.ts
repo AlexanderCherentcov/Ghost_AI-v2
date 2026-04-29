@@ -35,6 +35,21 @@ const generateSchema = z.object({
   sunoInstrumental: z.boolean().optional(),
 });
 
+/**
+ * Simulate generation delay for cache hits so the UI shows loading animation.
+ * Completes the job in background after a realistic delay.
+ */
+function completeCachedJobAfterDelay(jobId: string, mediaUrl: string, delayMs: number) {
+  setTimeout(async () => {
+    try {
+      await prisma.generateJob.update({
+        where: { id: jobId },
+        data: { status: 'done', mediaUrl },
+      });
+    } catch {}
+  }, delayMs);
+}
+
 export default async function generateRoutes(fastify: FastifyInstance) {
   // ── Vision (image generation) ─────────────────────────────────────────────
   fastify.post('/generate/vision', {
@@ -80,8 +95,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
             }).catch(() => {});
           }
           const job = await prisma.generateJob.create({
-            data: { userId, mode: 'vision', prompt, status: 'done', mediaUrl: mediaCached.url },
+            data: { userId, mode: 'vision', prompt, status: 'processing' },
           });
+          // Simulate generation (5–9 s) so UI shows loading animation
+          completeCachedJobAfterDelay(job.id, mediaCached.url, 5_000 + Math.random() * 4_000);
           return reply.code(202).send({ jobId: job.id });
         }
       }
@@ -163,8 +180,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
 
       if (mediaCached.hit) {
         const job = await prisma.generateJob.create({
-          data: { userId, mode: 'sound', prompt, status: 'done', mediaUrl: mediaCached.url },
+          data: { userId, mode: 'sound', prompt, status: 'processing' },
         });
+        // Simulate generation (8–14 s) so UI shows loading animation
+        completeCachedJobAfterDelay(job.id, mediaCached.url, 8_000 + Math.random() * 6_000);
         return reply.code(202).send({ jobId: job.id });
       }
 
@@ -234,8 +253,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         if (mediaCached.hit) {
           await checkAndDeduct(userId, 'video_generate', videoCount);
           const job = await prisma.generateJob.create({
-            data: { userId, mode: 'reel', prompt, status: 'done', mediaUrl: mediaCached.url },
+            data: { userId, mode: 'reel', prompt, status: 'processing' },
           });
+          // Simulate generation (10–18 s) so UI shows loading animation
+          completeCachedJobAfterDelay(job.id, mediaCached.url, 10_000 + Math.random() * 8_000);
           return reply.code(202).send({ jobId: job.id });
         }
       }

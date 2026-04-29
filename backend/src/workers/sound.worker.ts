@@ -92,27 +92,42 @@ export function startSoundWorker() {
       // ── Выбор модели по режиму пользователя ────────────────────────────────
       let externalUrl: string;
 
+      // DiffRhythm doesn't support Cyrillic text — auto-fallback to Suno for Russian lyrics
+      const hasCyrillic = (text?: string) => text ? /[Ѐ-ӿ]/.test(text) : false;
+      const needsSunoFallback = !!lyrics && hasCyrillic(lyrics);
+
       if (musicMode === 'suno') {
-        console.info(`[SoundWorker] suno mode → Suno API | style="${sunoStyle ?? ''}" instrumental=${sunoInstrumental ?? true}`);
+        console.info(`[SoundWorker] suno mode → Suno API | style="${sunoStyle ?? ''}" instrumental=${sunoInstrumental ?? false}`);
         externalUrl = await generateMusicSuno(prompt, {
           style: sunoStyle,
           title: sunoTitle,
-          instrumental: sunoInstrumental ?? true,
+          instrumental: sunoInstrumental ?? false,
+          lyrics,
           model: 'V5_5',
         });
       } else if (musicMode === 'quality') {
         console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);
         externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
       } else if (musicMode === 'long') {
-        console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics}`);
-        externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics);
-      } else {
-        const route = routeAudio(prompt);
-        console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd} | lyrics=${!!lyrics}`);
-        if (route.model === 'udio') {
-          externalUrl = await generateMusicUdio(prompt);
+        if (needsSunoFallback) {
+          console.info(`[SoundWorker] long mode + Cyrillic lyrics → Suno fallback (DiffRhythm doesn't support Russian)`);
+          externalUrl = await generateMusicSuno(prompt, { instrumental: false, lyrics, model: 'V5_5' });
         } else {
-          externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics);
+          console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics}`);
+          externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics);
+        }
+      } else {
+        if (needsSunoFallback) {
+          console.info(`[SoundWorker] short mode + Cyrillic lyrics → Suno fallback (DiffRhythm doesn't support Russian)`);
+          externalUrl = await generateMusicSuno(prompt, { instrumental: false, lyrics, model: 'V5_5' });
+        } else {
+          const route = routeAudio(prompt);
+          console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd} | lyrics=${!!lyrics}`);
+          if (route.model === 'udio') {
+            externalUrl = await generateMusicUdio(prompt);
+          } else {
+            externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics);
+          }
         }
       }
 

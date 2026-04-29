@@ -29,6 +29,12 @@ export interface SunoOptions {
    * V4_5 / V4_5PLUS / V4_5ALL / V5 / V5_5 — up to 8 min.
    */
   model?: 'V4' | 'V4_5' | 'V4_5PLUS' | 'V4_5ALL' | 'V5' | 'V5_5';
+  /**
+   * Song lyrics. When provided, they are sent as the prompt body in custom mode
+   * (Suno uses `prompt` as lyrics in custom mode).
+   * The `prompt` arg passed to generateMusicSuno becomes the style description.
+   */
+  lyrics?: string;
 }
 
 /**
@@ -46,20 +52,31 @@ export async function generateMusicSuno(
     title,
     instrumental = true,
     model = 'V4_5',
+    lyrics,
   } = options;
 
-  // Custom mode requires style + title
-  const customMode = !!(style?.trim() || title?.trim());
+  // Custom mode is needed for style/title/lyrics. When lyrics are provided,
+  // Suno expects them as the `prompt` body and the music description as `style`.
+  const customMode = !!(style?.trim() || title?.trim() || lyrics?.trim());
+  // In custom mode: use lyrics as prompt body if available; otherwise use description.
+  const promptBody = lyrics?.trim()
+    ? lyrics.trim().slice(0, 5000)
+    : prompt.slice(0, customMode ? 5000 : 500);
+
+  // When lyrics are provided, use the original prompt as style (if no style given).
+  const effectiveStyle = (lyrics?.trim() && !style?.trim())
+    ? prompt.slice(0, 200)
+    : style?.trim();
 
   const apiBase = process.env.API_URL ?? 'https://api.ghostlineai.ru';
 
   const body: Record<string, unknown> = {
-    prompt: prompt.slice(0, customMode ? 5000 : 500),
+    prompt: promptBody,
     model,
     customMode,
     instrumental,
     callBackUrl: `${apiBase}/api/suno/callback`,
-    ...(customMode && style?.trim() ? { style: style.trim() } : {}),
+    ...(customMode && effectiveStyle ? { style: effectiveStyle } : {}),
     ...(customMode && title?.trim() ? { title: title.trim() } : {}),
   };
 

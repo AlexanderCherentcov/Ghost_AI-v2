@@ -77,7 +77,7 @@ export function startReelWorker() {
         console.info(`[ReelWorker] FREE → Kling V-2.5 | ${genMode} | ${klingDuration}s | audio=${enableAudio}`);
         externalUrl = await generateVideoKling(prompt, {
           duration: klingDuration,
-          aspectRatio: aspectRatio === '1:1' ? '1:1' : aspectRatio,
+          aspectRatio,
           enableAudio,
           imageUrl: imageUrl ?? undefined,
           negativePrompt: negativePrompt || undefined,

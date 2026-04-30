@@ -112,6 +112,4 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Plans info (public) ───────────────────────────────────────────────────
-  fastify.get('/plans', async () => ({ plans: PLANS }));
 }

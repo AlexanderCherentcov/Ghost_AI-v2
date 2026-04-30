@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { FREE_LIMITS, CASPER_COSTS as _COSTS, PRO_FREE_QUOTA as _QUOTA } from '../config/plans.js';
+import { FREE_LIMITS, CASPER_COSTS as _COSTS } from '../config/plans.js';
 
 export type RequestType =
   | 'chat_std'
@@ -12,25 +12,32 @@ export type RequestType =
   | 'video_pro_8s'
   | 'music_generate';
 
-// ─── Re-export from config (single source of truth) ──────────────────────────
+// ─── Casper costs (chat_std is always free) ───────────────────────────────────
 
 export const CASPER_COSTS: Record<RequestType, number> = {
-  chat_std: 0,
-  ..._COSTS,
-} as const;
+  chat_std:       0,
+  chat_pro:       _COSTS.chat_pro,
+  image_generate: _COSTS.image_generate,
+  image_edit:     _COSTS.image_edit,
+  video_std_4s:   _COSTS.video_std_4s,
+  video_std_8s:   _COSTS.video_std_8s,
+  video_pro_4s:   _COSTS.video_pro_4s,
+  video_pro_8s:   _COSTS.video_pro_8s,
+  music_generate: _COSTS.music_generate,
+};
 
 export const FREE_WEEKLY_LIMITS = {
   images: FREE_LIMITS.images_weekly,
   music:  FREE_LIMITS.music_weekly,
-} as const;
+};
 
 export const FREE_MONTHLY_LIMITS = {
   videos: FREE_LIMITS.videos_monthly,  // 3 видео в месяц
-} as const;
+};
 
 export const FREE_DAILY_LIMITS = {
   std_messages: FREE_LIMITS.std_messages_daily,
-} as const;
+};
 
 // ─── Pro chat free quota per plan per day (-1 = unlimited) ───────────────────
 

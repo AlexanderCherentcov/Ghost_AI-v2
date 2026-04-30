@@ -265,6 +265,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const effectiveDuration = videoDuration ?? '8s';
       const videoRequestType = resolveVideoRequestType(effectiveModel, effectiveDuration);
 
+      // Fetch user plan — FREE users get Kling, paid get Veo3.1
+      const userRecord = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      const userPlan = userRecord?.plan ?? 'FREE';
+
       // Reset counters if period ended
       await checkResets(userId);
 
@@ -317,6 +321,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
+        userPlan,
         chatId: chatId ?? null,
         videoModel: effectiveModel,
         duration: effectiveDuration,

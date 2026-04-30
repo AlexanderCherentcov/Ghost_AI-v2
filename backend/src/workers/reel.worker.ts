@@ -6,7 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoVeo3, type VeoModel, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
+import { generateVideoVeo3, generateVideoKling, type VeoModel, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
@@ -35,6 +35,7 @@ interface ReelJob {
   jobId: string;
   userId: string;
   prompt: string;
+  userPlan?: string;
   chatId: string | null;
   videoModel?: VeoModel;
   duration?: VeoDuration;
@@ -50,7 +51,7 @@ export function startReelWorker() {
     'reel',
     async (job: Job<ReelJob>) => {
       const {
-        jobId, userId, prompt, chatId,
+        jobId, userId, prompt, userPlan = 'FREE', chatId,
         videoModel = 'standard',
         duration = '8s',
         aspectRatio = '16:9',
@@ -66,17 +67,34 @@ export function startReelWorker() {
       });
 
       const genMode = imageUrl ? 'img2video' : 'txt2video';
-      console.info(`[ReelWorker] Veo3.1 ${videoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
+      const isFree = userPlan === 'FREE';
 
-      const externalUrl = await generateVideoVeo3(prompt, {
-        model: videoModel,
-        duration,
-        aspectRatio,
-        generateAudio: enableAudio,
-        resolution,
-        imageUrl: imageUrl ?? undefined,
-        negativePrompt: negativePrompt || undefined,
-      });
+      let externalUrl: string;
+
+      if (isFree) {
+        // FREE план → Kling V-2.5 (дешевле, экономия на бесплатных генерациях)
+        const klingDuration = duration === '4s' ? 5 : 5; // Kling: 5 or 10s
+        console.info(`[ReelWorker] FREE → Kling V-2.5 | ${genMode} | ${klingDuration}s | audio=${enableAudio}`);
+        externalUrl = await generateVideoKling(prompt, {
+          duration: klingDuration,
+          aspectRatio: aspectRatio === '1:1' ? '1:1' : aspectRatio,
+          enableAudio,
+          imageUrl: imageUrl ?? undefined,
+          negativePrompt: negativePrompt || undefined,
+        });
+      } else {
+        // Платный план → Veo3.1 Standard или Pro
+        console.info(`[ReelWorker] Veo3.1 ${videoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
+        externalUrl = await generateVideoVeo3(prompt, {
+          model: videoModel,
+          duration,
+          aspectRatio,
+          generateAudio: enableAudio,
+          resolution,
+          imageUrl: imageUrl ?? undefined,
+          negativePrompt: negativePrompt || undefined,
+        });
+      }
 
       // ── Сразу помечаем done с внешним URL ──────────────────────────────────
       await prisma.generateJob.update({
@@ -148,6 +166,6 @@ export function startReelWorker() {
     console.info(`[ReelWorker] Job ${job.id} completed`);
   });
 
-  console.info('[ReelWorker] Started (Veo3 Standard/Pro)');
+  console.info('[ReelWorker] Started (FREE→Kling, Paid→Veo3.1 Standard/Pro)');
   return worker;
 }

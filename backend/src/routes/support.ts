@@ -51,7 +51,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           pro_messages_today: true,
           images_this_week:   true,
           music_this_week:    true,
-          videos_this_week:   true,
+          videos_this_month:   true,
         },
       });
       if (user) {
@@ -66,7 +66,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
             : '',
           `Caspers: ${user.caspers_balance}/${user.caspers_monthly}/мес`,
           user.plan === 'FREE' ? `🖼 Картинки/нед: ${user.images_this_week}/5` : '',
-          user.plan === 'FREE' ? `🎬 Видео/нед: ${user.videos_this_week}/3` : '',
+          user.plan === 'FREE' ? `🎬 Видео/мес: ${user.videos_this_month}/3` : '',
         ].filter(Boolean).join('\n');
       }
     } catch {

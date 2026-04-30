@@ -55,7 +55,7 @@ const USER_SELECT = {
   pro_messages_today: true,
   images_this_week: true,
   music_this_week: true,
-  videos_this_week: true,
+  videos_this_month: true,
   day_start: true,
   week_start: true,
   period_start: true,
@@ -150,7 +150,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         // Reset weekly counters
         images_this_week: 0,
         music_this_week:  0,
-        videos_this_week: 0,
+        videos_this_month: 0,
         week_start: new Date(),
       },
     });
@@ -184,7 +184,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         pro_messages_today: 0,
         images_this_week:   0,
         music_this_week:    0,
-        videos_this_week:   0,
+        videos_this_month:   0,
         day_start:   today,
         week_start:  today,
         period_start: today,

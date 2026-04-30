@@ -6,6 +6,7 @@ import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
+import { callCloudflareJSON } from '../services/providers/cloudflare.js';
 import { encrypt } from '../lib/crypto.js';
 import { notifyApiError } from '../services/admin-notify.js';
 import crypto from 'crypto';
@@ -18,7 +19,8 @@ const generateSchema = z.object({
   size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional(),
   sourceImageUrl: z.string().url().optional(), // for image editing mode
   // Video-specific options
-  videoModel: z.enum(['standard', 'pro']).optional(),
+  // motion = Veo 3.1 Fast, cinema = Veo 3.1 Pro, reality = Kling V-2.5
+  videoModel: z.enum(['standard', 'pro', 'motion', 'cinema', 'reality']).optional(),
   videoDuration: z.enum(['4s', '8s']).optional(),
   videoAspectRatio: z.enum(['16:9', '9:16']).optional(),
   videoEnableAudio: z.boolean().optional(),
@@ -349,6 +351,43 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       });
 
       return reply.code(202).send({ jobId: job.id });
+    },
+  });
+
+  // ── Lyrics generator ─────────────────────────────────────────────────────
+  fastify.post('/generate/lyrics', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { topic, style, instrumental } = z.object({
+        topic: z.string().min(1).max(300),
+        style: z.string().max(100).optional(),
+        instrumental: z.boolean().optional(),
+      }).parse(request.body);
+
+      if (instrumental) {
+        return reply.send({ lyrics: '' });
+      }
+
+      const styleHint = style ? ` in ${style} style` : '';
+      const systemMsg = `You are a professional songwriter. Write song lyrics${styleHint} about: "${topic}".
+Rules:
+- 2-3 verses + 1 chorus, total ~12-16 lines
+- No section headers like [Verse] or [Chorus]
+- No timestamps
+- Emotional, vivid imagery
+- Match the style/genre if specified
+- Respond in the same language as the topic
+Return ONLY the lyrics text, nothing else.`;
+
+      try {
+        const lyrics = await callCloudflareJSON(
+          [{ role: 'user', content: systemMsg }],
+          512,
+        );
+        return reply.send({ lyrics: lyrics.trim() });
+      } catch {
+        return reply.code(502).send({ error: 'Не удалось сгенерировать текст' });
+      }
     },
   });
 

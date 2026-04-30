@@ -133,10 +133,11 @@ export async function checkResets(userId: string): Promise<void> {
 // ─── Resolve video request type from model + duration ─────────────────────────
 
 export function resolveVideoRequestType(
-  model: 'standard' | 'pro' = 'standard',
+  model: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality' = 'standard',
   duration: '4s' | '8s' = '8s',
 ): RequestType {
-  if (model === 'pro') {
+  // cinema = Veo 3.1 Pro (expensive), motion/standard = Veo 3.1 Fast, reality = Kling (std pricing)
+  if (model === 'pro' || model === 'cinema') {
     return duration === '4s' ? 'video_pro_4s' : 'video_pro_8s';
   }
   return duration === '4s' ? 'video_std_4s' : 'video_std_8s';

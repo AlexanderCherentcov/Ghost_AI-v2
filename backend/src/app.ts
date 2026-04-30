@@ -23,6 +23,7 @@ import generateRoutes from './routes/generate.js';
 import supportRoutes from './routes/support.js';
 import adminRoutes from './routes/admin.js';
 import plansRoutes from './routes/plans.js';
+import dispatchRoutes from './routes/dispatch.js';
 
 import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
@@ -136,7 +137,8 @@ export async function buildApp() {
   await fastify.register(generateRoutes, { prefix: '/api' });
   await fastify.register(supportRoutes, { prefix: '/api' });
   await fastify.register(adminRoutes,   { prefix: '/api' });
-  await fastify.register(plansRoutes,   { prefix: '/api' });
+  await fastify.register(plansRoutes,    { prefix: '/api' });
+  await fastify.register(dispatchRoutes, { prefix: '/api' });
 
   // ── Static image serving (generated images saved to disk) ────────────────
   fastify.get('/images/:filename', async (request, reply) => {

@@ -6,7 +6,9 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoVeo3, generateVideoKling, type VeoModel, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
+import { generateVideoVeo3, generateVideoKling, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
+
+type VideoModelInput = 'standard' | 'pro' | 'motion' | 'cinema' | 'reality';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
@@ -37,7 +39,7 @@ interface ReelJob {
   prompt: string;
   userPlan?: string;
   chatId: string | null;
-  videoModel?: VeoModel;
+  videoModel?: VideoModelInput;
   duration?: VeoDuration;
   aspectRatio?: '16:9' | '9:16';
   enableAudio?: boolean;
@@ -69,12 +71,20 @@ export function startReelWorker() {
       const genMode = imageUrl ? 'img2video' : 'txt2video';
       const isFree = userPlan === 'FREE';
 
+      // Resolve effective engine:
+      // - FREE plan always → Kling (regardless of selection)
+      // - reality → Kling
+      // - motion/standard → Veo3.1 Fast
+      // - cinema/pro → Veo3.1 Pro
+      const useKling = isFree || videoModel === 'reality';
+      const veoModel: 'standard' | 'pro' =
+        (videoModel === 'pro' || videoModel === 'cinema') ? 'pro' : 'standard';
+
       let externalUrl: string;
 
-      if (isFree) {
-        // FREE план → Kling V-2.5 (дешевле, экономия на бесплатных генерациях)
-        const klingDuration = duration === '4s' ? 5 : 5; // Kling: 5 or 10s
-        console.info(`[ReelWorker] FREE → Kling V-2.5 | ${genMode} | ${klingDuration}s | audio=${enableAudio}`);
+      if (useKling) {
+        const klingDuration = duration === '4s' ? 5 : 10;
+        console.info(`[ReelWorker] ${isFree ? 'FREE' : 'Reality'} → Kling V-2.5 | ${genMode} | ${klingDuration}s | audio=${enableAudio}`);
         externalUrl = await generateVideoKling(prompt, {
           duration: klingDuration,
           aspectRatio,
@@ -83,10 +93,10 @@ export function startReelWorker() {
           negativePrompt: negativePrompt || undefined,
         });
       } else {
-        // Платный план → Veo3.1 Standard или Pro
-        console.info(`[ReelWorker] Veo3.1 ${videoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
+        // Paid → Veo3.1 (Fast for motion/standard, Pro for cinema/pro)
+        console.info(`[ReelWorker] Veo3.1 ${veoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
         externalUrl = await generateVideoVeo3(prompt, {
-          model: videoModel,
+          model: veoModel,
           duration,
           aspectRatio,
           generateAudio: enableAudio,

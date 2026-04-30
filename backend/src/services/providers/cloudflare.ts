@@ -21,6 +21,34 @@ function getCfHeaders(): Record<string, string> {
   };
 }
 
+// ─── One-shot JSON call (for dispatcher / lyrics) ────────────────────────────
+
+export async function callCloudflareJSON(
+  messages: ChatMessage[],
+  maxTokens = 512,
+): Promise<string> {
+  const cfMessages = messages.map((m) => ({
+    role: m.role,
+    content: typeof m.content === 'string'
+      ? m.content
+      : (m.content as any[]).map((p: any) => (p.type === 'text' ? p.text : '')).join(''),
+  }));
+
+  const response = await fetch(getCfUrl(), {
+    method: 'POST',
+    headers: getCfHeaders(),
+    body: JSON.stringify({ messages: cfMessages, stream: false, max_tokens: maxTokens }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => response.statusText);
+    throw new Error(`Cloudflare AI error ${response.status}: ${errText}`);
+  }
+
+  const data = (await response.json()) as any;
+  return data?.result?.response ?? data?.response ?? '';
+}
+
 // ─── Streaming text from Cloudflare AI ────────────────────────────────────────
 
 export async function* streamCloudflare(

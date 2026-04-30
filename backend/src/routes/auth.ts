@@ -437,13 +437,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
           // Daily counters
           std_messages_today: true,
           pro_messages_today: true,
-          // FREE tier weekly counters
+          // FREE tier weekly/monthly counters
           images_this_week: true,
           music_this_week: true,
-          videos_this_week: true,
+          videos_this_month: true,
           // Period timestamps
           day_start: true,
           week_start: true,
+          month_start: true,
           period_start: true,
           // Profile
           purposes: true,

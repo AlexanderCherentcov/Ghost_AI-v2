@@ -187,7 +187,7 @@ export default function BillingPage() {
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 сообщений/день</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 картинок/неделю</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 треков/неделю</p>
-                  <p className="text-xs text-[rgba(255,255,255,0.4)]">3 видео/неделю</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">3 видео/месяц</p>
                 </div>
               )}
             </div>
@@ -268,7 +268,7 @@ export default function BillingPage() {
                       {fakePrice.toLocaleString('ru-RU')} ₽
                     </span>
                     <span className="text-xs font-medium bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
-                      Скидка 50%
+                      {billingCycle === 'yearly' ? 'Скидка 70%' : 'Скидка 50%'}
                     </span>
                   </div>
                   <div className="text-2xl font-medium mb-1">
@@ -315,7 +315,7 @@ export default function BillingPage() {
             <div>
               <span className="font-medium text-white text-sm">Бесплатный план</span>
               <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
-                5 сообщений/день · 5 картинок/неделю · 3 видео/неделю · 5 треков/неделю
+                5 сообщений/день · 5 картинок/неделю · 5 треков/неделю · 3 видео/месяц
               </span>
             </div>
             {plan === 'FREE' && (

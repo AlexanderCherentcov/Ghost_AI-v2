@@ -55,13 +55,15 @@ model User {
   pro_messages_today  Int      @default(0)
 
   // ── FREE tier weekly counters (reset at week_start + 7 days) ─────────────
-  images_this_week  Int      @default(0)
-  music_this_week   Int      @default(0)
-  videos_this_week  Int      @default(0)
+  images_this_week   Int      @default(0)
+  music_this_week    Int      @default(0)
+  // ── FREE tier monthly counter (reset at month_start + 30 days) ───────────
+  videos_this_month  Int      @default(0)
 
   // ── Timestamps for period resets ─────────────────────────────────────────
   day_start    DateTime  @default(now())
   week_start   DateTime  @default(now())
+  month_start  DateTime  @default(now())
   period_start DateTime  @default(now())
 
   // ── Onboarding ────────────────────────────────────────────────────────────

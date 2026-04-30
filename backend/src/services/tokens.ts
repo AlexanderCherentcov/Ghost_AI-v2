@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { FREE_LIMITS, CASPER_COSTS as _COSTS, PRO_FREE_QUOTA as _QUOTA } from '../config/plans.js';
 
 export type RequestType =
   | 'chat_std'
@@ -11,36 +12,27 @@ export type RequestType =
   | 'video_pro_8s'
   | 'music_generate';
 
-// ─── Casper costs per operation ───────────────────────────────────────────────
+// ─── Re-export from config (single source of truth) ──────────────────────────
 
 export const CASPER_COSTS: Record<RequestType, number> = {
-  chat_std:      0,   // std chat is free on all plans
-  chat_pro:      1,
-  image_generate: 10,
-  image_edit:    10,
-  video_std_4s:  25,
-  video_std_8s:  40,
-  video_pro_4s:  50,
-  video_pro_8s:  90,
-  music_generate: 5,
+  chat_std: 0,
+  ..._COSTS,
 } as const;
-
-// ─── FREE tier weekly limits ──────────────────────────────────────────────────
 
 export const FREE_WEEKLY_LIMITS = {
-  images: 5,
-  music:  5,
-  videos: 3,
+  images: FREE_LIMITS.images_weekly,
+  music:  FREE_LIMITS.music_weekly,
 } as const;
 
-// ─── FREE tier daily limits ───────────────────────────────────────────────────
+export const FREE_MONTHLY_LIMITS = {
+  videos: FREE_LIMITS.videos_monthly,  // 3 видео в месяц
+} as const;
 
 export const FREE_DAILY_LIMITS = {
-  std_messages: 5,
+  std_messages: FREE_LIMITS.std_messages_daily,
 } as const;
 
-// ─── Pro chat free quota per plan per day ─────────────────────────────────────
-// -1 = unlimited
+// ─── Pro chat free quota per plan per day (-1 = unlimited) ───────────────────
 
 export const PRO_FREE_QUOTA: Record<string, number> = {
   FREE:  0,
@@ -71,6 +63,7 @@ export async function checkResets(userId: string): Promise<void> {
       plan: true,
       day_start: true,
       week_start: true,
+      month_start: true,
       period_start: true,
       caspers_monthly: true,
       caspers_balance: true,
@@ -80,7 +73,7 @@ export async function checkResets(userId: string): Promise<void> {
 
   const updates: Record<string, unknown> = {};
 
-  // Daily reset (std chat counter)
+  // Daily reset (std/pro chat counters)
   const dayEnd = new Date(user.day_start);
   dayEnd.setDate(dayEnd.getDate() + 1);
   if (now >= dayEnd) {
@@ -89,23 +82,29 @@ export async function checkResets(userId: string): Promise<void> {
     updates.day_start = now;
   }
 
-  // Weekly reset (FREE tier image/music/video counters)
+  // Weekly reset (FREE tier: images + music)
   const weekEnd = new Date(user.week_start);
   weekEnd.setDate(weekEnd.getDate() + 7);
   if (now >= weekEnd) {
     updates.images_this_week = 0;
-    updates.music_this_week = 0;
-    updates.videos_this_week = 0;
-    updates.week_start = now;
+    updates.music_this_week  = 0;
+    updates.week_start       = now;
   }
 
-  // Monthly caspers grant: when period_start + 30 days passed
+  // Monthly reset (FREE tier: videos — 3/месяц)
+  const monthEnd = new Date(user.month_start);
+  monthEnd.setDate(monthEnd.getDate() + 30);
+  if (now >= monthEnd) {
+    updates.videos_this_month = 0;
+    updates.month_start       = now;
+  }
+
+  // Monthly caspers grant: when period_start + 30 days passed (paid plans only)
   const periodEnd = new Date(user.period_start);
   periodEnd.setDate(periodEnd.getDate() + 30);
   if (now >= periodEnd && user.caspers_monthly > 0) {
-    // Add monthly caspers to balance
     updates.caspers_balance = user.caspers_balance + user.caspers_monthly;
-    updates.period_start = now;
+    updates.period_start    = now;
   }
 
   if (Object.keys(updates).length > 0) {
@@ -154,7 +153,7 @@ export async function checkAndDeduct(
         pro_messages_today: true,
         images_this_week: true,
         music_this_week: true,
-        videos_this_week: true,
+        videos_this_month: true,
       },
     });
     if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
@@ -289,13 +288,13 @@ export async function checkAndDeduct(
       requestType === 'video_pro_8s'
     ) {
       if (plan === 'FREE') {
-        if (user.videos_this_week >= FREE_WEEKLY_LIMITS.videos) {
+        if (user.videos_this_month >= FREE_MONTHLY_LIMITS.videos) {
           throw Object.assign(
-            new Error('Лимит видео на этой неделе исчерпан'),
+            new Error('Лимит видео в этом месяце исчерпан (3/мес на бесплатном)'),
             { code: 'LIMIT_VIDEOS' },
           );
         }
-        await tx.user.update({ where: { id: userId }, data: { videos_this_week: { increment: 1 } } });
+        await tx.user.update({ where: { id: userId }, data: { videos_this_month: { increment: 1 } } });
         return;
       }
       // Paid plans: deduct caspers
@@ -336,11 +335,11 @@ export async function refundCaspers(
     // FREE plan users don't have caspers deducted for images/music/videos
     const isFreeWeeklyOp =
       requestType === 'image_generate' ||
-      requestType === 'image_edit' ||
+      requestType === 'image_edit'     ||
       requestType === 'music_generate' ||
-      requestType === 'video_std_4s' ||
-      requestType === 'video_std_8s' ||
-      requestType === 'video_pro_4s' ||
+      requestType === 'video_std_4s'   ||
+      requestType === 'video_std_8s'   ||
+      requestType === 'video_pro_4s'   ||
       requestType === 'video_pro_8s';
 
     if (plan === 'FREE' && isFreeWeeklyOp) return;

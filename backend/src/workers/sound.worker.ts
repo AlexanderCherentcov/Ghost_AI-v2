@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateMusicDiffRhythm, generateMusicUdio } from '../services/providers/goapi.js';
+import { generateMusicDiffRhythm } from '../services/providers/goapi.js';
 import { generateMusicSuno } from '../services/providers/suno.js';
 import { routeAudio } from '../services/audio-router.js';
 import { setMediaCached } from '../services/cache.js';
@@ -89,20 +89,14 @@ export function startSoundWorker() {
         data: { status: 'processing' },
       });
 
-      // ── Выбор модели по режиму пользователя ────────────────────────────────
+      // ── Все режимы → Suno V5.5, DiffRhythm только как аварийный фолбэк ───────
       let externalUrl: string;
 
-      if (musicMode === 'quality') {
-        // ── Quality: Udio ──────────────────────────────────────────────────────
-        console.info(`[SoundWorker] quality → Udio | duration ${musicDuration ?? 30}s`);
-        externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
-      } else {
-        // ── Все остальные режимы (short / long / suno) → Suno V5.5 ─────────────
-        // DiffRhythm не следует style_prompt — используем только как аварийный фолбэк.
-        const sunoStyleArg  = musicMode === 'suno' ? sunoStyle  : undefined;
-        const sunoTitleArg  = musicMode === 'suno' ? sunoTitle  : undefined;
-        const sunoInstrArg  = musicMode === 'suno' ? (sunoInstrumental ?? false) : false;
-        const diffMode      = musicMode === 'long' ? 'full' : 'base';
+      {
+        const sunoStyleArg = musicMode === 'suno' ? sunoStyle : undefined;
+        const sunoTitleArg = musicMode === 'suno' ? sunoTitle : undefined;
+        const sunoInstrArg = musicMode === 'suno' ? (sunoInstrumental ?? false) : false;
+        const diffMode     = musicMode === 'long' ? 'full' : 'base';
 
         console.info(`[SoundWorker] ${musicMode} → Suno V5.5 | style="${sunoStyleArg ?? prompt.slice(0, 60)}" instrumental=${sunoInstrArg}`);
 
@@ -177,6 +171,6 @@ export function startSoundWorker() {
     console.info(`[SoundWorker] Job ${job.id} completed`);
   });
 
-  console.info('[SoundWorker] Started (DiffRhythm + Udio + Suno, FLAC→MP3 via ffmpeg)');
+  console.info('[SoundWorker] Started (Suno V5.5 primary, DiffRhythm fallback, FLAC→MP3 via ffmpeg)');
   return worker;
 }

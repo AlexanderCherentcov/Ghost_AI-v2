@@ -1,31 +1,23 @@
 /**
  * Video Router — автоматически выбирает модель по промту и контексту.
  *
- * Уровни (дешевле → дороже):
- *   hunyuan_fast          $0.03  — простые/природные сцены, короткий промт
- *   hunyuan_std           $0.09  — средняя сложность текст→видео
- *   hunyuan_img2video     $0.09  — изображение→видео (дешевле Kling на 54%!)
- *   kling_std             $0.195 — люди, лица, кинематика, сложные сцены
+ * Модели:
+ *   veo3_standard   — Veo 3.1 standard (veo3.1-video-fast)
+ *   veo3_pro        — Veo 3.1 pro (veo3.1-video)
+ *   kling_std       — Kling V-2.5
  *
  * Пользователь не видит какая модель используется — бренд «GhostLine».
  */
 
-import type { HunyuanMode } from './providers/goapi.js';
-
-export type VideoModel = 'hunyuan_fast' | 'hunyuan_std' | 'hunyuan_img2video' | 'kling_std';
+export type VideoModel = 'veo3_standard' | 'veo3_pro' | 'kling_std';
 
 export interface VideoRouterResult {
   model: VideoModel;
-  costUsd: number;
   reason: string;
-  // Детали для воркера
-  hunyuanMode?: HunyuanMode;
 }
 
-// ─── Keyword tables ────────────────────────────────────────────────────────────
-
-// Ключевые слова, требующие Kling (люди, лица, точная кинематика)
-const KLING_REQUIRED = [
+// Ключевые слова, требующие высокого качества (Kling / Veo3 Pro)
+const PREMIUM_SCENE = [
   // Люди / персонажи
   'человек', 'люди', 'мужчина', 'женщина', 'девушка', 'парень', 'ребёнок', 'дети',
   'лицо', 'лица', 'портрет', 'руки', 'тело', 'фигура', 'персонаж', 'актёр', 'модель',
@@ -42,90 +34,23 @@ const KLING_REQUIRED = [
   'дерётся', 'дерутся', 'танцует', 'танцуют', 'fighting', 'dancing',
 ];
 
-// Простые сцены — Hunyuan Fast справится
-const SIMPLE_SCENE = [
-  'закат', 'рассвет', 'небо', 'облака', 'море', 'океан', 'волны', 'река', 'озеро',
-  'лес', 'горы', 'поле', 'цветы', 'снег', 'дождь', 'туман', 'звёзды', 'луна',
-  'sunset', 'sunrise', 'sky', 'clouds', 'ocean', 'sea', 'waves', 'river', 'lake',
-  'forest', 'mountains', 'field', 'flowers', 'snow', 'rain', 'fog', 'stars', 'moon',
-  'абстракт', 'abstract', 'частицы', 'particles',
-  'огонь', 'fire', 'дым', 'smoke', 'вода', 'water', 'жидкость', 'liquid',
-  'кот', 'собака', 'птица', 'рыба', 'cat', 'dog', 'bird', 'fish', 'animal',
-];
-
-// ─── Router ────────────────────────────────────────────────────────────────────
-
 export function routeVideo(
   prompt: string,
   hasSourceImage: boolean,
-  duration: number,
-  aspectRatio: '16:9' | '9:16' | '1:1' = '16:9',
+  isPro: boolean,
 ): VideoRouterResult {
   const lower = prompt.toLowerCase();
-  const wordCount = prompt.trim().split(/\s+/).length;
 
-  // ── 10-секундные видео → только Kling (Hunyuan не поддерживает) ──
-  if (duration >= 10) {
-    return {
-      model: 'kling_std',
-      costUsd: 0.39,
-      reason: '10s duration → Kling STD',
-    };
+  // Pro model for complex/human scenes
+  if (isPro || PREMIUM_SCENE.some((kw) => lower.includes(kw))) {
+    return { model: 'veo3_pro', reason: 'pro/premium scene → Veo3.1 Pro' };
   }
 
-  // ── Image-to-video ────────────────────────────────────────────────
+  // Image-to-video → Kling (better motion preservation)
   if (hasSourceImage) {
-    // Если в промте есть люди/лица → Kling лучше сохраняет их пропорции
-    if (KLING_REQUIRED.some((kw) => lower.includes(kw))) {
-      return {
-        model: 'kling_std',
-        costUsd: 0.195,
-        reason: 'image-to-video + human/face → Kling STD',
-      };
-    }
-    // Остальные image-to-video → Hunyuan img2video-concat ($0.09 vs $0.195 у Kling — экономим 54%)
-    return {
-      model: 'hunyuan_img2video',
-      costUsd: 0.09,
-      hunyuanMode: 'img2video-concat',
-      reason: 'image-to-video → Hunyuan img2video-concat',
-    };
+    return { model: 'kling_std', reason: 'image-to-video → Kling STD' };
   }
 
-  // ── Text-to-video: сначала проверяем на Kling-обязательное ────────
-  if (KLING_REQUIRED.some((kw) => lower.includes(kw))) {
-    return {
-      model: 'kling_std',
-      costUsd: 0.195,
-      reason: 'complex/human scene → Kling STD',
-    };
-  }
-
-  // ── Явно простая сцена или короткий промт → Hunyuan Fast ─────────
-  if (SIMPLE_SCENE.some((kw) => lower.includes(kw)) || wordCount <= 6) {
-    return {
-      model: 'hunyuan_fast',
-      costUsd: 0.03,
-      hunyuanMode: 'fast',
-      reason: 'simple/short prompt → Hunyuan Fast',
-    };
-  }
-
-  // ── Длинный промт (> 120 символов) → Hunyuan STD ─────────────────
-  if (prompt.length > 120) {
-    return {
-      model: 'hunyuan_std',
-      costUsd: 0.09,
-      hunyuanMode: 'standard',
-      reason: 'long prompt → Hunyuan STD',
-    };
-  }
-
-  // ── По умолчанию → Hunyuan STD (баланс качества и цены) ──────────
-  return {
-    model: 'hunyuan_std',
-    costUsd: 0.09,
-    hunyuanMode: 'standard',
-    reason: 'default → Hunyuan STD',
-  };
+  // Default → Veo3.1 Standard
+  return { model: 'veo3_standard', reason: 'default → Veo3.1 Standard' };
 }

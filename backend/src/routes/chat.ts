@@ -245,7 +245,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         const hasAttachment = !!(imageUrl || fileContent);
 
         // Route request
-        const { provider, complexity, model, fallbackModel, maxTokens } = route(
+        const { provider, complexity, model, fallbackModels, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
           fastify.log,
@@ -350,7 +350,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Use Cloudflare for std chat, OpenRouter for think/pro
         const stream = provider === 'cloudflare'
           ? streamCloudflare(messages, maxTokens)
-          : streamOpenRouter(messages, model, maxTokens, fallbackModel);
+          : streamOpenRouter(messages, model, maxTokens, fallbackModels);
 
         try {
           for await (const chunk of stream) {

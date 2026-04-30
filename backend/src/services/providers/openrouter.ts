@@ -43,7 +43,7 @@ export async function* streamOpenRouter(
   messages: ChatMessage[],
   model: string,
   maxTokens?: number,
-  fallbackModel?: string
+  fallbackModels?: string[]
 ): AsyncGenerator<{ type: 'token'; data: string } | { type: 'used_model'; model: string }> {
   const client = getClient();
 
@@ -60,15 +60,20 @@ export async function* streamOpenRouter(
     }
   }
 
+  const chain = [model, ...(fallbackModels ?? [])];
   let usedModel = model;
-  try {
-    yield* tryStream(model);
-  } catch (err) {
-    if (!fallbackModel) throw err;
-    usedModel = fallbackModel;
-    yield* tryStream(fallbackModel);
+
+  for (let i = 0; i < chain.length; i++) {
+    try {
+      usedModel = chain[i];
+      yield* tryStream(chain[i]);
+      yield { type: 'used_model' as const, model: usedModel };
+      return;
+    } catch (err) {
+      if (i === chain.length - 1) throw err;
+      // Try next model in chain
+    }
   }
-  yield { type: 'used_model' as const, model: usedModel };
 }
 
 // ─── Image generation (Flux via chat completions) ─────────────────────────────

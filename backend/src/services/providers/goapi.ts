@@ -64,6 +64,7 @@ async function pollTask(
 function extractVideoUrl(data: any): string {
   const output = data?.data?.output ?? data?.output;
   const url: string | undefined =
+    output?.video ??          // Veo3.1 returns { output: { video: "..." } }
     output?.video_url ??
     output?.works?.[0]?.video?.resource_without_watermark ??
     output?.works?.[0]?.video?.resource ??

@@ -347,13 +347,24 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Stream from provider
         let fullResponse = '';
 
-        // Use Cloudflare for std chat, OpenRouter for think/pro
-        const stream = provider === 'cloudflare'
-          ? streamCloudflare(messages, maxTokens)
-          : streamOpenRouter(messages, model, maxTokens, fallbackModels);
+        // Std chat: Cloudflare Llama primary, OpenRouter Llama fallback if CF is down
+        // Pro/think: OpenRouter with model fallback chain
+        async function* buildStream() {
+          if (provider !== 'cloudflare') {
+            yield* streamOpenRouter(messages, model, maxTokens, fallbackModels);
+            return;
+          }
+          try {
+            yield* streamCloudflare(messages, maxTokens);
+          } catch {
+            const cfFallback = fallbackModels?.[0] ?? OR_MODELS.llama;
+            fastify.log.warn(`[chat] Cloudflare down, falling back to ${cfFallback}`);
+            yield* streamOpenRouter(messages, cfFallback, maxTokens);
+          }
+        }
 
         try {
-          for await (const chunk of stream) {
+          for await (const chunk of buildStream()) {
             if (chunk.type === 'token' && chunk.data) {
               fullResponse += chunk.data;
               send({ type: 'token', data: chunk.data });

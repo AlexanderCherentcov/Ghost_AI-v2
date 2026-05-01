@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { callCloudflareJSON } from '../services/providers/cloudflare.js';
+import { callOpenRouterJSON, OR_MODELS } from '../services/providers/openrouter.js';
 
 const bodySchema = z.object({
   prompt: z.string().min(1).max(2000),
@@ -91,13 +92,16 @@ const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
         userContent = `Context:\n${contextText}\n\nNew message to classify: ${prompt}`;
       }
 
-      const raw = await callCloudflareJSON(
-        [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userContent },
-        ],
-        200,
-      );
+      const msgs = [
+        { role: 'system' as const, content: SYSTEM_PROMPT },
+        { role: 'user' as const, content: userContent },
+      ];
+      let raw: string;
+      try {
+        raw = await callCloudflareJSON(msgs, 200);
+      } catch {
+        raw = await callOpenRouterJSON(msgs, OR_MODELS.llama, 200);
+      }
 
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

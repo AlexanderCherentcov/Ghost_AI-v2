@@ -16,7 +16,7 @@ ENV NEXT_PUBLIC_TG_BOT_USERNAME=$NEXT_PUBLIC_TG_BOT_USERNAME
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
-# Build (output: export → produces /app/out)
+# Build (output: standalone → produces /app/.next/standalone)
 COPY . .
 RUN npm run build
 
@@ -25,10 +25,16 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN npm install -g serve@14
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-COPY --from=builder /app/out ./out
+# Copy standalone server output
+COPY --from=builder /app/.next/standalone ./
+# Copy static assets (required by standalone server)
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
-CMD ["serve", "out", "-l", "3000", "--no-clipboard"]
+CMD ["node", "server.js"]

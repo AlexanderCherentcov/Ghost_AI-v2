@@ -2,9 +2,14 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon } from '@/components/icons';
+import { SendIcon, CasperCoin } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+
+// ─── FREE tier limits (must match backend/src/config/plans.ts) ───────────────
+const FREE_IMAGES_WEEKLY  = 5;
+const FREE_MUSIC_WEEKLY   = 5;
+const FREE_VIDEOS_MONTHLY = 3;
 
 // ─── File helpers ─────────────────────────────────────────────────────────────
 
@@ -93,6 +98,74 @@ function calcCaspers(mode: ChatMode, videoOpts: VideoOptions): number {
   return 0;
 }
 
+// ─── Plan-aware cost display ──────────────────────────────────────────────────
+//
+// Returns what to show next to a widget header or toolbar:
+//   { type:'free', label:'3/5 нед.' }   → FREE user with remaining quota
+//   { type:'caspers', amount: 10 }       → paid user OR FREE quota exhausted
+//   null                                 → chat mode (no cost)
+
+type CostDisplay =
+  | { type: 'free'; label: string }
+  | { type: 'caspers'; amount: number }
+  | null;
+
+function getCostDisplay(
+  mode: ChatMode,
+  videoOpts: VideoOptions,
+  userPlan?: string,
+  userImages?: number,
+  userMusic?: number,
+  userVideos?: number,
+): CostDisplay {
+  if (mode === 'chat') return null;
+  const isFree = userPlan === 'FREE';
+
+  if (mode === 'images') {
+    if (isFree) {
+      const left = Math.max(0, FREE_IMAGES_WEEKLY - (userImages ?? 0));
+      if (left > 0) return { type: 'free', label: `${left}/${FREE_IMAGES_WEEKLY} нед.` };
+    }
+    return { type: 'caspers', amount: 10 };
+  }
+
+  if (mode === 'music') {
+    if (isFree) {
+      const left = Math.max(0, FREE_MUSIC_WEEKLY - (userMusic ?? 0));
+      if (left > 0) return { type: 'free', label: `${left}/${FREE_MUSIC_WEEKLY} нед.` };
+    }
+    return { type: 'caspers', amount: 5 };
+  }
+
+  if (mode === 'video') {
+    if (isFree) {
+      const left = Math.max(0, FREE_VIDEOS_MONTHLY - (userVideos ?? 0));
+      if (left > 0) return { type: 'free', label: `${left}/${FREE_VIDEOS_MONTHLY} мес.` };
+    }
+    return { type: 'caspers', amount: calcCaspers('video', videoOpts) };
+  }
+
+  return null;
+}
+
+// ─── Reusable cost badge ──────────────────────────────────────────────────────
+function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
+  if (!cost) return null;
+  if (cost.type === 'free') {
+    return (
+      <span className="text-[11px] font-medium" style={{ color: '#4ade80' }}>
+        {cost.label} бесплатно
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[12px] font-semibold tabular-nums" style={{ color: 'var(--accent)' }}>
+      {cost.amount}
+      <CasperCoin size={size} />
+    </span>
+  );
+}
+
 // ─── Video quality options ────────────────────────────────────────────────────
 
 const VIDEO_QUALITIES: { key: VideoQuality; label: string; desc: string; emoji: string }[] = [
@@ -104,12 +177,14 @@ const VIDEO_QUALITIES: { key: VideoQuality; label: string; desc: string; emoji: 
 // ─── Widget panels ────────────────────────────────────────────────────────────
 
 function VideoWidget({
-  options, onChange,
+  options, onChange, userPlan, userVideos,
 }: {
   options: VideoOptions;
   onChange: (o: VideoOptions) => void;
+  userPlan?: string;
+  userVideos?: number;
 }) {
-  const caspers = calcCaspers('video', options);
+  const cost = getCostDisplay('video', options, userPlan, undefined, undefined, userVideos);
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -121,7 +196,7 @@ function VideoWidget({
     >
       <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
         <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🎬 GhostLine Motion</span>
-        <span className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>{caspers} 💎</span>
+        <CostBadge cost={cost} size={13} />
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-3">
@@ -210,14 +285,17 @@ function VideoWidget({
 }
 
 function MusicWidget({
-  options, onChange, onGenerateLyrics, generatingLyrics, topic,
+  options, onChange, onGenerateLyrics, generatingLyrics, topic, userPlan, userMusic,
 }: {
   options: MusicOptions;
   onChange: (o: MusicOptions) => void;
   onGenerateLyrics: () => void;
   generatingLyrics: boolean;
   topic: string;
+  userPlan?: string;
+  userMusic?: number;
 }) {
+  const cost = getCostDisplay('music', {} as VideoOptions, userPlan, undefined, userMusic, undefined);
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -229,7 +307,7 @@ function MusicWidget({
     >
       <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
         <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🎵 GhostLine Beats</span>
-        <span className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>5 💎</span>
+        <CostBadge cost={cost} size={13} />
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-2.5">
@@ -303,7 +381,8 @@ function MusicWidget({
   );
 }
 
-function ImageWidget() {
+function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?: number }) {
+  const cost = getCostDisplay('images', {} as VideoOptions, userPlan, userImages, undefined, undefined);
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -317,7 +396,7 @@ function ImageWidget() {
         <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🖼️ GhostLine Vision</span>
         <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Опишите изображение в строке ниже</p>
       </div>
-      <span className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>10 💎</span>
+      <CostBadge cost={cost} size={13} />
     </motion.div>
   );
 }
@@ -373,6 +452,10 @@ interface InputBarProps {
   dispatchResult?: { category: string; autoFill: Record<string, unknown> } | null;
   // Notify parent of input changes (for debounced dispatch)
   onInputChange?: (text: string) => void;
+  // User's current usage counters (for FREE plan limit display)
+  userImages?: number;   // images_this_week
+  userMusic?: number;    // music_this_week
+  userVideos?: number;   // videos_this_month
 }
 
 export function InputBar({
@@ -381,6 +464,7 @@ export function InputBar({
   chatMode = 'chat', setChatMode,
   dispatchResult,
   onInputChange,
+  userImages, userMusic, userVideos,
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -505,8 +589,7 @@ export function InputBar({
   }
 
   const hasContent = value.trim() || attachedFile;
-  const caspers = calcCaspers(chatMode, videoOptions);
-  const showCost = chatMode !== 'chat' && caspers > 0;
+  const toolbarCost = getCostDisplay(chatMode, videoOptions, userPlan, userImages, userMusic, userVideos);
   const category = attachedFile ? getFileCategory(attachedFile) : null;
 
   const activePlaceholder = chatMode === 'images'
@@ -524,7 +607,13 @@ export function InputBar({
         {/* Sliding widgets */}
         <AnimatePresence>
           {chatMode === 'video' && (
-            <VideoWidget key="video-widget" options={videoOptions} onChange={setVideoOptions} />
+            <VideoWidget
+              key="video-widget"
+              options={videoOptions}
+              onChange={setVideoOptions}
+              userPlan={userPlan}
+              userVideos={userVideos}
+            />
           )}
           {chatMode === 'music' && (
             <MusicWidget
@@ -534,10 +623,12 @@ export function InputBar({
               onGenerateLyrics={handleGenerateLyrics}
               generatingLyrics={generatingLyrics}
               topic={value.trim() || musicOptions.title || musicOptions.style}
+              userPlan={userPlan}
+              userMusic={userMusic}
             />
           )}
           {chatMode === 'images' && (
-            <ImageWidget key="image-widget" />
+            <ImageWidget key="image-widget" userPlan={userPlan} userImages={userImages} />
           )}
         </AnimatePresence>
 
@@ -641,11 +732,7 @@ export function InputBar({
 
             {/* Cost + Send */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              {showCost && (
-                <span className="text-[11px] font-medium tabular-nums" style={{ color: 'var(--accent)' }}>
-                  {caspers} 💎
-                </span>
-              )}
+              {toolbarCost && <CostBadge cost={toolbarCost} size={13} />}
 
               {isStreaming ? (
                 <motion.button

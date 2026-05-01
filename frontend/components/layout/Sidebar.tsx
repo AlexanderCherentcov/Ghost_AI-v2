@@ -270,7 +270,7 @@ export function Sidebar() {
             {/* FREE weekly limits summary */}
             {plan === 'FREE' && (
               <div className="text-[10px] text-[rgba(255,255,255,0.3)]">
-                {user?.images_this_week ?? 0}/5 картинок · {user?.videos_this_week ?? 0}/3 видео · {user?.music_this_week ?? 0}/5 треков/нед.
+                {user?.images_this_week ?? 0}/5 картинок · {user?.videos_this_month ?? 0}/3 видео/мес · {user?.music_this_week ?? 0}/5 треков/нед.
               </div>
             )}
           </div>

@@ -238,6 +238,38 @@ export function VideoIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
+/** Gold coin with a mini ghost inside — used for Casper currency display */
+export function CasperCoin({ size = 14, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+    >
+      {/* Coin base */}
+      <circle cx="10" cy="10" r="9.5" fill="#F5C518" />
+      <circle cx="10" cy="10" r="9.5" fill="none" stroke="#B8960C" strokeWidth="1" />
+      {/* Coin inner rim */}
+      <circle cx="10" cy="10" r="7.8" fill="none" stroke="#F0D060" strokeWidth="0.5" opacity="0.6" />
+      {/* Highlight blob top-left for 3D feel */}
+      <ellipse cx="7.5" cy="7" rx="2.5" ry="1.8" fill="#FFE866" opacity="0.35" />
+      {/* Ghost body — rounded top, two soft bumps at bottom */}
+      <path
+        d="M7.5 10.8 C7.5 7.8 8.6 5.8 10 5.8 C11.4 5.8 12.5 7.8 12.5 10.8 L12.5 14.8 Q11.2 13.6 10 14.8 Q8.8 13.6 7.5 14.8 Z"
+        fill="white"
+        opacity="0.93"
+      />
+      {/* Ghost eyes */}
+      <circle cx="9" cy="9.8" r="0.9" fill="#8B6508" />
+      <circle cx="11" cy="9.8" r="0.9" fill="#8B6508" />
+    </svg>
+  );
+}
+
 export function ArrowDownIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...svgBase(size, className, style)}>

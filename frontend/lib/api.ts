@@ -215,7 +215,7 @@ export interface User {
   // FREE tier weekly counters
   images_this_week:   number;
   music_this_week:    number;
-  videos_this_week:   number;
+  videos_this_month:  number;
   // Period timestamps
   day_start:    string;
   week_start:   string;

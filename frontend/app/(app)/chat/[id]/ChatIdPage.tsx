@@ -634,15 +634,21 @@ export default function ChatConversationPage() {
     }
     if (chatMode === 'video') {
       if (!prompt.trim()) return;
-      return handleGenerateVideo(prompt, videoOptions);
+      if (!isPromptComposeRequest(prompt)) {
+        return handleGenerateVideo(prompt, videoOptions);
+      }
+      // "напиши промт для видео..." → fall through to AI chat
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;
-      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+      if (!isPromptComposeRequest(prompt)) {
+        return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+      }
+      // "напиши промт для музыки..." → fall through to AI chat
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────
-    // Flag: user wants AI to WRITE an image prompt (not generate an image directly)
+    // Flag: user wants AI to WRITE an image/video/music prompt (not generate directly)
     let isWritingPrompt = false;
 
     if (!file && prompt) {
@@ -774,9 +780,35 @@ export default function ChatConversationPage() {
           content: 'Понял! Буду писать детальные промты для AI-генерации изображений на английском в блоке кода — с визуальным стилем, освещением, деталями сцены и тегами качества.',
         },
       ];
+      const VIDEO_PROMPT_GUIDE = [
+        {
+          role: 'user' as const,
+          content: 'Когда я прошу написать промт для видео — имею в виду промт для AI-генерации видео (Veo / Kling). Пиши на английском: описывай сцену, движение камеры, действия, атмосферу, стиль. Оформляй промт в блоке кода ```.',
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Понял! Буду писать детальные промты для AI-генерации видео на английском в блоке кода — с описанием сцены, движением камеры, динамикой и стилем.',
+        },
+      ];
+      const MUSIC_PROMPT_GUIDE = [
+        {
+          role: 'user' as const,
+          content: 'Когда я прошу написать промт для музыки — имею в виду промт для AI-генерации трека (Suno). Описывай жанр, инструменты, темп, настроение, вокал. Пиши кратко, через запятую. Оформляй промт в блоке кода ```.',
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Понял! Буду писать промты для AI-генерации музыки в блоке кода — жанр, инструменты, темп, настроение и вокал.',
+        },
+      ];
+
+      const activeGuide = chatMode === 'video'
+        ? VIDEO_PROMPT_GUIDE
+        : chatMode === 'music'
+          ? MUSIC_PROMPT_GUIDE
+          : IMAGE_PROMPT_GUIDE;
 
       const history = isWritingPrompt
-        ? [...IMAGE_PROMPT_GUIDE, ...historyBase]
+        ? [...activeGuide, ...historyBase]
         : historyBase;
 
       const { tokensCost, cacheHit, title: newTitle } = await send({

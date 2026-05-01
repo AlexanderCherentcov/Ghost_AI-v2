@@ -838,6 +838,9 @@ export default function ChatConversationPage() {
         setChatMode={handleSetChatMode}
         dispatchResult={dispatchResult}
         onInputChange={handleInputChange}
+        userImages={user?.images_this_week}
+        userMusic={user?.music_this_week}
+        userVideos={user?.videos_this_month}
       />
     </div>
   );

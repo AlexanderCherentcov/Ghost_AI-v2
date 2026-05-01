@@ -155,10 +155,10 @@ export const api = {
     },
   },
 
-  dispatch: (prompt: string) =>
+  dispatch: (prompt: string, context?: Array<{ role: 'user' | 'assistant'; content: string }>) =>
     request<{ category: 'chat' | 'music' | 'video' | 'image' | 'search'; autoFill: Record<string, unknown> }>('/dispatch', {
       method: 'POST',
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, context }),
     }),
 
   support: {

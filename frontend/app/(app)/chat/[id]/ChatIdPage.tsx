@@ -576,11 +576,14 @@ export default function ChatConversationPage() {
     // Only auto-detect when in chat mode; skip if user already opened a widget
     if (chatMode !== 'chat') return;
     if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
-    if (text.trim().length < 6) { setDispatchResult(null); return; }
+    if (text.trim().length < 4) { setDispatchResult(null); return; }
     dispatchTimerRef.current = setTimeout(async () => {
       try {
-        const result = await api.dispatch(text.trim());
-        // Only surface non-chat category suggestions
+        // Pass last 3 messages as context so dispatcher understands "давай", "сделай это" etc.
+        const recentContext = useChatStore.getState().messages
+          .slice(-3)
+          .map((m) => ({ role: m.role as 'user' | 'assistant', content: String(m.content).slice(0, 400) }));
+        const result = await api.dispatch(text.trim(), recentContext.length > 0 ? recentContext : undefined);
         if (result.category !== 'chat') setDispatchResult(result);
         else setDispatchResult(null);
       } catch {

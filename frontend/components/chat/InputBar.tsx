@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
+import { SendIcon, CasperCoin, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 
@@ -122,10 +122,12 @@ function getCostDisplay(
 ): CostDisplay {
   if (mode === 'chat') {
     if (preferredModel !== 'deepseek') return null;
+    if (!userPlan) return null; // still loading
     if (userPlan === 'ULTRA') return { type: 'free', label: 'безлимит' };
     if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
       return { type: 'free', label: `${userProFreeRemaining} сегодня` };
     }
+    if (!userProFreeRemaining && userPlan === 'FREE') return null; // FREE can't use pro
     return { type: 'caspers', amount: 1 };
   }
   const isFree = userPlan === 'FREE';
@@ -178,9 +180,9 @@ function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
 // ─── Video quality options ────────────────────────────────────────────────────
 
 const VIDEO_QUALITIES: { key: VideoQuality; label: string; emoji: string }[] = [
-  { key: 'motion',  label: 'Motion',  emoji: '⚡' },
-  { key: 'cinema',  label: 'Cinema',  emoji: '🎬' },
-  { key: 'reality', label: 'Reality', emoji: '📷' },
+  { key: 'motion',  label: 'Standard', emoji: '⚡' },
+  { key: 'cinema',  label: 'Pro',      emoji: '🎬' },
+  { key: 'reality', label: 'Reality',  emoji: '📷' },
 ];
 
 // ─── Widget panels ────────────────────────────────────────────────────────────
@@ -208,9 +210,9 @@ function VideoWidget({
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-3">
-        {/* Quality */}
+        {/* Quality + Resolution row */}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Качество</span>
+          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Модель</span>
           <div className="relative flex-1">
             <select
               value={options.videoModel}
@@ -223,6 +225,21 @@ function VideoWidget({
                   {q.emoji} {q.label}
                 </option>
               ))}
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-40" width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Качество</span>
+          <div className="relative">
+            <select
+              value={options.resolution}
+              onChange={(e) => onChange({ ...options, resolution: e.target.value as '720p' | '1080p' })}
+              className="px-3 py-1.5 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer pr-7"
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
+            >
+              <option value="720p"  style={{ background: 'var(--bg-elevated)' }}>720p</option>
+              <option value="1080p" style={{ background: 'var(--bg-elevated)' }}>1080p</option>
             </select>
             <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-40" width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -407,29 +424,6 @@ function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?:
   );
 }
 
-// ─── Mode icon button ─────────────────────────────────────────────────────────
-
-function ModeIconBtn({
-  icon, label, active, onClick,
-}: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      className={cn(
-        'flex items-center gap-1.5 px-2 py-1 rounded-lg text-[12px] transition-all',
-        active
-          ? 'bg-[var(--accent-dim)] text-accent font-medium'
-          : 'opacity-35 hover:opacity-70'
-      )}
-      style={!active ? { color: 'var(--text-primary)' } : {}}
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -716,14 +710,26 @@ export function InputBar({
               </button>
             )}
 
-            {/* Mode selector icons */}
-            <div className="flex-1 overflow-x-auto scrollbar-none min-w-0">
-              <div className="flex items-center gap-0.5 w-max">
-                <ModeIconBtn icon={<ChatIcon  size={15}/>} label="Чат"      active={chatMode === 'chat'}   onClick={() => setChatMode?.('chat')} />
-                <ModeIconBtn icon={<ImageIcon size={15}/>} label="Картинка" active={chatMode === 'images'} onClick={() => toggleMode('images')} />
-                <ModeIconBtn icon={<VideoIcon size={15}/>} label="Видео"    active={chatMode === 'video'}  onClick={() => toggleMode('video')} />
-                <ModeIconBtn icon={<MusicIcon size={15}/>} label="Музыка"   active={chatMode === 'music'}  onClick={() => toggleMode('music')} />
-              </div>
+            {/* Mode selector dropdown */}
+            <div className="relative flex-shrink-0">
+              <select
+                value={chatMode}
+                onChange={(e) => {
+                  const m = e.target.value as ChatMode;
+                  if (m === 'chat') setChatMode?.('chat');
+                  else toggleMode(m);
+                }}
+                className="pl-2 pr-6 py-1 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer font-medium"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
+              >
+                <option value="chat"   style={{ background: 'var(--bg-elevated)' }}>💬 Чат</option>
+                <option value="images" style={{ background: 'var(--bg-elevated)' }}>🖼️ Картинка</option>
+                <option value="video"  style={{ background: 'var(--bg-elevated)' }}>🎬 Видео</option>
+                <option value="music"  style={{ background: 'var(--bg-elevated)' }}>🎵 Музыка</option>
+              </select>
+              <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 opacity-40" width="9" height="9" viewBox="0 0 10 10" fill="none">
+                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
             </div>
 
             {/* Model pill — chat mode only */}
@@ -811,6 +817,7 @@ function ModelPill({
   const current = MODEL_OPTIONS.find((o) => o.key === currentKey) ?? MODEL_OPTIONS[0];
 
   function proLabel(): React.ReactNode {
+    if (!userPlan) return null; // still loading
     if (userPlan === 'ULTRA') return <span className="text-[10px] opacity-50 ml-1">∞</span>;
     if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
       return (
@@ -819,6 +826,7 @@ function ModelPill({
         </span>
       );
     }
+    if (userPlan === 'FREE') return null;
     return (
       <span className="flex items-center gap-0.5 text-[10px] ml-1" style={{ color: 'var(--accent)' }}>
         1<CasperCoin size={10} />

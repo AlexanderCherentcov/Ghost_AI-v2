@@ -841,6 +841,11 @@ export default function ChatConversationPage() {
         userImages={user?.images_this_week}
         userMusic={user?.music_this_week}
         userVideos={user?.videos_this_month}
+        userProFreeRemaining={(() => {
+          const limits: Record<string, number> = { FREE: 0, BASIC: 0, PRO: 20, VIP: 50, ULTRA: -1 };
+          const limit = limits[user?.plan ?? 'FREE'] ?? 0;
+          return limit === -1 ? undefined : Math.max(0, limit - (user?.pro_messages_today ?? 0));
+        })()}
       />
     </div>
   );

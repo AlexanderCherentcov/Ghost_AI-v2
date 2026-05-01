@@ -117,8 +117,17 @@ function getCostDisplay(
   userImages?: number,
   userMusic?: number,
   userVideos?: number,
+  preferredModel?: 'haiku' | 'deepseek' | undefined,
+  userProFreeRemaining?: number,
 ): CostDisplay {
-  if (mode === 'chat') return null;
+  if (mode === 'chat') {
+    if (preferredModel !== 'deepseek') return null;
+    if (userPlan === 'ULTRA') return { type: 'free', label: 'безлимит' };
+    if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
+      return { type: 'free', label: `${userProFreeRemaining} сегодня` };
+    }
+    return { type: 'caspers', amount: 1 };
+  }
   const isFree = userPlan === 'FREE';
 
   if (mode === 'images') {
@@ -168,10 +177,10 @@ function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
 
 // ─── Video quality options ────────────────────────────────────────────────────
 
-const VIDEO_QUALITIES: { key: VideoQuality; label: string; desc: string; emoji: string }[] = [
-  { key: 'motion',  label: 'Motion',  desc: 'Veo 3.1 Fast',  emoji: '⚡' },
-  { key: 'cinema',  label: 'Cinema',  desc: 'Veo 3.1 Pro',   emoji: '🎬' },
-  { key: 'reality', label: 'Reality', desc: 'Kling V-2.5',   emoji: '📷' },
+const VIDEO_QUALITIES: { key: VideoQuality; label: string; emoji: string }[] = [
+  { key: 'motion',  label: 'Motion',  emoji: '⚡' },
+  { key: 'cinema',  label: 'Cinema',  emoji: '🎬' },
+  { key: 'reality', label: 'Reality', emoji: '📷' },
 ];
 
 // ─── Widget panels ────────────────────────────────────────────────────────────
@@ -194,36 +203,30 @@ function VideoWidget({
       className="rounded-xl border mb-2 overflow-hidden"
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
-      <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
-        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-            <VideoIcon size={15} /> GhostLine Motion
-          </span>
+      <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
         <CostBadge cost={cost} size={13} />
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-3">
         {/* Quality */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Качество</span>
-          <div className="flex gap-2">
-            {VIDEO_QUALITIES.map((q) => (
-              <button
-                key={q.key}
-                type="button"
-                onClick={() => onChange({ ...options, videoModel: q.key })}
-                className={cn(
-                  'flex-1 flex flex-col items-center py-2 rounded-lg border text-[11px] transition-all',
-                  options.videoModel === q.key
-                    ? 'border-[var(--accent)] bg-[rgba(123,92,240,0.12)] text-accent'
-                    : 'border-[var(--border)] hover:border-[rgba(255,255,255,0.2)]'
-                )}
-                style={options.videoModel !== q.key ? { color: 'var(--text-secondary)' } : {}}
-              >
-                <span className="text-base mb-0.5">{q.emoji}</span>
-                <span className="font-semibold">{q.label}</span>
-                <span className="text-[10px] opacity-60">{q.desc}</span>
-              </button>
-            ))}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Качество</span>
+          <div className="relative flex-1">
+            <select
+              value={options.videoModel}
+              onChange={(e) => onChange({ ...options, videoModel: e.target.value as VideoQuality })}
+              className="w-full px-3 py-1.5 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer pr-7"
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
+            >
+              {VIDEO_QUALITIES.map((q) => (
+                <option key={q.key} value={q.key} style={{ background: 'var(--bg-elevated)' }}>
+                  {q.emoji} {q.label}
+                </option>
+              ))}
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-40" width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
           </div>
         </div>
 
@@ -307,10 +310,7 @@ function MusicWidget({
       className="rounded-xl border mb-2 overflow-hidden"
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
-      <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
-        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-            <MusicIcon size={15} /> GhostLine Beats
-          </span>
+      <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
         <CostBadge cost={cost} size={13} />
       </div>
 
@@ -321,6 +321,7 @@ function MusicWidget({
             value={options.title}
             onChange={(e) => onChange({ ...options, title: e.target.value })}
             placeholder="Название трека"
+            title="Введите название трека, например: «Ночной город» или «Летнее утро»"
             maxLength={100}
             className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
             style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
@@ -329,6 +330,7 @@ function MusicWidget({
             value={options.style}
             onChange={(e) => onChange({ ...options, style: e.target.value })}
             placeholder="Стиль / жанр"
+            title="Укажите жанр или настроение, например: «lo-fi, грустный» или «поп, энергичный»"
             maxLength={100}
             className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
             style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
@@ -396,12 +398,10 @@ function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?:
       className="rounded-xl border mb-2 px-4 py-3 flex items-center justify-between"
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
-      <div>
-        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-            <ImageIcon size={15} /> GhostLine Vision
-          </span>
-        <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Опишите изображение в строке ниже</p>
-      </div>
+      <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+        <ImageIcon size={13} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />
+        Опишите изображение в строке ниже
+      </p>
       <CostBadge cost={cost} size={13} />
     </motion.div>
   );
@@ -460,9 +460,10 @@ interface InputBarProps {
   // Notify parent of input changes (for debounced dispatch)
   onInputChange?: (text: string) => void;
   // User's current usage counters (for FREE plan limit display)
-  userImages?: number;   // images_this_week
-  userMusic?: number;    // music_this_week
-  userVideos?: number;   // videos_this_month
+  userImages?: number;            // images_this_week
+  userMusic?: number;             // music_this_week
+  userVideos?: number;            // videos_this_month
+  userProFreeRemaining?: number;  // remaining free pro chat requests today
 }
 
 export function InputBar({
@@ -471,7 +472,7 @@ export function InputBar({
   chatMode = 'chat', setChatMode,
   dispatchResult,
   onInputChange,
-  userImages, userMusic, userVideos,
+  userImages, userMusic, userVideos, userProFreeRemaining,
 }: InputBarProps) {
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -596,7 +597,7 @@ export function InputBar({
   }
 
   const hasContent = value.trim() || attachedFile;
-  const toolbarCost = getCostDisplay(chatMode, videoOptions, userPlan, userImages, userMusic, userVideos);
+  const toolbarCost = getCostDisplay(chatMode, videoOptions, userPlan, userImages, userMusic, userVideos, preferredModel, userProFreeRemaining);
   const category = attachedFile ? getFileCategory(attachedFile) : null;
 
   const activePlaceholder = chatMode === 'images'
@@ -732,6 +733,7 @@ export function InputBar({
                 setPreferredModel={setPreferredModel}
                 userPlan={userPlan}
                 onUpgradeRequired={onUpgradeRequired}
+                userProFreeRemaining={userProFreeRemaining}
               />
             )}
 
@@ -779,19 +781,19 @@ export function InputBar({
 
 // ─── Model pill (chat mode) ────────────────────────────────────────────────────
 
-const MODEL_OPTIONS: { key: 'haiku' | 'deepseek' | undefined; label: string }[] = [
-  { key: undefined,  label: 'Авто' },
+const MODEL_OPTIONS: { key: 'haiku' | 'deepseek'; label: string }[] = [
   { key: 'haiku',    label: 'Стандарт' },
   { key: 'deepseek', label: 'Про' },
 ];
 
 function ModelPill({
-  preferredModel, setPreferredModel, userPlan, onUpgradeRequired,
+  preferredModel, setPreferredModel, userPlan, onUpgradeRequired, userProFreeRemaining,
 }: {
   preferredModel?: 'haiku' | 'deepseek' | undefined;
   setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
   userPlan?: string;
   onUpgradeRequired?: () => void;
+  userProFreeRemaining?: number;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -804,7 +806,25 @@ function ModelPill({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const current = MODEL_OPTIONS.find((o) => o.key === preferredModel) ?? MODEL_OPTIONS[0];
+  // default to 'haiku' if undefined
+  const currentKey = preferredModel ?? 'haiku';
+  const current = MODEL_OPTIONS.find((o) => o.key === currentKey) ?? MODEL_OPTIONS[0];
+
+  function proLabel(): React.ReactNode {
+    if (userPlan === 'ULTRA') return <span className="text-[10px] opacity-50 ml-1">∞</span>;
+    if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
+      return (
+        <span className="text-[10px] ml-1" style={{ color: '#4ade80' }}>
+          {userProFreeRemaining} бесп.
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-0.5 text-[10px] ml-1" style={{ color: 'var(--accent)' }}>
+        1<CasperCoin size={10} />
+      </span>
+    );
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -827,13 +847,14 @@ function ModelPill({
             exit={{ opacity: 0, y: 4, scale: 0.97 }}
             transition={{ duration: 0.12 }}
             className="absolute bottom-full mb-2 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl"
-            style={{ minWidth: '130px' }}
+            style={{ minWidth: '150px' }}
           >
             {MODEL_OPTIONS.map((opt) => {
               const locked = opt.key === 'deepseek' && userPlan === 'FREE';
+              const isPro = opt.key === 'deepseek';
               return (
                 <button
-                  key={String(opt.key)}
+                  key={opt.key}
                   type="button"
                   onClick={() => {
                     if (locked) { onUpgradeRequired?.(); setOpen(false); return; }
@@ -842,12 +863,14 @@ function ModelPill({
                   }}
                   className={cn(
                     'w-full text-left px-4 py-2.5 text-[12px] transition-colors flex items-center justify-between hover:bg-[var(--bg-void)]',
-                    preferredModel === opt.key ? 'text-accent' : ''
+                    currentKey === opt.key ? 'text-accent' : ''
                   )}
-                  style={preferredModel !== opt.key ? { color: 'var(--text-primary)' } : {}}
+                  style={currentKey !== opt.key ? { color: 'var(--text-primary)' } : {}}
                 >
-                  {opt.label}
-                  {locked && <span className="text-[10px] text-[rgba(123,92,240,0.7)] ml-2">PRO</span>}
+                  <span>{opt.label}</span>
+                  {locked ? (
+                    <span className="text-[10px] text-[rgba(123,92,240,0.7)] ml-2">PRO</span>
+                  ) : isPro ? proLabel() : null}
                 </button>
               );
             })}

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon, CasperCoin, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
+import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 
@@ -179,11 +179,88 @@ function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
 
 // ─── Video quality options ────────────────────────────────────────────────────
 
-const VIDEO_QUALITIES: { key: VideoQuality; label: string; emoji: string }[] = [
-  { key: 'motion',  label: 'Standard', emoji: '⚡' },
-  { key: 'cinema',  label: 'Pro',      emoji: '🎬' },
-  { key: 'reality', label: 'Reality',  emoji: '📷' },
+const VIDEO_QUALITIES: { key: VideoQuality; label: string; icon: React.ReactNode }[] = [
+  { key: 'motion',  label: 'Standard', icon: <VideoIcon size={13} /> },
+  { key: 'cinema',  label: 'Pro',      icon: <VideoIcon size={13} /> },
+  { key: 'reality', label: 'Reality',  icon: <VideoIcon size={13} /> },
 ];
+
+// ─── Custom select (styled dropdown, replaces native <select>) ────────────────
+
+function CustomSelect<T extends string>({
+  value, onChange, options, direction = 'up',
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: string; icon?: React.ReactNode }>;
+  direction?: 'up' | 'down';
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const current = options.find((o) => o.value === value) ?? options[0];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[12px] font-medium transition-all hover:border-[rgba(255,255,255,0.2)]"
+        style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+      >
+        {current.icon && <span className="flex-shrink-0 opacity-70">{current.icon}</span>}
+        <span>{current.label}</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" className="opacity-40 ml-0.5">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className={cn(
+              'absolute left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl',
+              direction === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+            )}
+            style={{ minWidth: '130px' }}
+          >
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={cn(
+                  'w-full text-left px-3 py-2 text-[12px] flex items-center gap-2 transition-colors hover:bg-[var(--bg-void)]',
+                  value === opt.value ? 'text-accent' : ''
+                )}
+                style={value !== opt.value ? { color: 'var(--text-primary)' } : {}}
+              >
+                {opt.icon && <span className="flex-shrink-0 opacity-70">{opt.icon}</span>}
+                <span className="flex-1">{opt.label}</span>
+                {value === opt.value && (
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M3.5 10.5l5 5L17 6"/>
+                  </svg>
+                )}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ─── Widget panels ────────────────────────────────────────────────────────────
 
@@ -210,40 +287,28 @@ function VideoWidget({
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-3">
-        {/* Quality + Resolution row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Модель</span>
-          <div className="relative flex-1">
-            <select
+        {/* Model + Resolution row */}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Модель</span>
+            <CustomSelect<VideoQuality>
               value={options.videoModel}
-              onChange={(e) => onChange({ ...options, videoModel: e.target.value as VideoQuality })}
-              className="w-full px-3 py-1.5 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer pr-7"
-              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
-            >
-              {VIDEO_QUALITIES.map((q) => (
-                <option key={q.key} value={q.key} style={{ background: 'var(--bg-elevated)' }}>
-                  {q.emoji} {q.label}
-                </option>
-              ))}
-            </select>
-            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-40" width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
+              onChange={(v) => onChange({ ...options, videoModel: v })}
+              options={VIDEO_QUALITIES.map((q) => ({ value: q.key, label: q.label, icon: q.icon }))}
+              direction="down"
+            />
           </div>
-          <span className="text-[11px] uppercase tracking-wide flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Качество</span>
-          <div className="relative">
-            <select
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Разрешение</span>
+            <CustomSelect<'720p' | '1080p'>
               value={options.resolution}
-              onChange={(e) => onChange({ ...options, resolution: e.target.value as '720p' | '1080p' })}
-              className="px-3 py-1.5 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer pr-7"
-              style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
-            >
-              <option value="720p"  style={{ background: 'var(--bg-elevated)' }}>720p</option>
-              <option value="1080p" style={{ background: 'var(--bg-elevated)' }}>1080p</option>
-            </select>
-            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 opacity-40" width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
+              onChange={(v) => onChange({ ...options, resolution: v })}
+              options={[
+                { value: '720p',  label: '720p' },
+                { value: '1080p', label: '1080p' },
+              ]}
+              direction="down"
+            />
           </div>
         </div>
 
@@ -695,9 +760,9 @@ export function InputBar({
           />
 
           {/* Toolbar */}
-          <div className="flex items-center gap-1 mt-2 min-w-0">
+          <div className="flex items-center gap-1.5 mt-2">
 
-            {/* Attach button — hidden in music mode */}
+            {/* Attach — hidden in music mode */}
             {chatMode !== 'music' && (
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -710,30 +775,20 @@ export function InputBar({
               </button>
             )}
 
-            {/* Mode selector dropdown */}
-            <div className="relative flex-shrink-0">
-              <select
-                value={chatMode}
-                onChange={(e) => {
-                  const m = e.target.value as ChatMode;
-                  if (m === 'chat') setChatMode?.('chat');
-                  else toggleMode(m);
-                }}
-                className="pl-2 pr-6 py-1 rounded-lg text-[12px] outline-none border appearance-none cursor-pointer font-medium"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
-              >
-                <option value="chat"   style={{ background: 'var(--bg-elevated)' }}>💬 Чат</option>
-                <option value="images" style={{ background: 'var(--bg-elevated)' }}>🖼️ Картинка</option>
-                <option value="video"  style={{ background: 'var(--bg-elevated)' }}>🎬 Видео</option>
-                <option value="music"  style={{ background: 'var(--bg-elevated)' }}>🎵 Музыка</option>
-              </select>
-              <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 opacity-40" width="9" height="9" viewBox="0 0 10 10" fill="none">
-                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-            </div>
+            {/* Mode selector */}
+            <CustomSelect<ChatMode>
+              value={chatMode}
+              onChange={(m) => { if (m === 'chat') setChatMode?.('chat'); else toggleMode(m); }}
+              options={[
+                { value: 'chat',   label: 'Чат',      icon: <ChatIcon  size={13}/> },
+                { value: 'images', label: 'Картинка', icon: <ImageIcon size={13}/> },
+                { value: 'video',  label: 'Видео',    icon: <VideoIcon size={13}/> },
+                { value: 'music',  label: 'Музыка',   icon: <MusicIcon size={13}/> },
+              ]}
+            />
 
             {/* Model pill — chat mode only */}
-            {(chatMode === 'chat') && setPreferredModel && (
+            {chatMode === 'chat' && setPreferredModel && (
               <ModelPill
                 preferredModel={preferredModel}
                 setPreferredModel={setPreferredModel}
@@ -742,6 +797,9 @@ export function InputBar({
                 userProFreeRemaining={userProFreeRemaining}
               />
             )}
+
+            {/* Push send to the right */}
+            <div className="flex-1" />
 
             {/* Cost + Send */}
             <div className="flex items-center gap-1.5 flex-shrink-0">

@@ -1,5 +1,9 @@
 import axios from 'axios';
 import crypto from 'crypto';
+
+// YooKassa must connect directly — the global HTTP_PROXY/HTTPS_PROXY env vars
+// point to a proxy that doesn't forward HTTPS correctly from the container.
+const yokassaAxios = axios.create({ proxy: false });
 import { prisma } from '../lib/prisma.js';
 import { grantCaspers } from './tokens.js';
 import { notifyPayment } from './admin-notify.js';
@@ -37,7 +41,7 @@ export async function createPayment(
 
   let data: any;
   try {
-    const response = await axios.post(
+    const response = await yokassaAxios.post(
       `${YOKASSA_BASE}/payments`,
       {
         amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
@@ -100,7 +104,7 @@ export async function createCasperPayment(
 
   let data: any;
   try {
-    const response = await axios.post(
+    const response = await yokassaAxios.post(
       `${YOKASSA_BASE}/payments`,
       {
         amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
@@ -147,7 +151,7 @@ export async function processWebhook(body: unknown): Promise<void> {
   if (event.type !== 'payment.succeeded') return;
 
   const paymentId = event.object.id;
-  const verifyRes = await axios.get(`${YOKASSA_BASE}/payments/${paymentId}`, {
+  const verifyRes = await yokassaAxios.get(`${YOKASSA_BASE}/payments/${paymentId}`, {
     headers: yokassaHeaders(crypto.randomUUID()),
   }).catch(() => null);
   if (!verifyRes || verifyRes.data?.status !== 'succeeded') return;

@@ -155,6 +155,12 @@ export const api = {
     },
   },
 
+  dispatch: (prompt: string) =>
+    request<{ category: 'chat' | 'music' | 'video' | 'image' | 'search'; autoFill: Record<string, unknown> }>('/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    }),
+
   support: {
     send: (data: { message: string; email?: string }) =>
       request<{ ok: boolean }>('/support/message', {
@@ -174,8 +180,13 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; videoImageUrl?: string; negativePrompt?: string }) =>
+    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; videoImageUrl?: string; negativePrompt?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    lyrics: (data: { topic: string; style?: string; instrumental?: boolean }) =>
+      request<{ lyrics: string }>('/generate/lyrics', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

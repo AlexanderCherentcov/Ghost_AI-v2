@@ -167,6 +167,8 @@ export default function ChatConversationPage() {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
+  const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref для предотвращения poll после unmount (H-09)
   const mountedRef = useRef(true);
@@ -569,9 +571,36 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady]);
 
+  // ── Dispatcher — debounced intent detection from user typing ────────────────
+  const handleInputChange = useCallback((text: string) => {
+    // Only auto-detect when in chat mode; skip if user already opened a widget
+    if (chatMode !== 'chat') return;
+    if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
+    if (text.trim().length < 6) { setDispatchResult(null); return; }
+    dispatchTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await api.dispatch(text.trim());
+        // Only surface non-chat category suggestions
+        if (result.category !== 'chat') setDispatchResult(result);
+        else setDispatchResult(null);
+      } catch {
+        // silent — dispatcher is best-effort
+      }
+    }, 800);
+  }, [chatMode]);
+
+  // Clear dispatch result when user explicitly switches mode
+  const handleSetChatMode = useCallback((m: ChatMode) => {
+    setChatMode(m);
+    setDispatchResult(null);
+    if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
+  }, []);
+
   // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
+    // Clear dispatch suggestion on every send
+    setDispatchResult(null);
 
     // ── Mode-based routing ───────────────────────────────────────────────────
     if (chatMode === 'images' && !file) {
@@ -806,7 +835,9 @@ export default function ChatConversationPage() {
         userPlan={user?.plan}
         onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
         chatMode={chatMode}
-        setChatMode={setChatMode}
+        setChatMode={handleSetChatMode}
+        dispatchResult={dispatchResult}
+        onInputChange={handleInputChange}
       />
     </div>
   );

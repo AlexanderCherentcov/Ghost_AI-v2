@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
-import type { VideoOptions, VideoModel } from './InputBar';
+import type { VideoOptions, VideoQuality } from './InputBar';
 
 interface VideoSettingsMenuProps {
   options: VideoOptions;
@@ -26,7 +26,7 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
   }, []);
 
   const hasCustomSettings =
-    options.videoModel === 'pro' ||
+    options.videoModel === 'cinema' ||
     options.resolution === '1080p' ||
     !!options.imageUrl ||
     (options.negativePrompt ?? '').trim().length > 0;
@@ -46,9 +46,10 @@ export function VideoSettingsMenu({ options, onChange }: VideoSettingsMenuProps)
     }
   }
 
-  const models: { key: VideoModel; label: string; sub: string }[] = [
-    { key: 'standard', label: 'GhostLine Standard', sub: 'Быстро · Veo3 Fast' },
-    { key: 'pro',      label: 'GhostLine Pro',      sub: 'Высокое качество · Veo3' },
+  const models: { key: VideoQuality; label: string; sub: string }[] = [
+    { key: 'motion',  label: 'GhostLine Motion',  sub: 'Быстро · Veo 3.1 Fast' },
+    { key: 'cinema',  label: 'GhostLine Cinema',  sub: 'Высокое качество · Veo 3.1 Pro' },
+    { key: 'reality', label: 'GhostLine Reality', sub: 'Реализм · Kling V-2.5' },
   ];
 
   return (

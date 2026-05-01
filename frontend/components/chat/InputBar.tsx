@@ -699,6 +699,38 @@ export function InputBar({
           )}
         </AnimatePresence>
 
+        {/* Pro upgrade hint — search intent or document in std mode */}
+        <AnimatePresence>
+          {chatMode === 'chat' && preferredModel !== 'deepseek' && setPreferredModel && (
+            (dispatchResult?.category === 'search') ||
+            (attachedFile && category !== 'image')
+          ) && (
+            <motion.div
+              key="pro-hint"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15 }}
+              className="flex items-center justify-between gap-3 mb-2 px-3 py-2 rounded-xl border"
+              style={{ background: 'rgba(123,92,240,0.07)', borderColor: 'rgba(123,92,240,0.25)' }}
+            >
+              <span className="text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
+                {dispatchResult?.category === 'search'
+                  ? 'Для поиска в интернете точнее работает Про чат'
+                  : 'Для анализа документов рекомендуем Про чат'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreferredModel('deepseek')}
+                className="flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
+                style={{ background: 'rgba(123,92,240,0.18)', color: 'var(--accent)' }}
+              >
+                Перейти на Про
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Attached file preview */}
         {attachedFile && (
           <motion.div

@@ -219,6 +219,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(202).send({ jobId: job.id });
       }
 
+      // Save user message to chat history
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'sound', tokensCost: 0, mediaUrl: null },
+        }).catch((e) => console.error('[generate/sound] Failed to save user message:', e.message));
+      }
+
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'sound', prompt },
       });
@@ -313,6 +320,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         await checkAndDeduct(userId, videoRequestType);
       } catch (err: any) {
         return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
+      }
+
+      // Save user message to chat history
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'reel', tokensCost: 0, mediaUrl: videoImageUrl ?? null },
+        }).catch((e) => console.error('[generate/reel] Failed to save user message:', e.message));
       }
 
       const job = await prisma.generateJob.create({

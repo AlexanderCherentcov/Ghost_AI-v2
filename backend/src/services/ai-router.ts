@@ -2,13 +2,14 @@ import type { FastifyBaseLogger } from 'fastify';
 import { OR_MODELS } from './providers/openrouter.js';
 
 export type Complexity = 'simple' | 'complex';
-export type Provider = 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
+export type Provider = 'cloudflare' | 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
 
 export interface RouterResult {
   provider: Provider;
   complexity: Complexity;
   model: string;
-  fallbackModel?: string;
+  /** Fallback chain — tried in order if primary model fails */
+  fallbackModels?: string[];
   maxTokens?: number;
 }
 
@@ -92,49 +93,68 @@ export function route(
   logger?: FastifyBaseLogger,
   hasImage = false,
   plan?: string,
-  preferredModel?: 'haiku' | 'deepseek'
+  _preferredModel?: 'haiku' | 'deepseek',  // kept for API compat, ignored — DeepSeek is always primary
+  mode?: string,
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
+  const isPaid = plan !== 'FREE' && plan !== undefined;
 
-  // [C-05] Images need a vision-capable model for analysis, not an image-generation model
+  // ── Images always need a vision-capable model — DeepSeek V3.2 cannot see images ──
   if (hasImage) {
+    logger?.debug({ plan, model: OR_MODELS.haiku }, '[AIRouter] Image → Gemini Flash (vision)');
     return {
-      provider: 'openrouter-haiku' as Provider,
+      provider: 'openrouter-haiku',
       complexity: 'complex',
       model: OR_MODELS.haiku,
-      fallbackModel: OR_MODELS.gpt4oMini,
+      fallbackModels: [OR_MODELS.gpt4oMini],
       maxTokens: plan === 'FREE' ? 400 : undefined,
     };
   }
 
-  // Any paid plan + search intent → Perplexity Sonar (live web search)
-  const isPaid = plan !== 'FREE' && plan !== undefined;
-  const isPremium = plan === 'PRO' || plan === 'ULTRA';
-  if (isPaid && !hasDocument && !hasImage && isSearchQuery(prompt)) {
-    logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Search query → Sonar');
+  // ── Std chat (mode === 'chat' or unspecified, no attachments) → Cloudflare ──
+  if (mode === 'chat' || (!mode && !hasDocument)) {
+    // Paid plan + search keywords → Perplexity Sonar (web search)
+    if (isPaid && isSearchQuery(prompt)) {
+      logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Std search query → Sonar');
+      return {
+        provider: 'openrouter-sonar',
+        complexity: 'complex',
+        model: OR_MODELS.sonar,
+        fallbackModels: [OR_MODELS.deepseek, OR_MODELS.haiku],
+      };
+    }
+
+    logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare');
+    return {
+      provider: 'cloudflare',
+      complexity,
+      model: '@cf/meta/llama-3.1-8b-instruct-fast',
+      maxTokens: plan === 'FREE' ? 400 : undefined,
+    };
+  }
+
+  // ── Pro chat (mode === 'think') ────────────────────────────────────────────
+  // Search queries in pro mode → Sonar (paid plans only)
+  if (isPaid && !hasDocument && isSearchQuery(prompt)) {
+    logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Pro search query → Sonar');
     return {
       provider: 'openrouter-sonar',
       complexity: 'complex',
       model: OR_MODELS.sonar,
-      fallbackModel: OR_MODELS.deepseek,
-      maxTokens: undefined,
+      fallbackModels: [OR_MODELS.deepseek, OR_MODELS.haiku],
     };
   }
 
-  // PRO / ULTRA → DeepSeek by default (unless user explicitly picks haiku)
-  const useDeepSeek = preferredModel === 'deepseek'
-    ? true
-    : preferredModel === 'haiku'
-      ? false
-      : isPremium || hasDocument;
-
-  const provider: Provider = useDeepSeek ? 'openrouter-deepseek' : 'openrouter-haiku';
-  const model = useDeepSeek ? OR_MODELS.deepseek : OR_MODELS.haiku;
-  const fallbackModel = useDeepSeek ? OR_MODELS.gpt4oMini : undefined;
-  const maxTokens = plan === 'FREE' ? 400 : undefined;
-
-  logger?.debug({ complexity, provider, model, plan }, '[AIRouter] Routed');
-  return { provider, complexity: useDeepSeek ? 'complex' : complexity, model, fallbackModel, maxTokens };
+  // Pro chat (including documents): DeepSeek V3.2 is always primary.
+  // Gemini 2.5 Flash → GPT-4o-mini as ordered fallbacks.
+  logger?.debug({ plan, model: OR_MODELS.deepseek }, '[AIRouter] Pro chat → DeepSeek V3.2');
+  return {
+    provider: 'openrouter-deepseek',
+    complexity: 'complex',
+    model: OR_MODELS.deepseek,
+    fallbackModels: [OR_MODELS.haiku, OR_MODELS.gpt4oMini],
+    maxTokens: plan === 'FREE' ? 400 : undefined,
+  };
 }
 
 export function selectProvider(complexity: Complexity): { provider: Provider; model: string } {

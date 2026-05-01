@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
+import { grantCaspers } from '../services/tokens.js';
 
 if (!process.env.BOT_SECRET) {
   throw new Error('BOT_SECRET is required — server refuses to start without it');
@@ -21,29 +22,16 @@ function checkBotSecret(request: any, reply: any): boolean {
 
 const setplanSchema = z.object({
   userId: z.string().min(1),
-  plan:   z.enum(['FREE', 'BASIC', 'STANDARD', 'PRO', 'ULTRA']),
+  plan:   z.enum(['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA']),
 });
 
 const resetSchema = z.object({
   userId: z.string().min(1),
 });
 
-const setlimitsSchema = z.object({
+const addCaspersSchema = z.object({
   userId: z.string().min(1),
-  chat:   z.number().int().optional(),   // std_messages_daily_limit (-1 = unlimited)
-  pro:    z.number().int().optional(),   // pro_messages_daily_limit
-  img:    z.number().int().optional(),   // images_daily_limit
-  video:  z.number().int().optional(),   // videos_daily_limit
-  files:  z.number().int().optional(),   // files_monthly_limit
-});
-
-const addlimitsSchema = z.object({
-  userId: z.string().min(1),
-  chat:   z.number().int().optional(),
-  pro:    z.number().int().optional(),
-  img:    z.number().int().optional(),
-  video:  z.number().int().optional(),
-  files:  z.number().int().optional(),
+  amount: z.number().int().min(1),
 });
 
 const banSchema = z.object({
@@ -61,19 +49,15 @@ const USER_SELECT = {
   plan: true,
   planExpiresAt: true,
   billing: true,
+  caspers_balance: true,
+  caspers_monthly: true,
   std_messages_today: true,
   pro_messages_today: true,
-  images_today: true,
-  videos_today: true,
-  music_today: true,
-  files_used: true,
-  std_messages_daily_limit: true,
-  pro_messages_daily_limit: true,
-  images_daily_limit: true,
-  videos_daily_limit: true,
-  music_daily_limit: true,
-  files_monthly_limit: true,
+  images_this_week: true,
+  music_this_week: true,
+  videos_this_month: true,
   day_start: true,
+  week_start: true,
   period_start: true,
   onboardingDone: true,
   createdAt: true,
@@ -90,7 +74,6 @@ async function getUserWithBanStatus(user: any) {
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/users ──────────────────────────────────────────────────
-  // ?page=1&limit=15&search=<query>
   fastify.get('/admin/users', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
@@ -151,8 +134,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (!checkBotSecret(request, reply)) return;
 
     const { userId, plan } = setplanSchema.parse(request.body);
-    const limits = PLANS[plan];
-    if (!limits) return reply.code(400).send({ error: 'Unknown plan' });
+    const planInfo = PLANS[plan as keyof typeof PLANS];
+    if (!planInfo) return reply.code(400).send({ error: 'Unknown plan' });
 
     const periodStart = new Date();
     const periodEnd   = new Date(periodStart);
@@ -161,16 +144,27 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     await prisma.user.update({
       where: { id: userId },
       data: {
-        plan,
-        period_start:             periodStart,
-        planExpiresAt:            periodEnd,
-        std_messages_daily_limit: limits.std_messages_daily,
-        pro_messages_daily_limit: limits.pro_messages_daily,
-        images_daily_limit:       limits.images_daily,
-        videos_daily_limit:       limits.videos_daily,
-        files_monthly_limit:      limits.files_monthly,
+        plan: plan as any,
+        period_start:  periodStart,
+        planExpiresAt: periodEnd,
+        // Reset weekly counters
+        images_this_week: 0,
+        music_this_week:  0,
+        videos_this_month: 0,
+        week_start: new Date(),
       },
     });
+
+    // Grant caspers for the plan
+    if (planInfo.caspers_monthly > 0) {
+      await grantCaspers(userId, planInfo.caspers_monthly, planInfo.caspers_monthly, `admin_setplan_${plan.toLowerCase()}`);
+    } else {
+      // FREE plan: set to 0
+      await prisma.user.update({
+        where: { id: userId },
+        data: { caspers_balance: 0, caspers_monthly: 0 },
+      });
+    }
 
     return reply.send({ ok: true, plan });
   });
@@ -181,10 +175,6 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { userId } = resetSchema.parse(request.body);
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-    if (!user) return reply.code(404).send({ error: 'User not found' });
-
-    const limits = (PLANS as Record<string, typeof PLANS[keyof typeof PLANS]>)[user.plan] ?? PLANS['FREE'];
     const today  = new Date();
 
     await prisma.user.update({
@@ -192,118 +182,45 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       data: {
         std_messages_today: 0,
         pro_messages_today: 0,
-        images_today:       0,
-        videos_today:       0,
-        music_today:        0,
-        files_used:         0,
-        day_start:          today,
-        period_start:       today,
-        std_messages_daily_limit: limits.std_messages_daily,
-        pro_messages_daily_limit: limits.pro_messages_daily,
-        images_daily_limit:       limits.images_daily,
-        videos_daily_limit:       limits.videos_daily,
-        files_monthly_limit:      limits.files_monthly,
+        images_this_week:   0,
+        music_this_week:    0,
+        videos_this_month:   0,
+        day_start:   today,
+        week_start:  today,
+        period_start: today,
       },
     });
 
     return reply.send({ ok: true });
   });
 
-  // ── POST /api/admin/setlimits ──────────────────────────────────────────────
-  // Set absolute limit values. -1 = unlimited.
-  fastify.post('/admin/setlimits', async (request, reply) => {
+  // ── POST /api/admin/addcaspers ─────────────────────────────────────────────
+  // Add caspers to a user's balance directly.
+  fastify.post('/admin/addcaspers', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
-    const body = setlimitsSchema.parse(request.body);
-    const data: Record<string, number> = {};
-    if (body.chat  !== undefined) data.std_messages_daily_limit = body.chat;
-    if (body.pro   !== undefined) data.pro_messages_daily_limit = body.pro;
-    if (body.img   !== undefined) data.images_daily_limit       = body.img;
-    if (body.video !== undefined) data.videos_daily_limit       = body.video;
-    if (body.files !== undefined) data.files_monthly_limit      = body.files;
+    const { userId, amount } = addCaspersSchema.parse(request.body);
 
-    if (Object.keys(data).length === 0) {
-      return reply.code(400).send({ error: 'No limits specified' });
-    }
-
-    await prisma.user.update({ where: { id: body.userId }, data });
-    return reply.send({ ok: true, updated: data });
-  });
-
-  // ── POST /api/admin/addlimits ──────────────────────────────────────────────
-  // Add N to current limit values.
-  fastify.post('/admin/addlimits', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
-
-    const body = addlimitsSchema.parse(request.body);
-    const user = await prisma.user.findUnique({
-      where: { id: body.userId },
-      select: {
-        std_messages_daily_limit: true,
-        pro_messages_daily_limit: true,
-        images_daily_limit: true,
-        videos_daily_limit: true,
-        files_monthly_limit: true,
-      },
+    await prisma.user.update({
+      where: { id: userId },
+      data: { caspers_balance: { increment: amount } },
     });
-    if (!user) return reply.code(404).send({ error: 'User not found' });
+    await prisma.casperTransaction.create({
+      data: { userId, amount, reason: 'admin_grant' },
+    });
 
-    const data: Record<string, number> = {};
-    // For unlimited (-1) fields, keep unlimited; otherwise add.
-    if (body.chat  !== undefined && user.std_messages_daily_limit !== -1)
-      data.std_messages_daily_limit = user.std_messages_daily_limit + body.chat;
-    if (body.pro   !== undefined && user.pro_messages_daily_limit !== -1)
-      data.pro_messages_daily_limit = user.pro_messages_daily_limit + body.pro;
-    if (body.img   !== undefined && user.images_daily_limit !== -1)
-      data.images_daily_limit       = user.images_daily_limit + body.img;
-    if (body.video !== undefined && user.videos_daily_limit !== -1)
-      data.videos_daily_limit       = user.videos_daily_limit + body.video;
-    if (body.files !== undefined && user.files_monthly_limit !== -1)
-      data.files_monthly_limit      = user.files_monthly_limit + body.files;
-
-    if (Object.keys(data).length === 0) {
-      return reply.send({ ok: true, note: 'All targeted limits are already unlimited' });
-    }
-
-    await prisma.user.update({ where: { id: body.userId }, data });
-    return reply.send({ ok: true, updated: data });
+    return reply.send({ ok: true, added: amount });
   });
 
   // ── POST /api/admin/ban ────────────────────────────────────────────────────
-  // Ban: set all limits to 0 + set Redis ban flag.
-  // Unban: restore plan defaults + remove Redis flag.
   fastify.post('/admin/ban', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
     const { userId, unban } = banSchema.parse(request.body);
 
     if (unban) {
-      // Restore plan defaults
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      if (!user) return reply.code(404).send({ error: 'User not found' });
-      const limits = (PLANS as Record<string, typeof PLANS[keyof typeof PLANS]>)[user.plan] ?? PLANS['FREE'];
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          std_messages_daily_limit: limits.std_messages_daily,
-          pro_messages_daily_limit: limits.pro_messages_daily,
-          images_daily_limit:       limits.images_daily,
-          videos_daily_limit:       limits.videos_daily,
-          files_monthly_limit:      limits.files_monthly,
-        },
-      });
       await redis.del(`banned:${userId}`);
     } else {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          std_messages_daily_limit: 0,
-          pro_messages_daily_limit: 0,
-          images_daily_limit:       0,
-          videos_daily_limit:       0,
-          files_monthly_limit:      0,
-        },
-      });
       // 365-day ban flag in Redis (refreshed on each ban call)
       await redis.set(`banned:${userId}`, '1', 'EX', 60 * 60 * 24 * 365);
     }

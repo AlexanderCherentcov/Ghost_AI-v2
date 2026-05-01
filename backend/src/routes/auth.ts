@@ -9,7 +9,7 @@ import { PLANS } from '../services/yokassa.js';
 
 async function setupTrialForNewUser(_userId: string): Promise<void> {
   // New user starts on FREE plan — defaults from schema are correct:
-  // std_messages_daily_limit=10, pro_messages_daily_limit=0, images_daily_limit=3
+  // caspers_balance=0, FREE tier weekly limits apply
   // No extra setup needed; defaults handle it.
 }
 
@@ -431,20 +431,22 @@ export default async function authRoutes(fastify: FastifyInstance) {
           plan: true,
           planExpiresAt: true,
           billing: true,
+          // Caspers
+          caspers_balance: true,
+          caspers_monthly: true,
+          // Daily counters
           std_messages_today: true,
           pro_messages_today: true,
-          images_today: true,
-          videos_today: true,
-          music_today: true,
-          files_used: true,
-          std_messages_daily_limit: true,
-          pro_messages_daily_limit: true,
-          images_daily_limit: true,
-          videos_daily_limit: true,
-          music_daily_limit: true,
-          files_monthly_limit: true,
+          // FREE tier weekly/monthly counters
+          images_this_week: true,
+          music_this_week: true,
+          videos_this_month: true,
+          // Period timestamps
           day_start: true,
+          week_start: true,
+          month_start: true,
           period_start: true,
+          // Profile
           purposes: true,
           responseStyle: true,
           onboardingDone: true,
@@ -457,9 +459,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         await prisma.user.update({ where: { id: userId }, data: { onboardingDone: true } });
         onboardingDone = true;
       }
-      // Computed: whether the UI should show the message limit (hidden cap for PRO/ULTRA)
-      const planConfig = PLANS[user.plan as keyof typeof PLANS];
-      return { ...user, onboardingDone, show_message_limit: planConfig?.show_message_limit ?? true };
+      return { ...user, onboardingDone };
     },
   });
 

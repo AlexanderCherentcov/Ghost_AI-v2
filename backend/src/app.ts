@@ -22,6 +22,8 @@ import paymentRoutes from './routes/payments.js';
 import generateRoutes from './routes/generate.js';
 import supportRoutes from './routes/support.js';
 import adminRoutes from './routes/admin.js';
+import plansRoutes from './routes/plans.js';
+import dispatchRoutes from './routes/dispatch.js';
 
 import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
@@ -135,6 +137,8 @@ export async function buildApp() {
   await fastify.register(generateRoutes, { prefix: '/api' });
   await fastify.register(supportRoutes, { prefix: '/api' });
   await fastify.register(adminRoutes,   { prefix: '/api' });
+  await fastify.register(plansRoutes,    { prefix: '/api' });
+  await fastify.register(dispatchRoutes, { prefix: '/api' });
 
   // ── Static image serving (generated images saved to disk) ────────────────
   fastify.get('/images/:filename', async (request, reply) => {
@@ -263,19 +267,7 @@ async function start() {
   await prisma.$connect();
   await redis.connect();
 
-  // Бэкфилл music_daily_limit для существующих пользователей (один раз при деплое)
-  await prisma.$executeRaw`
-    UPDATE "User" SET "music_daily_limit" = CASE
-      WHEN plan = 'TRIAL'    THEN 1
-      WHEN plan = 'BASIC'    THEN 2
-      WHEN plan = 'STANDARD' THEN 5
-      WHEN plan = 'PRO'      THEN 10
-      WHEN plan = 'ULTRA'    THEN 20
-      WHEN plan = 'TEAM'     THEN 20
-      ELSE 0
-    END
-    WHERE "music_daily_limit" = 0 AND plan != 'FREE'
-  `;
+  // No legacy backfill needed — Caspers system migration handled via SQL migration file
 
   // Initialize optional vector cache (requires pgvector + EMBEDDING_API_KEY)
   await initVectorCache();

@@ -8,72 +8,109 @@ import { api } from '@/lib/api';
 import { CheckIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
-// trial=true означает фиксированный срок 7 дней, без yearly
+// Plans with fake discount display:
+// - Monthly: shown crossed-out = actual × 2 (fake 50% off)
+// - Yearly: actual = price × 12 × 0.8, crossed-out = fake_monthly × 12
 const PLANS = [
-  {
-    key: 'TRIAL',
-    name: 'Пробный',
-    price: 299,
-    price_yearly: 299,
-    badge: '7 дней' as string | undefined,
-    trial: true,
-    features: ['30 сообщений/день', '5 картинок/день', '1 видео/день', '1 трек/день'],
-  },
   {
     key: 'BASIC',
     name: 'Базовый',
-    price: 699,
-    price_yearly: 594,
+    price: 790,         // real monthly
+    price_yearly: 7584, // real yearly (790 * 12 * 0.8)
+    caspers: 300,
+    proFreeDaily: 0,
     badge: undefined as string | undefined,
-    trial: false,
-    features: ['Безлимитный чат (std)', '20 картинок/день', '2 трека/день', '40 файлов/месяц'],
-  },
-  {
-    key: 'STANDARD',
-    name: 'Стандарт',
-    price: 1199,
-    price_yearly: 1019,
-    badge: 'Популярный',
-    trial: false,
-    features: ['Безлимитный чат (std)', '50 про-сообщений/день', '30 картинок/день', '1 видео/день', '5 треков/день', '150 файлов/месяц'],
+    features: [
+      'Стандартный чат: безлимит',
+      '300 Caspers в месяц',
+      'Про чат: за Caspers (1/сообщ.)',
+      'Изображения — 10 Caspers/шт',
+      'Видео — от 25 Caspers',
+      'Музыка — 5 Caspers/трек',
+    ],
   },
   {
     key: 'PRO',
     name: 'Про',
-    price: 2490,
-    price_yearly: 2117,
+    price: 1690,
+    price_yearly: 16224, // 1690 * 12 * 0.8
+    caspers: 700,
+    proFreeDaily: 20,
+    badge: 'Популярный',
+    features: [
+      'Стандартный чат: безлимит',
+      '700 Caspers в месяц',
+      'Про чат: 20 запросов/день бесплатно',
+      'Изображения — 10 Caspers/шт',
+      'Видео — от 25 Caspers',
+      'Музыка — 5 Caspers/трек',
+    ],
+  },
+  {
+    key: 'VIP',
+    name: 'VIP',
+    price: 3990,
+    price_yearly: 38304, // 3990 * 12 * 0.8
+    caspers: 1800,
+    proFreeDaily: 50,
     badge: undefined,
-    trial: false,
-    features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '80 картинок/день', '3 видео/день', '10 треков/день', '500 файлов/месяц'],
+    features: [
+      'Стандартный чат: безлимит',
+      '1 800 Caspers в месяц',
+      'Про чат: 50 запросов/день бесплатно',
+      'Изображения — 10 Caspers/шт',
+      'Видео — от 25 Caspers',
+      'Музыка — 5 Caspers/трек',
+    ],
   },
   {
     key: 'ULTRA',
     name: 'Ультра',
-    price: 5490,
-    price_yearly: 4667,
+    price: 5990,
+    price_yearly: 57504, // 5990 * 12 * 0.8
+    caspers: 2800,
+    proFreeDaily: -1,
     badge: 'Максимум',
-    trial: false,
-    features: ['Безлимитный чат ✨', 'Умные модели без ограничений', '150 картинок/день', '5 видео/день', '20 треков/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
+    features: [
+      'Стандартный чат: безлимит',
+      '2 800 Caspers в месяц',
+      'Про чат: безлимит',
+      'Изображения — 10 Caspers/шт',
+      'Видео — от 25 Caspers',
+      'Музыка — 5 Caspers/трек',
+    ],
   },
 ];
 
-function UsageBar({ used, limit, label }: { used: number; limit: number; label: string }) {
-  if (limit <= 0) return null;
-  const pct = limit === -1 ? 0 : Math.min((used / limit) * 100, 100);
-  const displayLimit = limit === -1 ? '∞' : limit;
-  return (
-    <div>
-      <div className="flex justify-between text-xs text-[rgba(255,255,255,0.4)] mb-1">
-        <span>{label}</span>
-        <span>{used} / {displayLimit}</span>
-      </div>
-      {limit !== -1 && (
-        <div className="h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-          <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
-        </div>
-      )}
-    </div>
-  );
+function calculateCasperPrice(amount: number): number {
+  if (amount <= 0) return 0;
+  const tiers = [
+    { max: 100, price: 3.0 },
+    { max: 100, price: 2.9 },
+    { max: 100, price: 2.8 },
+    { max: 100, price: 2.7 },
+    { max: 100, price: 2.6 },
+    { max: 100, price: 2.5 },
+    { max: 100, price: 2.4 },
+    { max: 100, price: 2.3 },
+    { max: 100, price: 2.2 },
+    { max: 100, price: 2.1 },
+  ];
+  let total = 0;
+  let remaining = amount;
+  for (const tier of tiers) {
+    if (remaining <= 0) break;
+    const inTier = Math.min(remaining, tier.max);
+    total += inTier * tier.price;
+    remaining -= inTier;
+  }
+  return Math.round(total);
+}
+
+function pricePerCasper(amount: number): number {
+  if (amount <= 0) return 3.0;
+  const total = calculateCasperPrice(amount);
+  return Math.round((total / amount) * 10) / 10;
 }
 
 export default function BillingPage() {
@@ -81,6 +118,10 @@ export default function BillingPage() {
   const { show } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [casperSlider, setCasperSlider] = useState(100);
+
+  const plan = user?.plan ?? 'FREE';
+  const isPaid = plan !== 'FREE';
 
   async function handleBuy(planKey: string) {
     setLoading(planKey);
@@ -94,50 +135,70 @@ export default function BillingPage() {
     }
   }
 
-  const plan = user?.plan ?? 'FREE';
+  async function handleBuyCaspers() {
+    if (!isPaid) return;
+    setLoading('caspers');
+    try {
+      const { paymentUrl } = await api.payments.createCaspers({ amount: casperSlider });
+      window.location.href = paymentUrl;
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  const casperTotal = calculateCasperPrice(casperSlider);
+  const casperPPU = pricePerCasper(casperSlider);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       <div className="px-6 py-5 border-b border-[var(--border)]">
         <h1 className="text-xl font-medium text-white">Тарифы</h1>
-        <p className="text-sm text-[rgba(255,255,255,0.3)] mt-1">Текущий план: <span className="text-accent">{plan}</span></p>
+        <p className="text-sm text-[rgba(255,255,255,0.3)] mt-1">
+          Текущий план: <span className="text-accent">{plan}</span>
+        </p>
       </div>
 
-      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-8">
+      <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-6 space-y-8">
 
-        {/* Current usage */}
+        {/* Casper balance display */}
         {user && (
-          <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
-            <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider">Использование сегодня</p>
-
-            {/* Message progress — FREE and TRIAL show limit bar */}
-            {(plan === 'FREE' || plan === 'TRIAL') && (
-              <UsageBar used={user.std_messages_today} limit={user.std_messages_daily_limit} label="Сообщений сегодня" />
-            )}
-            {/* Pro messages — show only for STANDARD (PRO/ULTRA have hidden cap) */}
-            {user.pro_messages_daily_limit !== 0 && plan === 'STANDARD' && (
-              <UsageBar used={user.pro_messages_today} limit={user.pro_messages_daily_limit} label="Про-сообщений" />
-            )}
-            {/* Unlimited chat label for paid plans with no message cap shown */}
-            {plan !== 'FREE' && plan !== 'TRIAL' && (
-              <p className="text-xs text-[rgba(255,255,255,0.3)]">
-                {plan === 'PRO' || plan === 'ULTRA' ? '✨ Чат: безлимитный' : 'Стандартный чат: безлимитный'}
-              </p>
-            )}
-
-            <UsageBar used={user.images_today} limit={user.images_daily_limit} label="Картинок" />
-            {user.videos_daily_limit > 0 && (
-              <UsageBar used={user.videos_today} limit={user.videos_daily_limit} label="Видео" />
-            )}
-            {user.files_monthly_limit > 0 && (
-              <UsageBar used={user.files_used} limit={user.files_monthly_limit} label="Файлов (месяц)" />
-            )}
+          <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-1">
+                  Баланс Caspers
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-medium text-white">
+                    {user.caspers_balance.toLocaleString('ru-RU')}
+                  </span>
+                  <span className="text-[rgba(255,255,255,0.5)] text-sm">Caspers</span>
+                </div>
+                {plan !== 'FREE' && (
+                  <p className="text-xs text-[rgba(255,255,255,0.3)] mt-1">
+                    {user.caspers_monthly} Caspers начисляется каждый месяц
+                  </p>
+                )}
+              </div>
+              {plan === 'FREE' && (
+                <div className="text-right">
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">5 сообщений/день</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">5 картинок/неделю</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">5 треков/неделю</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">3 видео/месяц</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Billing toggle — hidden when only TRIAL plans visible */}
+        {/* Monthly/Yearly toggle */}
         <div className="flex items-center gap-3">
-          <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>Месяц</span>
+          <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>
+            Месяц
+          </span>
           <button
             onClick={() => setBillingCycle(c => c === 'monthly' ? 'yearly' : 'monthly')}
             className={cn(
@@ -150,20 +211,27 @@ export default function BillingPage() {
               billingCycle === 'yearly' ? 'translate-x-5' : 'translate-x-0'
             )} />
           </button>
-          <span className={cn('text-sm', billingCycle === 'yearly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>Год</span>
+          <span className={cn('text-sm', billingCycle === 'yearly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>
+            Год
+          </span>
           {billingCycle === 'yearly' && (
-            <span className="text-xs font-medium bg-accent/20 text-accent px-2 py-0.5 rounded-full">Скидка 15%</span>
+            <span className="text-xs font-medium bg-accent/20 text-accent px-2 py-0.5 rounded-full">
+              Скидка 70%
+            </span>
           )}
         </div>
 
-        {/* Plans — row 1: TRIAL + BASIC + STANDARD (3 cols), row 2: PRO + ULTRA (2 cols) */}
+        {/* Plan cards — 4 columns */}
         <div className="space-y-4">
           <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Подписки</h2>
 
-          {/* Row 1 — starter plans */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {PLANS.filter(p => ['TRIAL','BASIC','STANDARD'].includes(p.key)).map(({ key, name, price, price_yearly, badge, trial, features }) => {
-              const displayPrice = trial ? price : (billingCycle === 'yearly' ? price_yearly : price);
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {PLANS.map(({ key, name, price, price_yearly, caspers, badge, features }) => {
+              const realPrice = billingCycle === 'yearly' ? price_yearly : price;
+              // Fake crossed-out: actual × 2 (monthly), or fake_monthly × 12 (yearly)
+              const fakeMonthly = price * 2;
+              const fakePrice = billingCycle === 'yearly' ? fakeMonthly * 12 : fakeMonthly;
+
               return (
                 <motion.div
                   key={key}
@@ -172,37 +240,48 @@ export default function BillingPage() {
                   className={cn(
                     'card relative flex flex-col',
                     badge === 'Популярный' && 'border-accent/60',
-                    badge === '7 дней' && 'border-accent/40',
+                    badge === 'Максимум' && 'border-accent',
                     plan === key && 'border-accent/40 bg-accent/5'
                   )}
                 >
                   {badge && (
                     <div className={cn(
                       'absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap',
-                      badge === '7 дней'
-                        ? 'bg-accent/20 text-accent border border-accent/40'
-                        : 'bg-accent text-black'
+                      badge === 'Популярный' ? 'bg-accent text-black' : 'bg-accent text-black'
                     )}>
                       {badge}
                     </div>
                   )}
-                  <div className="flex items-center justify-between mb-1 min-h-[18px]">
+
+                  <div className="flex items-center justify-between mb-2 min-h-[20px]">
                     <h3 className="font-medium text-white">{name}</h3>
                     {plan === key && (
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-2">
-                        ✓ Активен
+                        Активен
                       </span>
                     )}
                   </div>
-                  <div className="text-2xl font-medium mb-1">
-                    {displayPrice.toLocaleString('ru-RU')} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{trial ? '/7 дней' : billingCycle === 'yearly' ? '/год' : '/мес'}</span>
+
+                  {/* Price with fake discount */}
+                  <div className="mb-1">
+                    <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
+                      {fakePrice.toLocaleString('ru-RU')} ₽
+                    </span>
+                    <span className="text-xs font-medium bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
+                      {billingCycle === 'yearly' ? 'Скидка 70%' : 'Скидка 50%'}
+                    </span>
                   </div>
-                  {!trial && billingCycle === 'yearly' && (
-                    <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
-                      {(displayPrice * 12).toLocaleString('ru-RU')} ₽/год
-                    </p>
-                  )}
+                  <div className="text-2xl font-medium mb-1">
+                    {realPrice.toLocaleString('ru-RU')} ₽
+                    <span className="text-sm text-[rgba(255,255,255,0.3)]">
+                      {billingCycle === 'yearly' ? '/год' : '/мес'}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-accent mb-3">
+                    {caspers.toLocaleString('ru-RU')} Caspers/мес
+                  </p>
+
                   <ul className="space-y-1.5 mb-5 flex-1 mt-2">
                     {features.map((f) => (
                       <li key={f} className="flex items-center gap-2 text-xs text-[rgba(255,255,255,0.4)]">
@@ -211,12 +290,17 @@ export default function BillingPage() {
                       </li>
                     ))}
                   </ul>
+
                   <button
                     onClick={() => handleBuy(key)}
                     disabled={loading !== null}
                     className={cn(
                       'w-full btn h-9 text-sm',
-                      plan === key ? 'btn-accent-outline' : badge === 'Популярный' ? 'btn-primary' : 'btn-ghost'
+                      plan === key
+                        ? 'btn-accent-outline'
+                        : badge === 'Популярный' || badge === 'Максимум'
+                          ? 'btn-primary'
+                          : 'btn-ghost'
                     )}
                   >
                     {loading === key ? 'Загрузка...' : plan === key ? 'Продлить' : 'Подключить'}
@@ -226,65 +310,77 @@ export default function BillingPage() {
             })}
           </div>
 
-          {/* Row 2 — premium plans */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PLANS.filter(p => ['PRO','ULTRA'].includes(p.key)).map(({ key, name, price, price_yearly, badge, trial, features }) => {
-              const displayPrice = billingCycle === 'yearly' ? price_yearly : price;
-              return (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    'card relative flex flex-col',
-                    badge === 'Максимум' && 'border-accent',
-                    plan === key && 'border-accent/40 bg-accent/5'
-                  )}
-                >
-                  {badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-black text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
-                      {badge}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mb-1 min-h-[18px]">
-                    <h3 className="font-medium text-white">{name}</h3>
-                    {plan === key && (
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-2">
-                        ✓ Активен
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-2xl font-medium mb-1">
-                    {displayPrice.toLocaleString('ru-RU')} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">{billingCycle === 'yearly' ? '/год' : '/мес'}</span>
-                  </div>
-                  {billingCycle === 'yearly' && (
-                    <p className="text-[11px] text-[rgba(255,255,255,0.3)] mb-3">
-                      {(displayPrice * 12).toLocaleString('ru-RU')} ₽/год
-                    </p>
-                  )}
-                  <ul className="space-y-1.5 mb-5 flex-1 mt-2">
-                    {features.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-xs text-[rgba(255,255,255,0.4)]">
-                        <CheckIcon size={12} className="text-accent flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleBuy(key)}
-                    disabled={loading !== null}
-                    className={cn(
-                      'w-full btn h-9 text-sm',
-                      plan === key ? 'btn-accent-outline' : badge === 'Максимум' ? 'btn-primary' : 'btn-ghost'
-                    )}
-                  >
-                    {loading === key ? 'Загрузка...' : plan === key ? 'Продлить' : 'Подключить'}
-                  </button>
-                </motion.div>
-              );
-            })}
+          {/* FREE plan strip */}
+          <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-5 py-3 mt-2">
+            <div>
+              <span className="font-medium text-white text-sm">Бесплатный план</span>
+              <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
+                5 сообщений/день · 5 картинок/неделю · 5 треков/неделю · 3 видео/месяц
+              </span>
+            </div>
+            {plan === 'FREE' && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-3">
+                Активен
+              </span>
+            )}
           </div>
+        </div>
+
+        {/* Casper top-up section */}
+        <div className={cn(
+          'bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4',
+          !isPaid && 'opacity-60'
+        )}>
+          <div>
+            <h2 className="text-base font-medium text-white">Докупить Caspers</h2>
+            <p className="text-xs text-[rgba(255,255,255,0.4)] mt-0.5">
+              {isPaid
+                ? 'Пополните баланс в любое время'
+                : 'Доступно с активной подпиской'}
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[rgba(255,255,255,0.6)]">Количество:</span>
+              <span className="font-medium text-white">{casperSlider.toLocaleString('ru-RU')} Caspers</span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={1000}
+              step={10}
+              value={casperSlider}
+              onChange={(e) => setCasperSlider(Number(e.target.value))}
+              disabled={!isPaid}
+              className="w-full accent-[var(--accent)]"
+            />
+            <div className="flex items-center justify-between text-xs text-[rgba(255,255,255,0.4)]">
+              <span>10</span>
+              <span>1 000</span>
+            </div>
+          </div>
+
+          <div className="bg-[var(--bg-elevated)] rounded-xl p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[rgba(255,255,255,0.5)]">Цена за 1 Casper:</span>
+              <span className="text-white">{casperPPU} ₽</span>
+            </div>
+            <div className="flex justify-between font-medium">
+              <span className="text-[rgba(255,255,255,0.7)]">Итого:</span>
+              <span className="text-accent">{casperTotal.toLocaleString('ru-RU')} ₽</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleBuyCaspers}
+            disabled={!isPaid || loading !== null}
+            className="w-full btn btn-primary h-10 text-sm"
+          >
+            {loading === 'caspers'
+              ? 'Загрузка...'
+              : `Купить ${casperSlider.toLocaleString('ru-RU')} Caspers за ${casperTotal.toLocaleString('ru-RU')} ₽`}
+          </button>
         </div>
 
       </div>

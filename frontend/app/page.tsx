@@ -50,26 +50,34 @@ const FEATURES = [
 const PLANS = [
   {
     name: 'Базовый',
-    price: 699,
-    features: ['Безлимитный чат', '20 картинок/день', '40 файлов/месяц'],
+    price: 790,
+    fakePrice: 1580,   // price × 2 (fake 50% off)
+    caspers: 300,
+    features: ['Стандартный чат: безлимит', '300 Caspers/мес', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers', 'Музыка — 5 Caspers/трек'],
     badge: null,
   },
   {
-    name: 'Стандарт',
-    price: 1199,
-    features: ['Безлимитный чат', '50 про-сообщений/день', '30 картинок/день', '1 видео/день', '150 файлов/месяц'],
+    name: 'Про',
+    price: 1690,
+    fakePrice: 3380,
+    caspers: 700,
+    features: ['Стандартный чат: безлимит', '700 Caspers/мес', 'Про чат: 20 запросов/день бесплатно', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
     badge: 'Популярный',
   },
   {
-    name: 'Про',
-    price: 2490,
-    features: ['Безлимитный чат', '200 про-сообщений/день', '80 картинок/день', '3 видео/день', '500 файлов/месяц'],
+    name: 'VIP',
+    price: 3990,
+    fakePrice: 7980,
+    caspers: 1800,
+    features: ['Стандартный чат: безлимит', '1 800 Caspers/мес', 'Про чат: 50 запросов/день бесплатно', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
     badge: null,
   },
   {
     name: 'Ультра',
-    price: 5490,
-    features: ['Безлимитный чат', '400 про-сообщений/день', '150 картинок/день', '5 видео/день', '1 000 файлов/месяц', 'Приоритетная обработка'],
+    price: 5990,
+    fakePrice: 11980,
+    caspers: 2800,
+    features: ['Стандартный чат: безлимит', '2 800 Caspers/мес', 'Про чат: безлимит', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
     badge: 'Максимум',
   },
 ];
@@ -157,7 +165,7 @@ export default function LandingPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.4 }}
           >
-            Без карты · 10 сообщений/день · 3 картинки/день бесплатно
+            Без карты · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц бесплатно
           </motion.p>
         </motion.div>
 
@@ -264,7 +272,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl px-6 py-4 mb-6">
             <div>
               <span className="font-medium text-white">Бесплатный план</span>
-              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">10 сообщений/день · 3 картинки/день · Без карты</span>
+              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">5 сообщений/день · 5 картинок/неделю · 3 видео/месяц · Без карты</span>
             </div>
             <Link href="/login" className="btn btn-ghost text-sm h-9 px-5 shrink-0">
               Начать бесплатно
@@ -272,7 +280,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map(({ name, price, features, badge }, i) => (
+            {PLANS.map(({ name, price, fakePrice, caspers, features, badge }, i) => (
               <motion.div
                 key={name}
                 className={`card relative flex flex-col ${badge === 'Максимум' ? 'border-accent shadow-accent' : badge === 'Популярный' ? 'border-accent/60' : ''}`}
@@ -287,10 +295,17 @@ export default function LandingPage() {
                   </div>
                 )}
                 <h3 className="font-medium text-white mb-1">{name}</h3>
-                <div className="mb-4">
+                <div className="mb-1">
+                  <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
+                    {fakePrice.toLocaleString('ru-RU')} ₽
+                  </span>
+                  <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">-50%</span>
+                </div>
+                <div className="mb-1">
                   <span className="text-2xl font-medium">{price.toLocaleString('ru-RU')} ₽</span>
                   <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
                 </div>
+                <p className="text-xs text-accent mb-3">{caspers.toLocaleString('ru-RU')} Caspers/мес</p>
                 <ul className="space-y-1.5 flex-1 mb-5">
                   {features.map((f) => (
                     <li key={f} className="text-sm text-[rgba(255,255,255,0.4)] flex items-center gap-2">
@@ -325,7 +340,7 @@ export default function LandingPage() {
             Начать бесплатно
           </Link>
           <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">
-            Без карты · 10 сообщений/день · 3 картинки/день бесплатно
+            Без карты · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц бесплатно
           </p>
         </motion.div>
       </section>

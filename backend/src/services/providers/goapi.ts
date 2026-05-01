@@ -131,55 +131,57 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
   return extractVideoUrl(data);
 }
 
-// ─── Hunyuan video generation ──────────────────────────────────────────────────
-//
-// Модели (GoAPI docs):
-//   fast-txt2video      $0.03  480x848 / 640x640  6 steps  — быстрый превью
-//   txt2video           $0.09  480x848 / 640x640  20 steps — качественный текст→видео
-//   img2video-concat    $0.09  544x960 / 720x720  20 steps — видео из картинки (лучше движение)
-//   img2video-replace   $0.09  544x960 / 720x720  20 steps — видео из картинки (точнее следует источнику)
+// ─── Veo3.1 video generation ──────────────────────────────────────────────────
+// Standard = veo3.1-video-fast, Pro = veo3.1-video
+// Supports both text-to-video and image-to-video (image_url)
 
-export type HunyuanMode = 'fast' | 'standard' | 'img2video-concat' | 'img2video-replace';
+export type VeoModel = 'standard' | 'pro';
+export type VeoDuration = '4s' | '8s';
+export type VeoResolution = '720p' | '1080p';
 
-export async function generateVideoHunyuan(
-  prompt: string,
-  mode: HunyuanMode = 'fast',
-  imageUrl?: string,
-  aspectRatio: '16:9' | '9:16' | '1:1' = '16:9',
-  negativePrompt?: string,
-): Promise<string> {
-  let taskType: string;
+export interface Veo3Options {
+  model?: VeoModel;
+  duration?: VeoDuration;
+  resolution?: VeoResolution;
+  aspectRatio?: '16:9' | '9:16';
+  generateAudio?: boolean;
+  negativePrompt?: string;
+  /** Image URL for image-to-video generation */
+  imageUrl?: string;
+}
+
+export async function generateVideoVeo3(prompt: string, options: Veo3Options = {}): Promise<string> {
+  const {
+    model = 'standard',
+    duration = '8s',
+    resolution = '720p',
+    aspectRatio = '16:9',
+    generateAudio = false,
+    negativePrompt,
+    imageUrl,
+  } = options;
+
+  const taskType = model === 'pro' ? 'veo3.1-video' : 'veo3.1-video-fast';
+
   const input: Record<string, unknown> = {
     prompt,
     aspect_ratio: aspectRatio,
+    duration,
+    resolution,
+    generate_audio: generateAudio,
+    ...(imageUrl ? { image_url: imageUrl } : {}),
     ...(negativePrompt?.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
   };
 
-  switch (mode) {
-    case 'fast':
-      taskType = 'fast-txt2video';
-      break;
-    case 'standard':
-      taskType = 'txt2video';
-      break;
-    case 'img2video-concat':
-      taskType = 'img2video-concat';
-      if (!imageUrl) throw new Error('Hunyuan img2video-concat requires imageUrl');
-      input.image = imageUrl;
-      break;
-    case 'img2video-replace':
-      taskType = 'img2video-replace';
-      if (!imageUrl) throw new Error('Hunyuan img2video-replace requires imageUrl');
-      input.image = imageUrl;
-      break;
-  }
+  const mode = imageUrl ? 'img2video' : 'txt2video';
+  console.info(`[Veo3.1] ${taskType} | ${mode} | ${duration} | ${resolution} | audio=${generateAudio}`);
 
-  const taskId = await createTask('Qubico/hunyuan', taskType, input);
-  const data = await pollTask(taskId);
+  const taskId = await createTask('veo3.1', taskType, input);
+  const data = await pollTask(taskId, 180, 5_000);
   return extractVideoUrl(data);
 }
 
-// ─── DiffRhythm music generation ──────────────────────────────────────────────
+// ─── DiffRhythm music generation (fallback) ───────────────────────────────────
 // txt2audio-base: $0.02 — ~95 сек
 // txt2audio-full: $0.02 — ~4:45
 
@@ -242,7 +244,6 @@ export async function generateMusicDiffRhythm(
   prompt: string,
   mode: DiffRhythmMode = 'base',
   lyrics?: string,
-  styleAudio?: string,
 ): Promise<string> {
   const taskType = mode === 'full' ? 'txt2audio-full' : 'txt2audio-base';
 
@@ -251,10 +252,11 @@ export async function generateMusicDiffRhythm(
     ? formatLyricsWithTimestamps(lyrics.trim(), mode)
     : '';
 
+  console.info(`[DiffRhythm] style_prompt="${prompt.slice(0, 120)}" lyrics=${!!formattedLyrics} mode=${taskType}`);
+
   const taskId = await createTask('Qubico/diffrhythm', taskType, {
     lyrics: formattedLyrics,
     style_prompt: prompt,
-    ...(styleAudio?.trim() ? { style_audio: styleAudio.trim() } : {}),
   });
   const data = await pollTask(taskId, 180, 5_000);
   const output = data?.data?.output ?? data?.output;
@@ -264,45 +266,6 @@ export async function generateMusicDiffRhythm(
     data?.data?.task_result?.audio_url ??
     data?.data?.task_result?.url;
   if (!url) throw new Error(`No audio URL in DiffRhythm response: ${JSON.stringify(data).slice(0, 300)}`);
-  return url;
-}
-
-// ─── Udio music generation (music-u) ──────────────────────────────────────────
-// $0.05 за трек, высокое качество
-
-export async function generateMusicUdio(prompt: string, _duration = 30): Promise<string> {
-  const taskId = await createTask('music-u', 'generate_music', {
-    gpt_description_prompt: prompt,
-    lyrics_type: 'instrumental',
-  });
-  const data = await pollTask(taskId, 180, 5_000);
-  const output = data?.data?.output ?? data?.output;
-  const url: string | undefined =
-    output?.audio_url ??
-    output?.songs?.[0]?.song_path ??
-    output?.url ??
-    data?.data?.task_result?.audio_url ??
-    data?.data?.task_result?.url;
-  if (!url) throw new Error(`No audio URL in Udio response: ${JSON.stringify(data).slice(0, 300)}`);
-  return url;
-}
-
-// ─── MMAudio — add ambient sound to video ─────────────────────────────────────
-// $0.0005/сек — очень дёшево, добавляет атмосферный звук к немому видео
-
-export async function generateMMAudio(videoUrl: string, duration = 8): Promise<string> {
-  const taskId = await createTask('mmaudio', 'generate', {
-    video_url: videoUrl,
-    duration,
-  });
-  const data = await pollTask(taskId, 60, 3_000);
-  const output = data?.data?.output ?? data?.output;
-  const url: string | undefined =
-    output?.video_url ??
-    output?.url ??
-    data?.data?.task_result?.video_url ??
-    data?.data?.task_result?.url;
-  if (!url) throw new Error(`No video URL in MMAudio response: ${JSON.stringify(data).slice(0, 300)}`);
   return url;
 }
 

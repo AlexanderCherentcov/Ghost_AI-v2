@@ -167,6 +167,8 @@ export default function ChatConversationPage() {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
+  const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref для предотвращения poll после unmount (H-09)
   const mountedRef = useRef(true);
@@ -274,7 +276,6 @@ export default function ChatConversationPage() {
     const initialMusicMode = (sessionStorage.getItem('initialMusicMode') ?? 'short') as MusicMode;
     const initialMusicDuration = sessionStorage.getItem('initialMusicDuration') ? Number(sessionStorage.getItem('initialMusicDuration')) : undefined;
     const initialLyrics = sessionStorage.getItem('initialLyrics') ?? undefined;
-    const initialStyleAudio = sessionStorage.getItem('initialStyleAudio') ?? undefined;
     const initialSunoStyle = sessionStorage.getItem('initialSunoStyle') ?? undefined;
     const initialSunoTitle = sessionStorage.getItem('initialSunoTitle') ?? undefined;
     const initialSunoInstrumental = sessionStorage.getItem('initialSunoInstrumental') !== null ? sessionStorage.getItem('initialSunoInstrumental') !== 'false' : undefined;
@@ -290,7 +291,7 @@ export default function ChatConversationPage() {
 
     autoSentChatRef.current = id; // mark this chat as auto-sent before async work
     ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialMusicDuration',
-     'initialLyrics','initialStyleAudio','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
+     'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
@@ -298,7 +299,7 @@ export default function ChatConversationPage() {
       if (initialVideoPrompt) {
         handleGenerateVideo(initialVideoPrompt);
       } else if (initialMusicPrompt) {
-        handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics, initialStyleAudio);
+        handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
       } else if (initialImagePrompt) {
         handleGenerateImage(initialImagePrompt);
       } else if (initialImageUrl) {
@@ -403,7 +404,7 @@ export default function ChatConversationPage() {
   }, [accessToken, user, messagesReady]);
 
   // ── Video generation ─────────────────────────────────────────────────────────
-  const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions, imageUrl?: string) => {
+  const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions) => {
     if (!accessToken || !messagesReady) return;
     if (generatingVideoRef.current) return;
     generatingVideoRef.current = true;
@@ -416,7 +417,7 @@ export default function ChatConversationPage() {
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: imageUrl ?? null,
+      mediaUrl: null,
       createdAt: new Date().toISOString(),
     });
 
@@ -436,13 +437,13 @@ export default function ChatConversationPage() {
       const { jobId } = await api.generate.reel({
         prompt,
         chatId: id,
+        videoModel: options?.videoModel,
         videoDuration: options?.duration,
         videoAspectRatio: options?.aspectRatio,
         videoEnableAudio: options?.enableAudio,
-        videoImageUrl: imageUrl,
-        cameraPreset: options?.cameraPreset,
+        videoResolution: options?.resolution,
+        videoImageUrl: options?.imageUrl || undefined,
         negativePrompt: options?.negativePrompt || undefined,
-        cfgScale: options?.cfgScale,
       });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));
 
@@ -491,7 +492,7 @@ export default function ChatConversationPage() {
   }, [accessToken, messagesReady]);
 
   // ── Music generation ─────────────────────────────────────────────────────────
-  const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, styleAudio?: string) => {
+  const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if (!accessToken || !messagesReady) return;
     if (generatingMusicRef.current) return;
     generatingMusicRef.current = true;
@@ -521,7 +522,7 @@ export default function ChatConversationPage() {
     });
 
     try {
-      const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode, musicDuration, lyrics, styleAudio, sunoStyle, sunoTitle, sunoInstrumental });
+      const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode, musicDuration, lyrics, sunoStyle, sunoTitle, sunoInstrumental });
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
@@ -570,9 +571,36 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady]);
 
+  // ── Dispatcher — debounced intent detection from user typing ────────────────
+  const handleInputChange = useCallback((text: string) => {
+    // Only auto-detect when in chat mode; skip if user already opened a widget
+    if (chatMode !== 'chat') return;
+    if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
+    if (text.trim().length < 6) { setDispatchResult(null); return; }
+    dispatchTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await api.dispatch(text.trim());
+        // Only surface non-chat category suggestions
+        if (result.category !== 'chat') setDispatchResult(result);
+        else setDispatchResult(null);
+      } catch {
+        // silent — dispatcher is best-effort
+      }
+    }, 800);
+  }, [chatMode]);
+
+  // Clear dispatch result when user explicitly switches mode
+  const handleSetChatMode = useCallback((m: ChatMode) => {
+    setChatMode(m);
+    setDispatchResult(null);
+    if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
+  }, []);
+
   // ── Main send handler ────────────────────────────────────────────────────────
-  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, styleAudio?: string) => {
+  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
+    // Clear dispatch suggestion on every send
+    setDispatchResult(null);
 
     // ── Mode-based routing ───────────────────────────────────────────────────
     if (chatMode === 'images' && !file) {
@@ -583,22 +611,12 @@ export default function ChatConversationPage() {
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
-      if (!prompt.trim() && !file) return;
-      // If image attached, use as source frame (image-to-video)
-      if (file && getFileCategory(file) === 'image') {
-        try {
-          const imgUrl = await resizeImageToBase64(file);
-          return handleGenerateVideo(prompt || 'animate this image', videoOptions, imgUrl);
-        } catch {
-          showToast('Не удалось обработать изображение', 'error');
-          return;
-        }
-      }
+      if (!prompt.trim()) return;
       return handleGenerateVideo(prompt, videoOptions);
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;
-      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics, styleAudio);
+      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────
@@ -817,7 +835,9 @@ export default function ChatConversationPage() {
         userPlan={user?.plan}
         onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
         chatMode={chatMode}
-        setChatMode={setChatMode}
+        setChatMode={handleSetChatMode}
+        dispatchResult={dispatchResult}
+        onInputChange={handleInputChange}
       />
     </div>
   );

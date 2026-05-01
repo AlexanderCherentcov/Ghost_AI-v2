@@ -104,6 +104,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    createCaspers: (data: { amount: number }) =>
+      request<{ paymentId: string; paymentUrl: string; totalPrice: number }>('/payments/caspers/create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
     status: (yokassaId: string) =>
       request<{ status: string; plan: string | null }>(
@@ -112,6 +117,24 @@ export const api = {
   },
 
   upload: {
+    /** Upload an image file. Returns a public URL for use in image-to-video. */
+    image: async (file: File): Promise<{ url: string; fileName: string }> => {
+      const form = new FormData();
+      form.append('file', file);
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const res = await fetch(`${API_URL}/api/upload/image`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
+      }
+      return res.json();
+    },
     /** Upload a file for text extraction. Returns extracted text + metadata. */
     extract: async (file: File): Promise<{ text: string; fileName: string; lang: string; truncated: boolean }> => {
       const form = new FormData();
@@ -132,6 +155,12 @@ export const api = {
     },
   },
 
+  dispatch: (prompt: string) =>
+    request<{ category: 'chat' | 'music' | 'video' | 'image' | 'search'; autoFill: Record<string, unknown> }>('/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    }),
+
   support: {
     send: (data: { message: string; email?: string }) =>
       request<{ ok: boolean }>('/support/message', {
@@ -151,8 +180,13 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; chatId?: string; videoDuration?: 5 | 10; videoAspectRatio?: '16:9' | '9:16' | '1:1'; videoEnableAudio?: boolean; videoImageUrl?: string; cameraPreset?: string; negativePrompt?: string; cfgScale?: number }) =>
+    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; videoImageUrl?: string; negativePrompt?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    lyrics: (data: { topic: string; style?: string; instrumental?: boolean }) =>
+      request<{ lyrics: string }>('/generate/lyrics', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -169,25 +203,24 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  plan: 'FREE' | 'TRIAL' | 'BASIC' | 'STANDARD' | 'PRO' | 'ULTRA' | 'TEAM';
+  plan: 'FREE' | 'BASIC' | 'PRO' | 'VIP' | 'ULTRA';
   planExpiresAt: string | null;
   billing: 'MONTHLY' | 'YEARLY';
+  // Caspers
+  caspers_balance:    number;
+  caspers_monthly:    number;
   // Daily counters
-  std_messages_today:       number;
-  pro_messages_today:       number;
-  images_today:             number;
-  videos_today:             number;
-  music_today:              number;
-  files_used:               number;
-  // Limits (-1 = unlimited)
-  std_messages_daily_limit: number;
-  pro_messages_daily_limit: number;
-  images_daily_limit:       number;
-  videos_daily_limit:       number;
-  music_daily_limit:        number;
-  files_monthly_limit:      number;
+  std_messages_today: number;
+  pro_messages_today: number;
+  // FREE tier weekly counters
+  images_this_week:   number;
+  music_this_week:    number;
+  videos_this_week:   number;
+  // Period timestamps
   day_start:    string;
+  week_start:   string;
   period_start: string;
+  // Profile
   purposes: string[];
   responseStyle: string;
   onboardingDone: boolean;
@@ -245,12 +278,8 @@ export interface PlanInfo {
   price: number;
   price_yearly: number;
   label: string;
-  show_message_limit: boolean;
-  std_messages_daily: number;
-  pro_messages_daily: number;
-  images_daily: number;
-  videos_daily: number;
-  files_monthly: number;
+  caspers_monthly: number;
+  pro_free_daily: number;
 }
 export interface PlansResponse {
   plans: Record<string, PlanInfo>;

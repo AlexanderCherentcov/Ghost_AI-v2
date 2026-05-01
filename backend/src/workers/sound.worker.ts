@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateMusicDiffRhythm, generateMusicUdio } from '../services/providers/goapi.js';
+import { generateMusicDiffRhythm } from '../services/providers/goapi.js';
 import { generateMusicSuno } from '../services/providers/suno.js';
 import { routeAudio } from '../services/audio-router.js';
 import { setMediaCached } from '../services/cache.js';
@@ -73,7 +73,6 @@ interface SoundJob {
   musicDuration?: number;
   chatId?: string | null;
   lyrics?: string;
-  styleAudio?: string; // URL of reference audio for DiffRhythm style_audio
   sunoStyle?: string;
   sunoTitle?: string;
   sunoInstrumental?: boolean;
@@ -83,52 +82,38 @@ export function startSoundWorker() {
   const worker = new Worker<SoundJob>(
     'sound',
     async (job: Job<SoundJob>) => {
-      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, lyrics, styleAudio, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
+      const { jobId, userId, prompt, musicMode = 'short', musicDuration, chatId, lyrics, sunoStyle, sunoTitle, sunoInstrumental } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      // ── Выбор модели по режиму пользователя ────────────────────────────────
+      // ── Все режимы → Suno V5.5, DiffRhythm только как аварийный фолбэк ───────
       let externalUrl: string;
 
-      // DiffRhythm doesn't support Cyrillic text — auto-fallback to Suno for Russian lyrics
-      const hasCyrillic = (text?: string) => text ? /[Ѐ-ӿ]/.test(text) : false;
-      const needsSunoFallback = !!lyrics && hasCyrillic(lyrics);
+      {
+        const sunoStyleArg = musicMode === 'suno' ? sunoStyle : undefined;
+        const sunoTitleArg = musicMode === 'suno' ? sunoTitle : undefined;
+        const sunoInstrArg = musicMode === 'suno' ? (sunoInstrumental ?? false) : false;
+        const diffMode     = musicMode === 'long' ? 'full' : 'base';
 
-      if (musicMode === 'suno') {
-        console.info(`[SoundWorker] suno mode → Suno API | style="${sunoStyle ?? ''}" instrumental=${sunoInstrumental ?? false}`);
-        externalUrl = await generateMusicSuno(prompt, {
-          style: sunoStyle,
-          title: sunoTitle,
-          instrumental: sunoInstrumental ?? false,
-          lyrics,
-          model: 'V5_5',
-        });
-      } else if (musicMode === 'quality') {
-        console.info(`[SoundWorker] quality mode → Udio | cost $0.05 | duration ${musicDuration ?? 30}s`);
-        externalUrl = await generateMusicUdio(prompt, musicDuration ?? 30);
-      } else if (musicMode === 'long') {
-        if (needsSunoFallback) {
-          console.info(`[SoundWorker] long mode + Cyrillic lyrics → Suno fallback (DiffRhythm doesn't support Russian)`);
-          externalUrl = await generateMusicSuno(prompt, { instrumental: false, lyrics, model: 'V5_5' });
-        } else {
-          console.info(`[SoundWorker] long mode → DiffRhythm Full | cost $0.02 | lyrics=${!!lyrics} | styleAudio=${!!styleAudio}`);
-          externalUrl = await generateMusicDiffRhythm(prompt, 'full', lyrics, styleAudio);
-        }
-      } else {
-        if (needsSunoFallback) {
-          console.info(`[SoundWorker] short mode + Cyrillic lyrics → Suno fallback (DiffRhythm doesn't support Russian)`);
-          externalUrl = await generateMusicSuno(prompt, { instrumental: false, lyrics, model: 'V5_5' });
-        } else {
-          const route = routeAudio(prompt);
-          console.info(`[SoundWorker] short/auto → ${route.reason} | cost $${route.costUsd} | lyrics=${!!lyrics}`);
-          if (route.model === 'udio') {
-            externalUrl = await generateMusicUdio(prompt);
-          } else {
-            externalUrl = await generateMusicDiffRhythm(prompt, route.diffRhythmMode ?? 'base', lyrics, styleAudio);
-          }
+        console.info(`[SoundWorker] ${musicMode} → Suno V5.5 | style="${sunoStyleArg ?? prompt.slice(0, 60)}" instrumental=${sunoInstrArg}`);
+
+        try {
+          externalUrl = await generateMusicSuno(prompt, {
+            style: sunoStyleArg,
+            title: sunoTitleArg,
+            instrumental: sunoInstrArg,
+            lyrics,
+            model: 'V5_5',
+          });
+        } catch (sunoErr: any) {
+          // Fallback to DiffRhythm only if Suno fails and there are no lyrics
+          // (DiffRhythm can't follow style but works for simple background music)
+          if (lyrics?.trim()) throw sunoErr; // lyrics require Suno — propagate error
+          console.warn(`[SoundWorker] Suno failed, falling back to DiffRhythm: ${sunoErr.message}`);
+          externalUrl = await generateMusicDiffRhythm(prompt, diffMode);
         }
       }
 
@@ -186,6 +171,6 @@ export function startSoundWorker() {
     console.info(`[SoundWorker] Job ${job.id} completed`);
   });
 
-  console.info('[SoundWorker] Started (DiffRhythm + Udio + Suno, FLAC→MP3 via ffmpeg)');
+  console.info('[SoundWorker] Started (Suno V5.5 primary, DiffRhythm fallback, FLAC→MP3 via ffmpeg)');
   return worker;
 }

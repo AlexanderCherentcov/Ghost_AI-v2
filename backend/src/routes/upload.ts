@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
+import { mkdirSync, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 // ─── MIME → language mapping for markdown code blocks ─────────────────────────
 
@@ -184,6 +188,48 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
       if (truncated) text = text.slice(0, MAX_CHARS) + '\n\n[... файл обрезан до 60 000 символов]';
 
       return { text, fileName, lang, truncated, chars: text.length };
+    },
+  });
+
+  /**
+   * POST /api/upload/image
+   * Accepts an image file (multipart), saves it to disk, returns a public URL.
+   * Used for image-to-video (Veo3.1) source images.
+   */
+  fastify.post('/upload/image', {
+    preHandler: [authenticate],
+    handler: async (request, reply) => {
+      const data = await request.file();
+      if (!data) {
+        return reply.code(400).send({ error: 'No file provided' });
+      }
+
+      const mime = data.mimetype ?? '';
+      if (!mime.startsWith('image/')) {
+        return reply.code(422).send({ error: 'Файл должен быть изображением' });
+      }
+
+      const ext = data.filename?.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+      const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${safeExt}`;
+
+      const dir = path.join(process.cwd(), 'uploads', 'images');
+      mkdirSync(dir, { recursive: true });
+      const filepath = path.join(dir, filename);
+
+      const writeStream = createWriteStream(filepath);
+      try {
+        await pipeline(data.file, writeStream);
+      } catch (err: any) {
+        writeStream.destroy();
+        fastify.log.error(err, '[upload/image] write error');
+        return reply.code(500).send({ error: 'Не удалось сохранить изображение' });
+      }
+
+      const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+      const url = `${API_BASE}/images/${filename}`;
+
+      return { url, fileName: filename };
     },
   });
 }

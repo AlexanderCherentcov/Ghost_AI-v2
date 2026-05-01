@@ -4,13 +4,15 @@ import { prisma } from '../lib/prisma.js';
 import { route } from '../services/ai-router.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
-import { checkResets, checkAndDeduct, refundCounter, sanitizeInput } from '../services/tokens.js';
+import { checkResets, checkAndDeduct, refundCaspers, sanitizeInput } from '../services/tokens.js';
 import type { RequestType } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
+import { streamCloudflare } from '../services/providers/cloudflare.js';
 import { OR_MODELS } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
+import { notifyApiError } from '../services/admin-notify.js';
 import type { SocketStream } from '@fastify/websocket';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -38,12 +40,6 @@ const wsMessageSchema = z.object({
   // Code-fence language (js, python, etc.)
   fileLang: z.string().max(32).optional(),
 });
-
-// ─── Provider stream factory ──────────────────────────────────────────────────
-
-function getProviderStream(model: string, messages: ChatMessage[], maxTokens?: number, fallbackModel?: string) {
-  return streamOpenRouter(messages, model, maxTokens, fallbackModel);
-}
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
@@ -213,11 +209,13 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       const { chatId, mode, history, imageUrl, fileContent, fileName, fileLang, preferredModel } = parsed;
       const prompt = sanitizeInput(parsed.prompt);
 
+      let requestType: RequestType = 'chat_std';
+
       try {
         // Verify chat ownership + load user profile
         const [chat, userProfile] = await Promise.all([
           prisma.chat.findFirst({ where: { id: chatId, userId } }),
-          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true, files_monthly_limit: true } }),
+          prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true } }),
         ]);
         if (!chat) {
           send({ type: 'error', code: 'CHAT_NOT_FOUND' });
@@ -226,14 +224,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         const responseStyle = userProfile?.responseStyle ?? null;
         const plan = userProfile?.plan ?? 'FREE';
 
-        // FREE plan: only chat mode allowed
-        if (plan === 'FREE' && mode !== 'chat') {
-          send({ type: 'error', code: 'PLAN_RESTRICTED', message: 'Обновите тариф для использования этой функции.' });
-          return;
-        }
-
-        // FREE plan: no file attachments (files_monthly_limit = 0)
-        if (fileContent && (userProfile?.files_monthly_limit ?? 0) === 0) {
+        // File attachments require paid plan
+        if (fileContent && plan === 'FREE') {
           send({ type: 'error', code: 'FREE_LOCKED', message: 'Файлы доступны с платного тарифа.' });
           return;
         }
@@ -253,26 +245,27 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         const hasAttachment = !!(imageUrl || fileContent);
 
         // Route request
-        const { provider, complexity, model, fallbackModel, maxTokens } = route(
+        const { provider, complexity, model, fallbackModels, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
           fastify.log,
           !!imageUrl,
           plan,
-          preferredModel
+          preferredModel,
+          mode,
         );
 
-        // Determine request type based on which model was selected
-        // sonar (web search) counts as pro — only available to PRO/ULTRA
-        const isProModel = model === OR_MODELS.deepseek || model === OR_MODELS.sonar;
-        const requestType: RequestType = isProModel ? 'chat_pro' : 'chat_std';
+        // Determine request type
+        // sonar (web search) and think mode count as pro
+        const isProRequest = mode === 'think' || model === OR_MODELS.sonar;
+        requestType = isProRequest ? 'chat_pro' : 'chat_std';
 
-        // Reset daily counters if period ended
+        // Reset daily/weekly/monthly counters if period ended
         await checkResets(userId);
-        // Check limits and deduct BEFORE calling AI (with refund on 5xx)
+        // Check limits and deduct BEFORE calling AI (with refund on error)
         await checkAndDeduct(userId, requestType, 1, !!fileContent);
 
-        // History context for cache key: последние user-сообщения (без текущего)
+        // History context for cache key
         const userHistoryContext = history
           .filter(m => m.role === 'user')
           .map(m => m.content);
@@ -290,15 +283,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           ? await getVectorCached(mode, effectivePrompt, userHistoryContext, responseStyle)
           : { hit: false as const };
 
-        // Merge cache hits — TypeScript-safe narrowing through a single variable
+        // Merge cache hits
         const cacheHit = cached.hit ? cached : vecCached;
         if (cacheHit.hit) {
           const response = cacheHit.response as { content: string };
 
-          // No token deduction on cache hits
-          const tokensCost = 0;
-
-          // Save messages
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
           await prisma.$transaction([
             prisma.message.create({
@@ -314,7 +303,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
                 complexity,
                 provider,
                 cacheHit: true,
-                tokensCost,
+                tokensCost: 0,
               },
             }),
             prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
@@ -324,18 +313,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           for (const char of response.content) {
             send({ type: 'token', data: char });
           }
-          send({ type: 'done', tokensCost, cacheHit: true });
+          send({ type: 'done', tokensCost: 0, cacheHit: true });
           return;
         }
 
         // Build messages array for AI
-        // When imageUrl present: build multimodal content array (Sonnet vision)
         const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle, plan) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;
         if (imageUrl && !fileContent) {
-          // Multimodal: text + image
+          // Multimodal: text + image (only for OpenRouter vision models)
           const textPart = effectivePrompt.trim() || 'Опиши что изображено на картинке.';
           userMsg = {
             role: 'user',
@@ -350,28 +338,47 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const messages: ChatMessage[] = [systemMsg, ...historyMsgs, userMsg];
 
-        // Save user message (include image URL if attached)
+        // Save user message
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
           data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
-        // Stream from provider (maxTokens is set for FREE plan)
+        // Stream from provider
         let fullResponse = '';
-        const stream = streamOpenRouter(messages, model, maxTokens, fallbackModel);
 
-        for await (const chunk of stream) {
-          if (chunk.type === 'token' && chunk.data) {
-            fullResponse += chunk.data;
-            send({ type: 'token', data: chunk.data });
+        // Use Cloudflare for std chat, OpenRouter for think/pro
+        const stream = provider === 'cloudflare'
+          ? streamCloudflare(messages, maxTokens)
+          : streamOpenRouter(messages, model, maxTokens, fallbackModels);
+
+        try {
+          for await (const chunk of stream) {
+            if (chunk.type === 'token' && chunk.data) {
+              fullResponse += chunk.data;
+              send({ type: 'token', data: chunk.data });
+            }
           }
+        } catch (streamErr: any) {
+          // API error during streaming: notify admins with details, send generic message to user
+          const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+          notifyApiError({
+            userId,
+            userName: userInfo?.name,
+            operation: 'chat',
+            error: streamErr.message ?? String(streamErr),
+            context: `mode=${mode} provider=${provider} model=${model}`,
+          }).catch(() => {});
+
+          // Refund caspers if it was a paid operation
+          await refundCaspers(userId, requestType).catch(() => {});
+
+          send({ type: 'error', code: 'SERVER_ERROR', message: 'Ошибка соединения, попробуйте позже' });
+          return;
         }
 
-        // No token deduction — counters already deducted before API call
-        const tokensCost = 0;
-
         // Cache the response (skip if any attachment present)
-        if (!hasAttachment) {
+        if (!hasAttachment && fullResponse) {
           await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
           await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
         }
@@ -388,7 +395,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
               complexity,
               provider,
               cacheHit: false,
-              tokensCost,
+              tokensCost: 0,
             },
           }),
           prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
@@ -403,20 +410,27 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           await prisma.chat.update({ where: { id: chatId }, data: { title: newTitle } });
         }
 
-        send({ type: 'done', tokensCost, cacheHit: false, title: newTitle });
+        send({ type: 'done', tokensCost: 0, cacheHit: false, title: newTitle });
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
-        // If it's a server error (not a limit error), refund the counter
-        const limitCodes = ['LIMIT_FREE_MESSAGES', 'LIMIT_STD_MESSAGES', 'LIMIT_PRO_MESSAGES', 'LIMIT_PRO_UNAVAILABLE', 'LIMIT_FILES', 'LIMIT_IMAGES', 'FREE_LOCKED', 'PLAN_RESTRICTED'];
+        // If it's a limit/auth error, don't refund
+        const limitCodes = [
+          'LIMIT_FREE_MESSAGES', 'LIMIT_STD_MESSAGES', 'LIMIT_PRO_MESSAGES',
+          'LIMIT_PRO_UNAVAILABLE', 'LIMIT_FILES', 'LIMIT_IMAGES', 'LIMIT_MUSIC',
+          'LIMIT_VIDEOS', 'FREE_LOCKED', 'PLAN_RESTRICTED', 'INSUFFICIENT_CASPERS',
+          'UNAUTHORIZED',
+        ];
         if (userId && !limitCodes.includes(err.code)) {
-          const isProModel = parsed ? OR_MODELS.deepseek === route(parsed.prompt || '', !!parsed.fileContent, undefined, !!parsed.imageUrl, undefined, parsed.preferredModel).model : false;
-          const rt: RequestType = isProModel ? 'chat_pro' : 'chat_std';
-          await refundCounter(userId, rt, 1, !!parsed?.fileContent).catch(() => {});
+          await refundCaspers(userId, requestType).catch(() => {});
         }
-        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: err.message });
+
+        // Send generic message to user (never expose provider/model details)
+        const userMessage = limitCodes.includes(err.code)
+          ? (err.message ?? 'Лимит исчерпан')
+          : 'Генерация провалась, попробуйте позже';
+        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: userMessage });
       } finally {
-        // Всегда освобождаем лок — даже при ошибке или стриминге кэша
-        await releaseChatLock(userId);
+        await releaseChatLock(userId).catch(() => {});
       }
     });
   });

@@ -82,3 +82,27 @@ export async function notifyAbuse(info: {
     `Управление: /user ${info.userId}`,
   );
 }
+
+export async function notifyApiError(info: {
+  userId: string;
+  userName?: string | null;
+  operation: string; // 'image_gen' | 'video_gen' | 'music_gen' | 'chat'
+  error: string;
+  context?: string;
+}): Promise<void> {
+  const opLabel: Record<string, string> = {
+    image_gen: '🖼 Генерация изображения',
+    video_gen: '🎬 Генерация видео',
+    music_gen: '🎵 Генерация музыки',
+    chat:      '💬 Чат',
+  };
+  const label = opLabel[info.operation] ?? `⚙️ ${info.operation}`;
+  const ctx = info.context ? `\n📋 Контекст: <code>${info.context.slice(0, 200)}</code>` : '';
+  await notifyAdmins(
+    `🔴 <b>Ошибка API!</b>\n\n` +
+    `👤 ${info.userName ?? 'Без имени'}\n` +
+    `🆔 User ID: <code>${info.userId}</code>\n` +
+    `${label}\n` +
+    `❌ Ошибка: <code>${info.error.slice(0, 300)}</code>${ctx}`,
+  );
+}

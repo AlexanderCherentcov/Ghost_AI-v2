@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon, CasperCoin } from '@/components/icons';
+import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 
@@ -195,7 +195,9 @@ function VideoWidget({
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
-        <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🎬 GhostLine Motion</span>
+        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <VideoIcon size={15} /> GhostLine Motion
+          </span>
         <CostBadge cost={cost} size={13} />
       </div>
 
@@ -306,7 +308,9 @@ function MusicWidget({
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div className="px-4 py-2.5 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
-        <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🎵 GhostLine Beats</span>
+        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <MusicIcon size={15} /> GhostLine Beats
+          </span>
         <CostBadge cost={cost} size={13} />
       </div>
 
@@ -393,7 +397,9 @@ function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?:
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div>
-        <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>🖼️ GhostLine Vision</span>
+        <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <ImageIcon size={15} /> GhostLine Vision
+          </span>
         <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Опишите изображение в строке ниже</p>
       </div>
       <CostBadge cost={cost} size={13} />
@@ -404,22 +410,23 @@ function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?:
 // ─── Mode icon button ─────────────────────────────────────────────────────────
 
 function ModeIconBtn({
-  emoji, label, active, onClick,
-}: { emoji: string; label: string; active: boolean; onClick: () => void }) {
+  icon, label, active, onClick,
+}: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={label}
       className={cn(
-        'flex items-center gap-1 px-2 py-0.5 rounded-md text-[12px] transition-all',
+        'flex items-center gap-1.5 px-2 py-1 rounded-lg text-[12px] transition-all',
         active
           ? 'bg-[var(--accent-dim)] text-accent font-medium'
-          : 'opacity-40 hover:opacity-70'
+          : 'opacity-35 hover:opacity-70'
       )}
       style={!active ? { color: 'var(--text-primary)' } : {}}
     >
-      {emoji} <span className="hidden sm:inline">{label}</span>
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
@@ -699,24 +706,22 @@ export function InputBar({
             {chatMode !== 'music' && (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-elevated)] opacity-40 hover:opacity-80"
+                className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-md transition-colors hover:bg-[var(--bg-elevated)] opacity-35 hover:opacity-80"
                 style={{ color: 'var(--text-primary)' }}
                 type="button"
                 title="Прикрепить файл"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+                <AttachIcon size={16} />
               </button>
             )}
 
             {/* Mode selector icons */}
             <div className="flex-1 overflow-x-auto scrollbar-none min-w-0">
               <div className="flex items-center gap-0.5 w-max">
-                <ModeIconBtn emoji="💬" label="Чат"     active={chatMode === 'chat'}   onClick={() => setChatMode?.('chat')} />
-                <ModeIconBtn emoji="🖼️" label="Картинка" active={chatMode === 'images'} onClick={() => toggleMode('images')} />
-                <ModeIconBtn emoji="🎬" label="Видео"   active={chatMode === 'video'}  onClick={() => toggleMode('video')} />
-                <ModeIconBtn emoji="🎵" label="Музыка"  active={chatMode === 'music'}  onClick={() => toggleMode('music')} />
+                <ModeIconBtn icon={<ChatIcon  size={15}/>} label="Чат"      active={chatMode === 'chat'}   onClick={() => setChatMode?.('chat')} />
+                <ModeIconBtn icon={<ImageIcon size={15}/>} label="Картинка" active={chatMode === 'images'} onClick={() => toggleMode('images')} />
+                <ModeIconBtn icon={<VideoIcon size={15}/>} label="Видео"    active={chatMode === 'video'}  onClick={() => toggleMode('video')} />
+                <ModeIconBtn icon={<MusicIcon size={15}/>} label="Музыка"   active={chatMode === 'music'}  onClick={() => toggleMode('music')} />
               </div>
             </div>
 

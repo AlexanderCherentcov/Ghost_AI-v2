@@ -35,8 +35,13 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
 
       const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
-      const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing);
-      return result;
+      try {
+        const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing);
+        return result;
+      } catch (err: any) {
+        fastify.log.error(err, 'createPayment failed');
+        return reply.code(502).send({ error: err.message ?? 'Платёжный сервис недоступен' });
+      }
     },
   });
 

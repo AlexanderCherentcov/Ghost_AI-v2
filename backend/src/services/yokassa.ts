@@ -51,8 +51,9 @@ export async function createPayment(
     data = response.data;
   } catch (err: any) {
     const detail = err?.response?.data ?? err?.message ?? 'unknown';
-    console.error('[yokassa] createPayment failed:', detail);
-    throw new Error('Платёжный сервис недоступен');
+    const status = err?.response?.status;
+    console.error('[yokassa] createPayment failed:', status, JSON.stringify(detail));
+    throw new Error(`Платёжный сервис недоступен (${status ?? 'no response'}): ${JSON.stringify(detail)}`);
   }
 
   await prisma.payment.create({

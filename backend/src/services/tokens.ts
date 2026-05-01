@@ -412,7 +412,7 @@ export async function grantCaspers(
   await prisma.user.update({
     where: { id: userId },
     data: {
-      caspers_balance: amount,
+      caspers_balance: { increment: amount },
       caspers_monthly: monthly,
       period_start: new Date(),
       // Reset daily counters on plan change

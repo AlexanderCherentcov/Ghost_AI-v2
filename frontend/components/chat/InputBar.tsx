@@ -165,7 +165,7 @@ function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
   if (cost.type === 'free') {
     return (
       <span className="text-[11px] font-medium" style={{ color: '#4ade80' }}>
-        {cost.label} бесплатно
+        {cost.label}
       </span>
     );
   }

@@ -28,6 +28,22 @@ const IMAGE_NOUNS = [
 ];
 const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
 
+// Filler words that don't constitute an image description
+const INTENT_FILLERS = [
+  'хотел', 'хотела', 'хочу', 'хочется', 'бы', 'можешь', 'можно',
+  'пожалуйста', 'мне', 'я', 'давай', 'давайте', 'хотелось',
+];
+
+function isOnlyImageIntent(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const meaningful = words.filter(w =>
+    !IMAGE_VERBS.includes(w) &&
+    !IMAGE_NOUNS.includes(w) &&
+    !INTENT_FILLERS.includes(w)
+  );
+  return meaningful.length === 0;
+}
+
 // Keywords that mean user is REFERENCING a previous message/prompt
 const REF_KEYWORDS = [
   'по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата',
@@ -668,7 +684,12 @@ export default function ChatConversationPage() {
             return handleGenerateImage(extractImagePrompt(lastAssistant.content));
           }
         }
-        // 4. Direct image generation with user's own description
+        // 4. Intent-only ("хочу картинку", "хотел бы сделать изображение") → switch to images mode
+        if (isOnlyImageIntent(prompt)) {
+          handleSetChatMode('images');
+          return;
+        }
+        // 5. Prompt has real description → generate directly
         return handleGenerateImage(prompt);
       }
     }
@@ -757,7 +778,7 @@ export default function ChatConversationPage() {
 
       const { tokensCost, cacheHit, title: newTitle } = await send({
         chatId: id,
-        mode: mode as 'chat' | 'think',
+        mode: preferredModel === 'deepseek' ? 'think' : 'chat',
         prompt,
         history,
         jwt: accessToken,

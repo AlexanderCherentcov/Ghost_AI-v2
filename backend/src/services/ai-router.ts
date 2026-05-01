@@ -111,30 +111,20 @@ export function route(
     };
   }
 
-  // ── Std chat (mode === 'chat' or unspecified, no attachments) → Cloudflare ──
+  // ── Std chat (mode === 'chat') → Cloudflare Llama, fallback OpenRouter Llama ──
   if (mode === 'chat' || (!mode && !hasDocument)) {
-    // Paid plan + search keywords → Perplexity Sonar (web search)
-    if (isPaid && isSearchQuery(prompt)) {
-      logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Std search query → Sonar');
-      return {
-        provider: 'openrouter-sonar',
-        complexity: 'complex',
-        model: OR_MODELS.sonar,
-        fallbackModels: [OR_MODELS.deepseek, OR_MODELS.haiku],
-      };
-    }
-
-    logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare');
+    logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare Llama');
     return {
       provider: 'cloudflare',
       complexity,
       model: '@cf/meta/llama-3.1-8b-instruct-fast',
+      fallbackModels: [OR_MODELS.llama],
       maxTokens: plan === 'FREE' ? 400 : undefined,
     };
   }
 
   // ── Pro chat (mode === 'think') ────────────────────────────────────────────
-  // Search queries in pro mode → Sonar (paid plans only)
+  // Search queries → Sonar (all paid plans)
   if (isPaid && !hasDocument && isSearchQuery(prompt)) {
     logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Pro search query → Sonar');
     return {
@@ -145,8 +135,7 @@ export function route(
     };
   }
 
-  // Pro chat (including documents): DeepSeek V3.2 is always primary.
-  // Gemini 2.5 Flash → GPT-4o-mini as ordered fallbacks.
+  // Pro chat (including documents): DeepSeek V3.2 primary, Gemini Flash → GPT-4o-mini fallback.
   logger?.debug({ plan, model: OR_MODELS.deepseek }, '[AIRouter] Pro chat → DeepSeek V3.2');
   return {
     provider: 'openrouter-deepseek',

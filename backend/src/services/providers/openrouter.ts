@@ -8,6 +8,7 @@ export const OR_MODELS = {
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
   sonar:      'perplexity/sonar',          // web-search model, PRO/ULTRA only
+  llama:      'meta-llama/llama-3.1-8b-instruct', // Cloudflare fallback
   flux:       'google/gemini-3.1-flash-image-preview',
   fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;
@@ -35,6 +36,23 @@ export type MessageContent =
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: MessageContent;
+}
+
+// ─── One-shot JSON call (for dispatcher fallback) ─────────────────────────────
+
+export async function callOpenRouterJSON(
+  messages: ChatMessage[],
+  model: string,
+  maxTokens = 512,
+): Promise<string> {
+  const client = getClient();
+  const resp = await client.chat.completions.create({
+    model,
+    messages: messages as OpenAI.ChatCompletionMessageParam[],
+    stream: false,
+    max_tokens: maxTokens,
+  });
+  return resp.choices[0]?.message?.content ?? '';
 }
 
 // ─── Text streaming ────────────────────────────────────────────────────────────

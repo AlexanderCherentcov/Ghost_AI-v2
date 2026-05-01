@@ -39,9 +39,16 @@ export function startVisionWorker() {
         data: { status: 'processing' },
       });
 
-      // For image editing use fluxFill (supports image-to-image); plain generation uses Gemini flash
-      const model = sourceImageUrl ? OR_MODELS.fluxFill : OR_MODELS.flux;
-      let mediaUrl = await generateImageFlux(prompt, model, sourceImageUrl);
+      // For image editing use fluxFill; plain generation uses Gemini Flash.
+      // If primary fails (empty images, content policy), fall back to FLUX.2 Pro.
+      const primaryModel = sourceImageUrl ? OR_MODELS.fluxFill : OR_MODELS.flux;
+      let mediaUrl: string;
+      try {
+        mediaUrl = await generateImageFlux(prompt, primaryModel, sourceImageUrl);
+      } catch (err) {
+        console.warn('[VisionWorker] Primary model failed, falling back to FLUX.2 Pro:', (err as Error).message);
+        mediaUrl = await generateImageFlux(prompt, OR_MODELS.fluxFill, sourceImageUrl);
+      }
 
       // Always serve from our own server — avoids CORS/expiry issues with external CDN URLs
       if (mediaUrl.startsWith('data:')) {

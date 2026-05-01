@@ -623,11 +623,14 @@ export default function ChatConversationPage() {
 
     // ── Mode-based routing ───────────────────────────────────────────────────
     if (chatMode === 'images' && !file) {
-      // If user is editing the last generated image — pass it as source
-      if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
+      // "напиши промт...", "сгенерируй промт..." → route to AI chat with image prompt guidance
+      if (isPromptComposeRequest(prompt)) {
+        // isWritingPrompt will be set below; fall through to AI chat
+      } else if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
         return handleGenerateImage(prompt, lastGeneratedImageRef.current);
+      } else {
+        return handleGenerateImage(prompt || 'beautiful landscape');
       }
-      return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
       if (!prompt.trim()) return;

@@ -6,11 +6,6 @@ import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, Attach
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 
-// ─── FREE tier limits (must match backend/src/config/plans.ts) ───────────────
-const FREE_IMAGES_WEEKLY  = 5;
-const FREE_MUSIC_WEEKLY   = 5;
-const FREE_VIDEOS_MONTHLY = 3;
-
 // ─── File helpers ─────────────────────────────────────────────────────────────
 
 const ACCEPT = [
@@ -130,29 +125,16 @@ function getCostDisplay(
     if (!userProFreeRemaining && userPlan === 'FREE') return null; // FREE can't use pro
     return { type: 'caspers', amount: 1 };
   }
-  const isFree = userPlan === 'FREE';
 
   if (mode === 'images') {
-    if (isFree) {
-      const left = Math.max(0, FREE_IMAGES_WEEKLY - (userImages ?? 0));
-      if (left > 0) return { type: 'free', label: `${left}/${FREE_IMAGES_WEEKLY} нед.` };
-    }
     return { type: 'caspers', amount: 10 };
   }
 
   if (mode === 'music') {
-    if (isFree) {
-      const left = Math.max(0, FREE_MUSIC_WEEKLY - (userMusic ?? 0));
-      if (left > 0) return { type: 'free', label: `${left}/${FREE_MUSIC_WEEKLY} нед.` };
-    }
     return { type: 'caspers', amount: 5 };
   }
 
   if (mode === 'video') {
-    if (isFree) {
-      const left = Math.max(0, FREE_VIDEOS_MONTHLY - (userVideos ?? 0));
-      if (left > 0) return { type: 'free', label: `${left}/${FREE_VIDEOS_MONTHLY} мес.` };
-    }
     return { type: 'caspers', amount: calcCaspers('video', videoOpts) };
   }
 

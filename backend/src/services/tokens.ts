@@ -175,7 +175,7 @@ export async function checkAndDeduct(
         if (user.std_messages_today >= FREE_DAILY_LIMITS.std_messages) {
           throw Object.assign(
             new Error('Лимит бесплатных сообщений исчерпан'),
-            { code: 'LIMIT_FREE_MESSAGES' },
+            { code: 'LIMIT_MESSAGES_DAILY' },
           );
         }
         await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
@@ -238,17 +238,6 @@ export async function checkAndDeduct(
 
     // ── image generation ──────────────────────────────────────────────────────
     if (requestType === 'image_generate' || requestType === 'image_edit') {
-      if (plan === 'FREE') {
-        if (user.images_this_week >= FREE_WEEKLY_LIMITS.images) {
-          throw Object.assign(
-            new Error('Лимит картинок на этой неделе исчерпан'),
-            { code: 'LIMIT_IMAGES' },
-          );
-        }
-        await tx.user.update({ where: { id: userId }, data: { images_this_week: { increment: 1 } } });
-        return;
-      }
-      // Paid plans: deduct caspers
       if (user.caspers_balance < cost) {
         throw Object.assign(
           new Error('Недостаточно Caspers для генерации изображения'),
@@ -256,25 +245,12 @@ export async function checkAndDeduct(
         );
       }
       await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({
-        data: { userId, amount: -cost, reason: requestType },
-      });
+      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: requestType } });
       return;
     }
 
     // ── music generation ──────────────────────────────────────────────────────
     if (requestType === 'music_generate') {
-      if (plan === 'FREE') {
-        if (user.music_this_week >= FREE_WEEKLY_LIMITS.music) {
-          throw Object.assign(
-            new Error('Лимит треков на этой неделе исчерпан'),
-            { code: 'LIMIT_MUSIC' },
-          );
-        }
-        await tx.user.update({ where: { id: userId }, data: { music_this_week: { increment: 1 } } });
-        return;
-      }
-      // Paid plans: deduct caspers
       if (user.caspers_balance < cost) {
         throw Object.assign(
           new Error('Недостаточно Caspers для генерации музыки'),
@@ -282,9 +258,7 @@ export async function checkAndDeduct(
         );
       }
       await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({
-        data: { userId, amount: -cost, reason: 'music_generate' },
-      });
+      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: 'music_generate' } });
       return;
     }
 
@@ -295,17 +269,6 @@ export async function checkAndDeduct(
       requestType === 'video_pro_4s' ||
       requestType === 'video_pro_8s'
     ) {
-      if (plan === 'FREE') {
-        if (user.videos_this_month >= FREE_MONTHLY_LIMITS.videos) {
-          throw Object.assign(
-            new Error('Лимит видео в этом месяце исчерпан (3/мес на бесплатном)'),
-            { code: 'LIMIT_VIDEOS' },
-          );
-        }
-        await tx.user.update({ where: { id: userId }, data: { videos_this_month: { increment: 1 } } });
-        return;
-      }
-      // Paid plans: deduct caspers
       if (user.caspers_balance < cost) {
         throw Object.assign(
           new Error('Недостаточно Caspers для генерации видео'),
@@ -313,9 +276,7 @@ export async function checkAndDeduct(
         );
       }
       await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({
-        data: { userId, amount: -cost, reason: requestType },
-      });
+      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: requestType } });
       return;
     }
   });
@@ -337,20 +298,6 @@ export async function refundCaspers(
       select: { plan: true },
     });
     if (!user) return;
-
-    const plan = user.plan as string;
-
-    // FREE plan users don't have caspers deducted for images/music/videos
-    const isFreeWeeklyOp =
-      requestType === 'image_generate' ||
-      requestType === 'image_edit'     ||
-      requestType === 'music_generate' ||
-      requestType === 'video_std_4s'   ||
-      requestType === 'video_std_8s'   ||
-      requestType === 'video_pro_4s'   ||
-      requestType === 'video_pro_8s';
-
-    if (plan === 'FREE' && isFreeWeeklyOp) return;
 
     // For pro chat: only refund if caspers were actually deducted (not free quota)
     if (requestType === 'chat_pro') {

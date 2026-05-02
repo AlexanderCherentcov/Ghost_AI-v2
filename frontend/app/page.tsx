@@ -165,7 +165,7 @@ export default function LandingPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.4 }}
           >
-            🎁 100 Caspers · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц · Без карты
+            🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
           </motion.p>
         </motion.div>
 
@@ -272,7 +272,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl px-6 py-4 mb-6">
             <div>
               <span className="font-medium text-white">Бесплатный план</span>
-              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">🎁 100 Caspers · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц · Без карты</span>
+              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers · Без карты</span>
             </div>
             <Link href="/login" className="btn btn-ghost text-sm h-9 px-5 shrink-0">
               Начать бесплатно
@@ -340,7 +340,7 @@ export default function LandingPage() {
             Начать бесплатно
           </Link>
           <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">
-            🎁 100 Caspers · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц · Без карты
+            🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
           </p>
         </motion.div>
       </section>

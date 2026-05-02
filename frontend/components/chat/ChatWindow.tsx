@@ -10,6 +10,7 @@ import { greetingByHour } from '@/lib/utils';
 
 interface ChatWindowProps {
   onSuggestion?: (text: string) => void;
+  onUsePrompt?: (prompt: string) => void;
   isLoading?: boolean;
 }
 
@@ -49,7 +50,7 @@ function ChatSkeleton() {
   );
 }
 
-export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
+export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowProps) {
   const { user } = useAuthStore();
   const { messages, isStreaming, streamContent, activeChat } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -85,7 +86,7 @@ export function ChatWindow({ onSuggestion, isLoading }: ChatWindowProps) {
           <div className="max-w-[720px] w-full mx-auto px-4 py-6 space-y-1">
           <AnimatePresence initial={false}>
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble key={msg.id} message={msg} onUsePrompt={onUsePrompt} />
             ))}
           </AnimatePresence>
 

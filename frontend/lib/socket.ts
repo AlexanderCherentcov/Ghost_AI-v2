@@ -86,20 +86,43 @@ export function disconnectWS() {
   ws = null;
 }
 
+// [H-16] Stream stall timeouts:
+//   30s  — no first token received (server hung before responding)
+//   20s  — no new token after last one (stream frozen mid-response)
+const STALL_BEFORE_FIRST = 30_000;
+const STALL_AFTER_TOKEN  = 20_000;
+
 export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean; title?: string }> {
   return new Promise((resolve, reject) => {
     const socket = connectWS();
-    // [H-06] Capture chatId at the time of sendMessage so the handler only
-    // reacts to chunks belonging to this specific request.
-    // Note: the server does not return chatId in chunks, so we use a per-request
-    // requestId to disambiguate concurrent sends.
     const requestId = `${msg.chatId}-${Date.now()}-${Math.random()}`;
     const msgWithId = { ...msg, requestId };
 
-    const cleanup = () => listeners.delete(handler);
+    let firstTokenReceived = false;
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function resetStall() {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        cleanup();
+        aborted = true;
+        reject(Object.assign(
+          new Error('Нет ответа от сервера, попробуйте ещё раз'),
+          { code: 'STREAM_TIMEOUT' },
+        ));
+      }, firstTokenReceived ? STALL_AFTER_TOKEN : STALL_BEFORE_FIRST);
+    }
+
+    const cleanup = () => {
+      listeners.delete(handler);
+      if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
+    };
 
     const handler = (chunk: WSChunk) => {
-      if (chunk.type === 'done') {
+      if (chunk.type === 'token') {
+        firstTokenReceived = true;
+        resetStall(); // reset stall window on every token
+      } else if (chunk.type === 'done') {
         cleanup();
         resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false, title: chunk.title });
       } else if (chunk.type === 'error') {
@@ -109,6 +132,7 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
     };
 
     listeners.add(handler);
+    resetStall(); // start stall timer immediately
 
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msgWithId));

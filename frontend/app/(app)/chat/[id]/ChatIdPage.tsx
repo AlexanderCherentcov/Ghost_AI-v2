@@ -178,6 +178,7 @@ export default function ChatConversationPage() {
   } = useChatStore();
 
   const [limitType, setLimitType] = useState<LimitType>(null);
+  const [fillPrompt, setFillPrompt] = useState('');
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
@@ -615,6 +616,17 @@ export default function ChatConversationPage() {
     if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
   }, []);
 
+  // "⚡ Использовать промт" — fills InputBar with the prompt.
+  // Switches to the relevant mode so widgets (model, duration, etc.) appear
+  // and the user can adjust settings before clicking Send.
+  const handleUsePrompt = useCallback((prompt: string, messageMode?: string) => {
+    if (messageMode === 'reel')  handleSetChatMode('video');
+    else if (messageMode === 'sound') handleSetChatMode('music');
+    else if (messageMode === 'vision') handleSetChatMode('images');
+    // For 'chat' mode messages keep the current mode — user knows what they want
+    setFillPrompt(prompt);
+  }, [handleSetChatMode]);
+
   // ── Main send handler ────────────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
@@ -631,11 +643,43 @@ export default function ChatConversationPage() {
     }
     if (chatMode === 'video') {
       if (!prompt.trim()) return;
-      return handleGenerateVideo(prompt, videoOptions);
+      if (isPromptComposeRequest(prompt)) {
+        // fall through to AI chat with video prompt guide
+      } else {
+        const lower = prompt.toLowerCase();
+        const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
+        if (isRef) {
+          // "сделай по промту", "используй это" → extract from last AI message
+          const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+          if (lastAssistant) {
+            const extracted = extractImagePrompt(lastAssistant.content);
+            if (extracted && extracted.length > 20) return handleGenerateVideo(extracted, videoOptions);
+          }
+          showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
+          return;
+        }
+        return handleGenerateVideo(prompt, videoOptions);
+      }
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;
-      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+      if (isPromptComposeRequest(prompt)) {
+        // fall through to AI chat with music prompt guide
+      } else {
+        const lower = prompt.toLowerCase();
+        const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
+        if (isRef) {
+          // "сделай по промту" → extract from last AI message
+          const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+          if (lastAssistant) {
+            const extracted = extractImagePrompt(lastAssistant.content);
+            if (extracted && extracted.length > 20) return handleGenerateMusic(extracted, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+          }
+          showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
+          return;
+        }
+        return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+      }
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────
@@ -826,6 +870,8 @@ export default function ChatConversationPage() {
         showToast('Подождите — предыдущий запрос ещё выполняется', 'warning');
       } else if (err.code === 'RATE_LIMITED') {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
+      } else if (err.code === 'STREAM_TIMEOUT') {
+        showToast('Нет ответа от сервера, попробуйте ещё раз', 'error');
       }
     }
   }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
@@ -847,7 +893,7 @@ export default function ChatConversationPage() {
     <div className="flex flex-col flex-1 min-h-0">
       <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
 
-      <ChatWindow onSuggestion={handleSend} isLoading={isLoading} />
+      <ChatWindow onSuggestion={handleSend} onUsePrompt={handleUsePrompt} isLoading={isLoading} />
 
       <InputBar
         onSend={handleSend}
@@ -862,6 +908,7 @@ export default function ChatConversationPage() {
         setChatMode={handleSetChatMode}
         dispatchResult={dispatchResult}
         onInputChange={handleInputChange}
+        fillPrompt={fillPrompt}
         userImages={user?.images_this_week}
         userMusic={user?.music_this_week}
         userVideos={user?.videos_this_month}

@@ -11,13 +11,24 @@ import type { Message } from '@/lib/api';
 
 interface MessageBubbleProps {
   message: Message;
+  onUsePrompt?: (prompt: string, messageMode?: string) => void;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+// Extract the first code block from a message (used for "Use prompt" button)
+function extractCodeBlock(content: string): string | null {
+  const m = content.match(/```[^\n]*\n?([\s\S]+?)```/);
+  const text = m?.[1]?.trim();
+  return text && text.length > 20 ? text.slice(0, 600) : null;
+}
+
+export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [videoOpen, setVideoOpen] = useState(false);
   const isUser = message.role === 'user';
+  const codeBlockPrompt = !isUser && !message.mediaUrl && onUsePrompt
+    ? extractCodeBlock(message.content)
+    : null;
 
   async function handleCopy() {
     await navigator.clipboard.writeText(message.content);
@@ -99,6 +110,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               {message.cacheHit && (
                 <span className="text-[11px]" style={{ color: 'rgba(123,92,240,0.5)' }}>⚡ Кэш</span>
               )}
+              {codeBlockPrompt && (
+                <button
+                  onClick={() => onUsePrompt!(codeBlockPrompt, message.mode)}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors"
+                  style={{ background: 'rgba(123,92,240,0.15)', color: 'var(--accent)' }}
+                >
+                  ⚡ Использовать промт
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -138,26 +158,37 @@ async function downloadFile(url: string, ext = 'mp4') {
   try {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
-    // Web Share API (iOS 15+, Android Chrome) → opens native share sheet
-    // with "Save to Photos / Gallery" option
-    if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
-      const file = new File([blob], fname, { type: blob.type });
+
+    // Try Web Share API with files first (iOS Safari 15+, some Android browsers)
+    // Note: canShare({files}) check prevents Chrome-desktop false positive
+    if (typeof navigator !== 'undefined' && 'canShare' in navigator) {
+      const file = new File([blob], fname, { type: blob.type || `video/${ext}` });
       if ((navigator as any).canShare({ files: [file] })) {
-        await (navigator as any).share({ files: [file], title: 'GhostLine' });
-        return;
+        try {
+          await (navigator as any).share({ files: [file], title: 'GhostLine' });
+          return;
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return; // user cancelled — done
+          // share failed (e.g. Chrome Android) → fall through to blob download
+        }
       }
     }
-    // Desktop fallback — blob URL download
+
+    // Blob URL download — works on desktop and Chrome for Android
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = blobUrl;
     a.download = fname;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-  } catch (err: any) {
-    if (err?.name === 'AbortError') return; // user cancelled share sheet
+    // Delay revoke to give browser time to start the download
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 5000);
+  } catch {
+    // Fetch failed (e.g. CORS) — open in new tab; user can save from there
     window.open(url, '_blank');
   }
 }

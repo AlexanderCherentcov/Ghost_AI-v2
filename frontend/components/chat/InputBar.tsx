@@ -279,7 +279,7 @@ function VideoWidget({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.18 }}
-      className="rounded-xl border mb-2 overflow-hidden"
+      className="rounded-xl border mb-2"
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
@@ -295,7 +295,7 @@ function VideoWidget({
               value={options.videoModel}
               onChange={(v) => onChange({ ...options, videoModel: v })}
               options={VIDEO_QUALITIES.map((q) => ({ value: q.key, label: q.label, icon: q.icon }))}
-              direction="down"
+              direction="up"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -307,7 +307,7 @@ function VideoWidget({
                 { value: '720p',  label: '720p' },
                 { value: '1080p', label: '1080p' },
               ]}
-              direction="down"
+              direction="up"
             />
           </div>
         </div>
@@ -389,7 +389,7 @@ function MusicWidget({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 6 }}
       transition={{ duration: 0.18 }}
-      className="rounded-xl border mb-2 overflow-hidden"
+      className="rounded-xl border mb-2"
       style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
     >
       <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
@@ -518,6 +518,8 @@ interface InputBarProps {
   dispatchResult?: { category: string; autoFill: Record<string, unknown> } | null;
   // Notify parent of input changes (for debounced dispatch)
   onInputChange?: (text: string) => void;
+  // Fill textarea with an external prompt value (e.g. "Use this prompt" button)
+  fillPrompt?: string;
   // User's current usage counters (for FREE plan limit display)
   userImages?: number;            // images_this_week
   userMusic?: number;             // music_this_week
@@ -531,6 +533,7 @@ export function InputBar({
   chatMode = 'chat', setChatMode,
   dispatchResult,
   onInputChange,
+  fillPrompt,
   userImages, userMusic, userVideos, userProFreeRemaining,
 }: InputBarProps) {
   const [value, setValue] = useState('');
@@ -585,6 +588,23 @@ export function InputBar({
       // Keep chat mode — search handled by backend routing
     }
   }, [dispatchResult]);
+
+  // Fill textarea when parent passes a prompt via "Use this prompt" button
+  const prevFillRef = useRef<string | undefined>();
+  useEffect(() => {
+    if (!fillPrompt || fillPrompt === prevFillRef.current) return;
+    prevFillRef.current = fillPrompt;
+    setValue(fillPrompt);
+    // Resize after state update
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.style.height = 'auto';
+        ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+        ta.focus();
+      }
+    });
+  }, [fillPrompt]);
 
   function adjustHeight() {
     const ta = textareaRef.current;

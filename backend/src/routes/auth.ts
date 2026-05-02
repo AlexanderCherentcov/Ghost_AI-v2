@@ -7,10 +7,17 @@ import { PLANS } from '../services/yokassa.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
-async function setupTrialForNewUser(_userId: string): Promise<void> {
-  // New user starts on FREE plan — defaults from schema are correct:
-  // caspers_balance=0, FREE tier weekly limits apply
-  // No extra setup needed; defaults handle it.
+const FREE_WELCOME_CASPERS = 100;
+
+async function setupTrialForNewUser(userId: string): Promise<void> {
+  // New users get a welcome bonus of 100 Caspers so they can try paid features
+  await prisma.user.update({
+    where: { id: userId },
+    data: { caspers_balance: { increment: FREE_WELCOME_CASPERS } },
+  });
+  await prisma.casperTransaction.create({
+    data: { userId, amount: FREE_WELCOME_CASPERS, reason: 'welcome_bonus' },
+  }).catch(() => {});
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────

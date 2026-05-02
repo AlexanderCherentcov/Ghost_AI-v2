@@ -184,6 +184,7 @@ export default function BillingPage() {
               </div>
               {plan === 'FREE' && (
                 <div className="text-right">
+                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">🎁 100 Caspers при регистрации</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 сообщений/день</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 картинок/неделю</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">5 треков/неделю</p>
@@ -315,7 +316,7 @@ export default function BillingPage() {
             <div>
               <span className="font-medium text-white text-sm">Бесплатный план</span>
               <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
-                5 сообщений/день · 5 картинок/неделю · 5 треков/неделю · 3 видео/месяц
+                🎁 100 Caspers · 5 сообщений/день · 5 картинок/неделю · 3 видео/месяц
               </span>
             </div>
             {plan === 'FREE' && (

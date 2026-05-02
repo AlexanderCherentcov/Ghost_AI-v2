@@ -36,6 +36,7 @@ export const PLANS: Record<PlanKey, PlanInfo> = {
     badge: null,
     popular: false,
     features: [
+      '100 Caspers при регистрации',
       'Стандартный чат: 5 сообщений/день',
       'Изображения: 5 в неделю',
       'Музыка: 5 треков в неделю',

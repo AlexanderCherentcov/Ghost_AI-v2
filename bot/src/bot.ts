@@ -102,12 +102,8 @@ bot.command('start', async (ctx) => {
   const displayName = dbName ?? tgName;
   const planLabel   = PLAN_LABELS[plan] ?? plan;
 
-  // webApp-кнопка всегда на отдельной строке в Telegram — используем url с t.me deep-link
-  const miniAppLink = `https://t.me/${BOT_USERNAME}?startapp=open`;
   const keyboard = new InlineKeyboard()
-    .url('🤖 Открыть GhostLine', miniAppLink)
-    .row()
-    .url('🌐 Сайт', FRONTEND_URL);
+    .url('🌐 Открыть GhostLine', FRONTEND_URL);
 
   await ctx.reply(
     `✨ *Твой личный ИИ\\-ассистент*\n\n` +

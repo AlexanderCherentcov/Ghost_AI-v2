@@ -212,6 +212,28 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true, added: amount });
   });
 
+  // ── POST /api/admin/subcaspers ────────────────────────────────────────────
+  // Subtract caspers from a user's balance (floors at 0).
+  fastify.post('/admin/subcaspers', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const { userId, amount } = addCaspersSchema.parse(request.body);
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { caspers_balance: true } });
+    if (!user) return reply.code(404).send({ error: 'User not found' });
+
+    const deduct = Math.min(amount, user.caspers_balance);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { caspers_balance: { decrement: deduct } },
+    });
+    await prisma.casperTransaction.create({
+      data: { userId, amount: -deduct, reason: 'admin_deduct' },
+    });
+
+    return reply.send({ ok: true, removed: deduct });
+  });
+
   // ── POST /api/admin/ban ────────────────────────────────────────────────────
   fastify.post('/admin/ban', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;

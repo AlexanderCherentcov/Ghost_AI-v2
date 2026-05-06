@@ -7,12 +7,15 @@
 
 import axios from 'axios';
 
+// Must bypass HTTP_PROXY — the global proxy doesn't forward HTTPS correctly (same issue as YooKassa)
+const notifyAxios = axios.create({ proxy: false });
+
 const TOKEN  = process.env.ADMIN_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
 const ADMINS = (process.env.ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 async function send(chatId: string, text: string): Promise<void> {
   if (!TOKEN) return;
-  await axios.post(
+  await notifyAxios.post(
     `https://api.telegram.org/bot${TOKEN}/sendMessage`,
     { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true },
     { timeout: 5000 },

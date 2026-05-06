@@ -132,7 +132,7 @@ async function containerStats(svc: string): Promise<{ cpu: string; memMb: string
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
 const PLAN_ICON: Record<string, string> = {
-  FREE: '🆓', BASIC: '⭐', STANDARD: '💫', PRO: '🚀', ULTRA: '💎', TEAM: '👥',
+  FREE: '🆓', BASIC: '⭐', PRO: '🚀', VIP: '💎', ULTRA: '🔥',
 };
 
 function esc(s: string): string {
@@ -151,18 +151,20 @@ function fmtUser(u: any): string {
   const tg      = u.telegramId ? `\n📱 TG ID: <code>${u.telegramId}</code>` : '';
   const email   = u.email ? `\n📧 ${u.email}` : '';
   const banned  = u.isBanned ? '\n🚫 <b>ЗАБАНЕН</b>' : '';
+  const billing = u.billing ? ` (${u.billing})` : '';
 
   return (
     `👤 <b>${esc(u.name ?? 'Без имени')}</b>${banned}\n` +
     `🆔 <code>${u.id}</code>${tg}${email}\n` +
     `📅 Зарегистрирован: ${new Date(u.createdAt).toLocaleDateString('ru')}\n` +
-    `📦 План: ${plan}${expires}\n\n` +
-    `📊 <b>Лимиты сегодня:</b>\n` +
-    `💬 Чат (стд): ${lim(u.std_messages_today, u.std_messages_daily_limit)}\n` +
-    `🧠 Чат (про): ${lim(u.pro_messages_today, u.pro_messages_daily_limit)}\n` +
-    `🖼 Картинки:  ${lim(u.images_today, u.images_daily_limit)}\n` +
-    `🎬 Видео:     ${lim(u.videos_today, u.videos_daily_limit)}\n` +
-    `📁 Файлы:     ${lim(u.files_used, u.files_monthly_limit)}`
+    `📦 План: ${plan}${billing}${expires}\n\n` +
+    `👻 <b>Caspers:</b> ${u.caspers_balance ?? 0} (месячных: ${u.caspers_monthly ?? 0})\n\n` +
+    `📊 <b>Активность сегодня:</b>\n` +
+    `💬 Чат (стд): ${u.std_messages_today ?? 0}\n` +
+    `🧠 Чат (про): ${u.pro_messages_today ?? 0}\n` +
+    `🖼 Картинки (нед): ${u.images_this_week ?? 0}\n` +
+    `🎵 Музыка (нед): ${u.music_this_week ?? 0}\n` +
+    `🎬 Видео (мес): ${u.videos_this_month ?? 0}`
   );
 }
 
@@ -238,27 +240,14 @@ function mainKb(): InlineKeyboard {
     .text('🏥 Здоровье', 'health');
 }
 
-function userKb(userId: string, u?: any): InlineKeyboard {
-  const kb = new InlineKeyboard()
+function userKb(userId: string): InlineKeyboard {
+  return new InlineKeyboard()
     .text('📦 Изменить план', `plan_menu:${userId}`)
     .text('🔄 Сбросить лимиты', `rl:${userId}`)
-    .row();
-
-  // Feature on/off toggles based on current limits
-  if (u) {
-    const vidOff = u.videos_daily_limit === 0;
-    const imgOff = u.images_daily_limit === 0;
-    const proOff = u.pro_messages_daily_limit === 0;
-    const chatOff = u.std_messages_daily_limit === 0;
-    kb.text(vidOff  ? '✅ Вкл видео'     : '📵 Откл видео',     vidOff  ? `ena:${userId}:video` : `dis:${userId}:video`)
-      .text(imgOff  ? '✅ Вкл картинки'  : '📵 Откл картинки',  imgOff  ? `ena:${userId}:image` : `dis:${userId}:image`)
-      .row()
-      .text(proOff  ? '✅ Вкл про-чат'   : '📵 Откл про-чат',   proOff  ? `ena:${userId}:pro`   : `dis:${userId}:pro`)
-      .text(chatOff ? '✅ Вкл чат'       : '📵 Откл чат',       chatOff ? `ena:${userId}:chat`  : `dis:${userId}:chat`)
-      .row();
-  }
-
-  return kb
+    .row()
+    .text('➕ Caspers', `caspers_add:${userId}`)
+    .text('➖ Caspers', `caspers_sub:${userId}`)
+    .row()
     .text('🚫 Бан', `ban:${userId}`)
     .text('✅ Разбан', `unban:${userId}`)
     .row()
@@ -267,7 +256,7 @@ function userKb(userId: string, u?: any): InlineKeyboard {
 }
 
 function planKb(userId: string): InlineKeyboard {
-  const plans = ['FREE', 'BASIC', 'STANDARD', 'PRO', 'ULTRA'] as const;
+  const plans = ['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'] as const;
   const kb    = new InlineKeyboard();
   plans.forEach((p, i) => {
     kb.text(`${PLAN_ICON[p]} ${p}`, `sp:${userId}:${p}`);
@@ -332,7 +321,7 @@ async function fetchUser(id: string): Promise<any> {
 async function replyUserCard(ctx: any, userId: string, edit = false): Promise<void> {
   const u  = await fetchUser(userId);
   const text = fmtUser(u);
-  const kb   = userKb(u.id, u);
+  const kb   = userKb(u.id);
   if (edit) {
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
   } else {
@@ -487,6 +476,24 @@ bot.command('ban', async (ctx) => {
   try {
     await api.post('/ban', { userId });
     await ctx.reply(`🚫 Пользователь <code>${userId}</code> заблокирован`, { parse_mode: 'HTML' });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
+});
+
+bot.command('addcaspers', async (ctx) => {
+  const [userId, amountStr] = (ctx.match ?? '').trim().split(/\s+/);
+  const amount = parseInt(amountStr ?? '');
+  if (!userId || isNaN(amount) || amount === 0) {
+    await ctx.reply('❌ /addcaspers <userId> <кол-во>\nОтрицательное — вычесть. Например: /addcaspers abc123 100');
+    return;
+  }
+  try {
+    const endpoint = amount > 0 ? '/addcaspers' : '/subcaspers';
+    await api.post(endpoint, { userId, amount: Math.abs(amount) });
+    const sign = amount > 0 ? '+' : '-';
+    await ctx.reply(`✅ Caspers ${sign}${Math.abs(amount)} для <code>${userId}</code>`, { parse_mode: 'HTML' });
+    await replyUserCard(ctx, userId);
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
   }
@@ -706,6 +713,26 @@ bot.callbackQuery(/^unban:(.+)$/, async (ctx) => {
   const userId = ctx.match[1];
   await api.post('/ban', { userId, unban: true });
   await replyUserCard(ctx, userId, true);
+});
+
+// caspers_add:<userId> — prompt to add caspers
+bot.callbackQuery(/^caspers_add:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const userId = ctx.match[1];
+  await ctx.reply(
+    `➕ <b>Добавить Caspers</b>\n\nПользователь: <code>${userId}</code>\n\nВведи команду:\n/addcaspers ${userId} <кол-во>`,
+    { parse_mode: 'HTML' },
+  );
+});
+
+// caspers_sub:<userId> — prompt to subtract caspers
+bot.callbackQuery(/^caspers_sub:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const userId = ctx.match[1];
+  await ctx.reply(
+    `➖ <b>Списать Caspers</b>\n\nПользователь: <code>${userId}</code>\n\nВведи команду (отрицательное значение):\n/addcaspers ${userId} -<кол-во>`,
+    { parse_mode: 'HTML' },
+  );
 });
 
 // dis:<userId>:<feature>  — disable a feature (set limit = 0)

@@ -107,27 +107,40 @@ export async function checkResets(userId: string): Promise<void> {
   }
 
   // Monthly caspers grant: when period_start + 30 days passed (paid plans only)
-  const periodEnd = new Date(user.period_start);
-  periodEnd.setDate(periodEnd.getDate() + 30);
-  if (now >= periodEnd && user.caspers_monthly > 0) {
-    updates.caspers_balance = user.caspers_balance + user.caspers_monthly;
-    updates.period_start    = now;
-  }
-
-  if (Object.keys(updates).length > 0) {
-    await prisma.user.update({ where: { id: userId }, data: updates });
-
-    // Log casper grant if applicable
-    if (updates.caspers_balance !== undefined && user.caspers_monthly > 0) {
-      await prisma.casperTransaction.create({
-        data: {
-          userId,
-          amount: user.caspers_monthly,
-          reason: 'plan_grant_monthly',
+  // Uses optimistic locking (updateMany with period_start condition) + atomic increment
+  // to prevent race-condition double-grants.
+  let didGrantMonthly = false;
+  if (user.caspers_monthly > 0) {
+    const periodEnd = new Date(user.period_start);
+    periodEnd.setDate(periodEnd.getDate() + 30);
+    if (now >= periodEnd) {
+      const granted = await prisma.user.updateMany({
+        where: {
+          id: userId,
+          period_start: user.period_start,   // optimistic lock — only fires once
+          caspers_monthly: { gt: 0 },
         },
-      }).catch(() => {});
+        data: {
+          caspers_balance: { increment: user.caspers_monthly },
+          period_start: now,
+        },
+      });
+      if (granted.count > 0) {
+        didGrantMonthly = true;
+        await prisma.casperTransaction.create({
+          data: { userId, amount: user.caspers_monthly, reason: 'plan_grant_monthly' },
+        }).catch(() => {});
+      }
     }
   }
+
+  // Apply the remaining counter resets (if any) separately
+  if (Object.keys(updates).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data: updates });
+  }
+
+  // Suppress unused variable warning
+  void didGrantMonthly;
 }
 
 // ─── Resolve video request type from model + duration ─────────────────────────

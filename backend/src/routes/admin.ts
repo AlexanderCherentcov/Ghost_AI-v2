@@ -107,7 +107,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     ]);
 
     // Attach ban status
-    const bannedKeys = await redis.mget(...users.map(u => `banned:${u.id}`));
+    const bannedKeys = users.length > 0 ? await redis.mget(...users.map(u => `banned:${u.id}`)) : [];
     const usersWithBan = users.map((u, i) => ({ ...u, isBanned: bannedKeys[i] === '1' }));
 
     return { users: usersWithBan, total, page, limit };

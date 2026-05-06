@@ -585,19 +585,31 @@ bot.command('sys', async (ctx) => {
 
 bot.callbackQuery('menu', async (ctx) => {
   await ctx.answerCallbackQuery();
-  const text = await quickStats();
-  await ctx.editMessageText(text + '\n\nВыберите раздел:', {
-    parse_mode: 'HTML', reply_markup: mainKb(),
-  });
+  try {
+    const text = await quickStats();
+    await ctx.editMessageText(text + '\n\nВыберите раздел:', {
+      parse_mode: 'HTML', reply_markup: mainKb(),
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    console.error('[AdminBot] menu callback error:', msg);
+    await ctx.reply(`❌ Ошибка меню: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery('stats', async (ctx) => {
   await ctx.answerCallbackQuery();
-  const { data } = await api.get('/stats');
-  await ctx.editMessageText(fmtStats(data), {
-    parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
-  });
+  try {
+    const { data } = await api.get('/stats');
+    await ctx.editMessageText(fmtStats(data), {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    console.error('[AdminBot] stats callback error:', msg);
+    await ctx.reply(`❌ Ошибка статистики: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery('server_menu', async (ctx) => {
@@ -640,12 +652,18 @@ bot.callbackQuery('sys', async (ctx) => {
 
 bot.callbackQuery(/^ul:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
-  const page     = parseInt(ctx.match[1]);
-  const { data } = await api.get(`/users?page=${page}&limit=8`);
-  await ctx.editMessageText(fmtUserList(data, page), {
-    parse_mode: 'HTML',
-    reply_markup: userListKb(data, page),
-  });
+  const page = parseInt(ctx.match[1]);
+  try {
+    const { data } = await api.get(`/users?page=${page}&limit=8`);
+    await ctx.editMessageText(fmtUserList(data, page), {
+      parse_mode: 'HTML',
+      reply_markup: userListKb(data, page),
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    console.error('[AdminBot] ul callback error:', msg);
+    await ctx.reply(`❌ Ошибка загрузки пользователей: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery('search_hint', async (ctx) => {
@@ -662,7 +680,13 @@ bot.callbackQuery('search_hint', async (ctx) => {
 
 bot.callbackQuery(/^u:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
-  await replyUserCard(ctx, ctx.match[1], true);
+  try {
+    await replyUserCard(ctx, ctx.match[1], true);
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    console.error('[AdminBot] user card error:', msg);
+    await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery(/^plan_menu:(.+)$/, async (ctx) => {
@@ -676,15 +700,25 @@ bot.callbackQuery(/^plan_menu:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^sp:(.+):([A-Z]+)$/, async (ctx) => {
   const [, userId, plan] = ctx.match;
   await ctx.answerCallbackQuery(`Устанавливаю ${plan}...`);
-  await api.post('/setplan', { userId, plan });
-  await replyUserCard(ctx, userId, true);
+  try {
+    await api.post('/setplan', { userId, plan });
+    await replyUserCard(ctx, userId, true);
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    await ctx.reply(`❌ Ошибка установки плана: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery(/^rl:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery('Сбрасываю...');
   const userId = ctx.match[1];
-  await api.post('/resetlimits', { userId });
-  await replyUserCard(ctx, userId, true);
+  try {
+    await api.post('/resetlimits', { userId });
+    await replyUserCard(ctx, userId, true);
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    await ctx.reply(`❌ Ошибка сброса: ${String(msg).slice(0, 300)}`);
+  }
 });
 
 bot.callbackQuery(/^ban:(.+)$/, async (ctx) => {
@@ -704,15 +738,23 @@ bot.callbackQuery(/^ban:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^ban_yes:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery('Баню...');
   const userId = ctx.match[1];
-  await api.post('/ban', { userId });
-  await replyUserCard(ctx, userId, true);
+  try {
+    await api.post('/ban', { userId });
+    await replyUserCard(ctx, userId, true);
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${(err?.message ?? '').slice(0, 200)}`);
+  }
 });
 
 bot.callbackQuery(/^unban:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery('Разбаниваю...');
   const userId = ctx.match[1];
-  await api.post('/ban', { userId, unban: true });
-  await replyUserCard(ctx, userId, true);
+  try {
+    await api.post('/ban', { userId, unban: true });
+    await replyUserCard(ctx, userId, true);
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${(err?.message ?? '').slice(0, 200)}`);
+  }
 });
 
 // caspers_add:<userId> — prompt to add caspers

@@ -42,6 +42,7 @@ const api = axios.create({
   baseURL: `${API_URL}/api/admin`,
   headers: { 'x-bot-secret': BOT_SECRET },
   timeout: 15_000,
+  proxy: false, // bypass HTTP_PROXY — internal Docker hostname not routable via proxy
 });
 
 const docker = axios.create({

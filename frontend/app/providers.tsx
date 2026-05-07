@@ -18,12 +18,10 @@ function AuthInit({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    // persist is only available on client
-    if (useAuthStore.persist?.hasHydrated()) {
-      setHydrated(true);
-      return;
-    }
+    // skipHydration=true in the store — trigger it manually here on the client.
+    // This guarantees localStorage is read only in the browser, never on the server.
     const unsub = useAuthStore.persist?.onFinishHydration(() => setHydrated(true));
+    useAuthStore.persist?.rehydrate();
     return unsub;
   }, []);
 

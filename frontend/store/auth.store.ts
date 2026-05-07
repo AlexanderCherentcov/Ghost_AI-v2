@@ -15,6 +15,9 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
 }
 
+// createJSONStorage wraps localStorage in try/catch — safe on SSR (returns null).
+// skipHydration: true means Zustand won't auto-hydrate on the server;
+// providers.tsx calls persist.rehydrate() on the client after mount.
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -39,22 +42,17 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'ghostline-auth',
-      // localStorage persists across browser sessions (30-day rolling refresh token).
-      // Access token stays in memory only — never hits storage.
-      storage: typeof window !== 'undefined'
-        ? createJSONStorage(() => localStorage)
-        : undefined,
-      // Persist user too — shows cached data instantly on refresh
+      storage: createJSONStorage(() => localStorage),
+      skipHydration: true, // hydration triggered manually in providers.tsx on client
       partialize: (state) => ({
         user: state.user,
         refreshToken: state.refreshToken,
       }),
       onRehydrateStorage: () => (state) => {
-        // After localStorage rehydration — mark loading as false so UI shows immediately
         if (state) {
           state.isLoading = false;
         }
       },
-    }
-  )
+    },
+  ),
 );

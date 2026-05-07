@@ -152,7 +152,7 @@ const jsonLd = {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'RUB',
-        description: '10 сообщений/день бесплатно',
+        description: '100 Caspers · 5 сообщений/день бесплатно',
       },
       featureList: [
         'AI-диалоги',

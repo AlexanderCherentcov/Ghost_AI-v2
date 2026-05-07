@@ -207,7 +207,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">
-          Без карты · 10 сообщений/день · 3 картинки/день бесплатно
+          🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
         </p>
       </motion.div>
     </div>

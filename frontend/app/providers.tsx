@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { ToastProvider } from '@/components/ui/Toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
@@ -16,6 +17,8 @@ const queryClient = new QueryClient({
 function AuthInit({ children }: { children: React.ReactNode }) {
   // Wait for Zustand persist to hydrate from localStorage (client-only)
   const [hydrated, setHydrated] = useState(false);
+  // usePathname is SSR-safe — same value on server and client, no hydration mismatch
+  const pathname = usePathname();
 
   useEffect(() => {
     // skipHydration=true in the store — trigger it manually here on the client.
@@ -29,8 +32,7 @@ function AuthInit({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
 
     // Callback pages set their own tokens — don't interfere
-    const path = window.location.pathname;
-    if (path.startsWith('/auth/callback') || path.startsWith('/auth/telegram/callback')) return;
+    if (pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/telegram/callback')) return;
 
     const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
 
@@ -54,15 +56,15 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
     // No refresh token — not logged in
     clearAuth();
-  }, [hydrated]);
+  }, [hydrated, pathname]);
 
-  // Show nothing only on first load when there's no cached user.
-  // Callback pages must mount immediately so their useState initializer
+  // Callback pages must render immediately (no waiting) so their useState initializer
   // can capture the hash/tokens before React effects run.
-  const { user } = useAuthStore();
-  const isCallback = typeof window !== 'undefined' &&
-    window.location.pathname.startsWith('/auth/callback');
-  if (!isCallback && !hydrated && !user) return null;
+  const isCallback = pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/telegram/callback');
+
+  // Before localStorage is hydrated: render nothing (same on server & client → no mismatch).
+  // Once hydrated, always render children — auth redirects are handled by page components.
+  if (!isCallback && !hydrated) return null;
 
   return <>{children}</>;
 }

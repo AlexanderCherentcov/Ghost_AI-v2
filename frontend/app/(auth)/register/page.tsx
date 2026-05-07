@@ -1,0 +1,225 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { GhostIcon } from '@/components/icons/GhostIcon';
+import { api, setAccessToken } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
+import { Tooltip } from '@/components/ui/Tooltip';
+import Link from 'next/link';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+function YandexIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="12" fill="#FC3F1D" />
+      <text x="12" y="17" textAnchor="middle" fill="white" fontFamily="Arial, sans-serif" fontWeight="bold" fontSize="13">Я</text>
+    </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+function TelegramIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="12" fill="#229ED9" />
+      <path d="M5.2 11.8L18 6.5l-2.3 11-4-3.3-2.2 2.1.4-3.5 5.8-5.2-7.3 4.5-3.2-1z" fill="white" />
+    </svg>
+  );
+}
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const { setAuth } = useAuthStore();
+  const [tgLoading, setTgLoading] = useState(false);
+  const [tgError, setTgError] = useState(false);
+  const [consented, setConsented] = useState(false);
+
+  // ── Telegram Mini App: auto-authenticate with initData ────────────────────
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg?.initData) return;
+
+    tg.ready?.();
+    tg.expand?.();
+
+    setTgLoading(true);
+
+    api.auth.telegramWebApp(tg.initData)
+      .then((res) => {
+        setAccessToken(res.accessToken);
+        setAuth(res.user, res.accessToken, res.refreshToken);
+        router.replace(res.isNew || !res.user.onboardingDone ? '/onboarding/name' : '/chat');
+      })
+      .catch(() => {
+        setTgLoading(false);
+        setTgError(true);
+      });
+  }, []);
+
+  if (tgLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
+        <GhostIcon size={48} className="text-accent animate-float mx-auto" animated />
+        <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
+      </div>
+    );
+  }
+
+  if (tgError) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <GhostIcon size={48} className="text-accent" />
+        <p className="text-white font-medium">Не удалось войти через Telegram</p>
+        <p className="text-sm text-[rgba(255,255,255,0.4)]">Закройте и откройте приложение заново</p>
+        <button
+          onClick={() => { setTgError(false); setTgLoading(false); window.location.reload(); }}
+          className="mt-2 px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium"
+        >
+          Попробовать снова
+        </button>
+      </div>
+    );
+  }
+
+  const tooltipContent = !consented ? 'Подтвердите пользовательское соглашение' : '';
+
+  return (
+    <div className="min-h-screen bg-[var(--bg-void)] flex items-center justify-center p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-[380px]"
+      >
+        <div className="card" style={{ borderRadius: '20px', padding: '32px' }}>
+          <div className="text-center mb-6">
+            <GhostIcon size={48} className="text-accent animate-float mx-auto mb-4" animated />
+            <h1 className="text-xl font-medium text-white mb-1">Создать аккаунт</h1>
+            <p className="text-sm text-[rgba(255,255,255,0.3)] italic">
+              Добро пожаловать в тень.
+            </p>
+          </div>
+
+          {/* Consent checkbox — must be checked before OAuth buttons become active */}
+          <label className="flex items-start gap-3 cursor-pointer group mb-1">
+            <div className="mt-0.5 flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={consented}
+                onChange={(e) => setConsented(e.target.checked)}
+                className="sr-only"
+              />
+              <div
+                className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all"
+                style={{
+                  borderColor: consented ? 'var(--accent)' : 'var(--border-hover)',
+                  background: consented ? 'var(--accent)' : 'transparent',
+                }}
+              >
+                {consented && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <span className="text-[12px] text-[rgba(255,255,255,0.35)] leading-relaxed group-hover:text-[rgba(255,255,255,0.5)] transition-colors select-none">
+              Я принимаю{' '}
+              <Link href="/terms" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>условия использования</Link>
+              {' '}и даю согласие на обработку персональных данных в соответствии с{' '}
+              <Link href="/privacy" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>политикой конфиденциальности</Link>
+            </span>
+          </label>
+
+          <div className="space-y-3 mt-4">
+            <Tooltip content={tooltipContent} side="top">
+              {consented ? (
+                <a
+                  href={`${API_URL}/api/auth/yandex`}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <YandexIcon />
+                  Зарегистрироваться через Яндекс
+                </a>
+              ) : (
+                <button
+                  disabled
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
+                >
+                  <YandexIcon />
+                  Зарегистрироваться через Яндекс
+                </button>
+              )}
+            </Tooltip>
+
+            <Tooltip content={tooltipContent} side="top">
+              {consented ? (
+                <a
+                  href={`${API_URL}/api/auth/google`}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <GoogleIcon />
+                  Зарегистрироваться через Google
+                </a>
+              ) : (
+                <button
+                  disabled
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
+                >
+                  <GoogleIcon />
+                  Зарегистрироваться через Google
+                </button>
+              )}
+            </Tooltip>
+
+            <Tooltip content={tooltipContent} side="top">
+              {consented ? (
+                <a
+                  href="https://t.me/GhostSuperAI_bot?start=auth"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <TelegramIcon />
+                  Зарегистрироваться через Telegram
+                </a>
+              ) : (
+                <button
+                  disabled
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
+                >
+                  <TelegramIcon />
+                  Зарегистрироваться через Telegram
+                </button>
+              )}
+            </Tooltip>
+          </div>
+
+          <p className="text-center text-xs text-[rgba(255,255,255,0.3)] mt-5">
+            Уже есть аккаунт?{' '}
+            <Link href="/login" className="text-accent hover:opacity-80">
+              Войти
+            </Link>
+          </p>
+        </div>
+
+        <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">
+          🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
+        </p>
+      </motion.div>
+    </div>
+  );
+}

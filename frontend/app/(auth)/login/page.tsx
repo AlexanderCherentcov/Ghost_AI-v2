@@ -44,14 +44,12 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState(false);
-  const [consented, setConsented] = useState(false);
 
   // ── Telegram Mini App: auto-authenticate with initData ────────────────────
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
     if (!tg?.initData) return; // Not inside Telegram — show normal login
 
-    // Tell Telegram the app is ready and expand to full height
     tg.ready?.();
     tg.expand?.();
 
@@ -113,97 +111,40 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Consent checkbox — must be checked before OAuth buttons become active */}
-          <label className="flex items-start gap-3 cursor-pointer group mb-1">
-            <div className="mt-0.5 flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={consented}
-                onChange={(e) => setConsented(e.target.checked)}
-                className="sr-only"
-              />
-              <div
-                className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all"
-                style={{
-                  borderColor: consented ? 'var(--accent)' : 'var(--border-hover)',
-                  background: consented ? 'var(--accent)' : 'transparent',
-                }}
-              >
-                {consented && (
-                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-            </div>
-            <span className="text-[12px] text-[rgba(255,255,255,0.35)] leading-relaxed group-hover:text-[rgba(255,255,255,0.5)] transition-colors select-none">
-              Я принимаю{' '}
-              <Link href="/terms" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>условия использования</Link>
-              {' '}и даю согласие на обработку персональных данных в соответствии с{' '}
-              <Link href="/privacy" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>политикой конфиденциальности</Link>
-            </span>
-          </label>
+          <div className="space-y-3">
+            <a
+              href={`${API_URL}/api/auth/yandex`}
+              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+            >
+              <YandexIcon />
+              Войти через Яндекс
+            </a>
 
-          <div className="space-y-3 mt-4">
-            {consented ? (
-              <a
-                href={`${API_URL}/api/auth/yandex`}
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-              >
-                <YandexIcon />
-                Войти через Яндекс
-              </a>
-            ) : (
-              <button
-                disabled
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                title="Подтвердите согласие выше"
-              >
-                <YandexIcon />
-                Войти через Яндекс
-              </button>
-            )}
+            <a
+              href={`${API_URL}/api/auth/google`}
+              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+            >
+              <GoogleIcon />
+              Войти через Google
+            </a>
 
-            {consented ? (
-              <a
-                href={`${API_URL}/api/auth/google`}
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-              >
-                <GoogleIcon />
-                Войти через Google
-              </a>
-            ) : (
-              <button
-                disabled
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                title="Подтвердите согласие выше"
-              >
-                <GoogleIcon />
-                Войти через Google
-              </button>
-            )}
-
-            {consented ? (
-              <a
-                href="https://t.me/GhostSuperAI_bot?start=auth"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-              >
-                <TelegramIcon />
-                Войти через Telegram
-              </a>
-            ) : (
-              <button
-                disabled
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                title="Подтвердите согласие выше"
-              >
-                <TelegramIcon />
-                Войти через Telegram
-              </button>
-            )}
+            <a
+              href="https://t.me/GhostSuperAI_bot?start=auth"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+            >
+              <TelegramIcon />
+              Войти через Telegram
+            </a>
           </div>
+
+          <p className="text-center text-xs text-[rgba(255,255,255,0.3)] mt-5">
+            Нет аккаунта?{' '}
+            <Link href="/register" className="text-accent hover:opacity-80">
+              Зарегистрироваться
+            </Link>
+          </p>
         </div>
 
         <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 // ─── File helpers ─────────────────────────────────────────────────────────────
 
@@ -421,24 +422,30 @@ function MusicWidget({
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Текст песни (необязательно)</span>
-              <button
-                type="button"
-                onClick={onGenerateLyrics}
-                disabled={generatingLyrics || !topic.trim()}
-                className={cn(
-                  'text-[11px] px-2.5 py-0.5 rounded-md border transition-all',
-                  generatingLyrics || !topic.trim()
-                    ? 'opacity-40 cursor-not-allowed border-[var(--border)]'
-                    : 'border-[rgba(123,92,240,0.4)] text-accent hover:bg-[rgba(123,92,240,0.1)]'
-                )}
+              <Tooltip
+                content="Введите название трека для генерации"
+                disabled={!!topic.trim() || generatingLyrics}
+                side="top"
               >
-                {generatingLyrics ? '✨ Генерирую...' : '✨ Сгенерировать текст'}
-              </button>
+                <button
+                  type="button"
+                  onClick={onGenerateLyrics}
+                  disabled={generatingLyrics || !topic.trim()}
+                  className={cn(
+                    'text-[11px] px-2.5 py-0.5 rounded-md border transition-all',
+                    generatingLyrics || !topic.trim()
+                      ? 'opacity-40 cursor-not-allowed border-[var(--border)]'
+                      : 'border-[rgba(123,92,240,0.4)] text-accent hover:bg-[rgba(123,92,240,0.1)]'
+                  )}
+                >
+                  {generatingLyrics ? '✨ Генерирую...' : '✨ Сгенерировать текст'}
+                </button>
+              </Tooltip>
             </div>
             <textarea
               value={options.lyrics}
               onChange={(e) => onChange({ ...options, lyrics: e.target.value })}
-              placeholder={'Текст песни...\n\nИли нажмите «Сгенерировать текст» — Llama набросает стихи, которые вы сможете отредактировать.'}
+              placeholder={'Текст песни...\n\nИли нажмите «Сгенерировать текст» — текст сгенерируется автоматически по названию трека.'}
               rows={4}
               maxLength={10000}
               className="w-full rounded-lg px-3 py-2 text-[12px] outline-none resize-none placeholder:opacity-30 leading-relaxed"

@@ -849,7 +849,7 @@ export default function ChatConversationPage() {
         ? [...activeGuide, ...historyBase]
         : historyBase;
 
-      const { tokensCost, cacheHit, title: newTitle } = await send({
+      const { tokensCost, cacheHit } = await send({
         chatId: id,
         mode: preferredModel === 'deepseek' ? 'think' : 'chat',
         prompt,
@@ -874,11 +874,7 @@ export default function ChatConversationPage() {
         createdAt: new Date().toISOString(),
       };
       commitStream(assistantMsg);
-
-      if (newTitle) {
-        const { updateChat } = useChatStore.getState();
-        updateChat(id, { title: newTitle });
-      }
+      // Title arrives via separate WS 'title' event → handled in socket.ts globally
 
     } catch (err: any) {
       setStreaming(false);

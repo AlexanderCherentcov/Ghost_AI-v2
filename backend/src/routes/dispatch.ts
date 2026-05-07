@@ -119,4 +119,44 @@ const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
   });
 };
 
+// ─── Chat title generation ────────────────────────────────────────────────────
+// Called from chat.ts on first user message to produce a smart 3-6 word title.
+
+const TITLE_SYSTEM = `You are a chat title generator. Given the user's first message, return a SHORT title (3–6 words max) that captures the main topic.
+Rules:
+- Same language as the message (Russian if Russian, English if English)
+- No quotes, no punctuation at the end
+- No generic titles like "Новый чат", "Chat", "Help me"
+- Be specific and descriptive
+- If it's a creative task (image/video/music), reflect that
+
+Examples:
+"напиши функцию сортировки на python" → Сортировка на Python
+"как похудеть за месяц?" → Как похудеть за месяц
+"сгенерируй аниме девушку с мечом" → Аниме девушка с мечом
+"write me a cover letter for a developer job" → Developer cover letter
+"что такое квантовая запутанность" → Квантовая запутанность
+"сделай грустный джаз про осень" → Грустный джаз про осень`;
+
+export async function generateChatTitle(prompt: string): Promise<string> {
+  // Fallback: trim prompt to 50 chars
+  const fallback = prompt.slice(0, 50) + (prompt.length > 50 ? '...' : '');
+  try {
+    const msgs = [
+      { role: 'system' as const, content: TITLE_SYSTEM },
+      { role: 'user' as const, content: prompt.slice(0, 500) },
+    ];
+    let raw: string;
+    try {
+      raw = await callCloudflareJSON(msgs, 30);
+    } catch {
+      raw = await callOpenRouterJSON(msgs, OR_MODELS.llama, 30);
+    }
+    const title = raw.trim().replace(/^["']|["']$/g, '').slice(0, 80);
+    return title || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default dispatchRoutes;

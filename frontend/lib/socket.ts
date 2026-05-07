@@ -8,11 +8,12 @@ function getWsUrl(): string {
 const WS_URL = getWsUrl();
 
 export interface WSChunk {
-  type: 'token' | 'done' | 'error';
+  type: 'token' | 'done' | 'error' | 'title';
   data?: string;
   tokensCost?: number;
   cacheHit?: boolean;
   title?: string;
+  chatId?: string;
   code?: string;
   message?: string;
 }
@@ -64,6 +65,13 @@ export function connectWS(): WebSocket {
       if (aborted && chunk.type === 'token') return;
       // [H-07] Reset aborted flag when server sends done/error
       if (chunk.type === 'done' || chunk.type === 'error') aborted = false;
+      // Background title update — update chat store directly, no need to notify listeners
+      if (chunk.type === 'title' && chunk.chatId && chunk.title) {
+        import('@/store/chat.store').then(({ useChatStore }) => {
+          useChatStore.getState().updateChat(chunk.chatId!, { title: chunk.title });
+        }).catch(() => {});
+        return;
+      }
       listeners.forEach((l) => l(chunk));
     } catch {}
   };

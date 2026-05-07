@@ -13,6 +13,7 @@ import { OR_MODELS } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import { notifyApiError } from '../services/admin-notify.js';
+import { generateChatTitle } from './dispatch.js';
 import type { SocketStream } from '@fastify/websocket';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -412,16 +413,25 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
         ]);
 
-        // Auto-generate title from first message
-        let newTitle: string | undefined;
+        // Send done immediately — unblocks user input right away
+        send({ type: 'done', tokensCost: 0, cacheHit: false });
+
+        // Auto-generate title in background (non-blocking)
         const messageCount = await prisma.message.count({ where: { chatId } });
         if (messageCount <= 2 && chat.title === 'Новый чат') {
-          const titleSource = prompt || (fileName ? `📎 ${fileName}` : '📎 Изображение');
-          newTitle = titleSource.slice(0, 40) + (titleSource.length > 40 ? '...' : '');
-          await prisma.chat.update({ where: { id: chatId }, data: { title: newTitle } });
-        }
+          const textSource = prompt || null;
+          const fallback = textSource
+            ? textSource.slice(0, 50) + (textSource.length > 50 ? '...' : '')
+            : fileName ? `📎 ${fileName}` : '📎 Изображение';
 
-        send({ type: 'done', tokensCost: 0, cacheHit: false, title: newTitle });
+          (textSource ? generateChatTitle(textSource) : Promise.resolve(fallback))
+            .catch(() => fallback)
+            .then(async (title) => {
+              await prisma.chat.update({ where: { id: chatId }, data: { title } }).catch(() => {});
+              // Push title to still-open WS so sidebar updates without reload
+              send({ type: 'title', chatId, title } as any);
+            });
+        }
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
         // If it's a limit/auth error, don't refund

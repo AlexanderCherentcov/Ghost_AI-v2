@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -44,6 +45,8 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState(false);
+  // Pre-checked: returning users already agreed; new users who land here still see the checkbox
+  const [consented, setConsented] = useState(true);
 
   // ── Telegram Mini App: auto-authenticate with initData ────────────────────
   useEffect(() => {
@@ -111,32 +114,90 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="space-y-3">
-            <a
-              href={`${API_URL}/api/auth/yandex`}
-              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-            >
-              <YandexIcon />
-              Войти через Яндекс
-            </a>
+          {/* Agreement checkbox — pre-checked for returning users */}
+          <label className="flex items-start gap-3 cursor-pointer group mb-1">
+            <div className="mt-0.5 flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={consented}
+                onChange={(e) => setConsented(e.target.checked)}
+                className="sr-only"
+              />
+              <div
+                className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all"
+                style={{
+                  borderColor: consented ? 'var(--accent)' : 'var(--border-hover)',
+                  background: consented ? 'var(--accent)' : 'transparent',
+                }}
+              >
+                {consented && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <span className="text-[12px] text-[rgba(255,255,255,0.35)] leading-relaxed group-hover:text-[rgba(255,255,255,0.5)] transition-colors select-none">
+              Я принимаю{' '}
+              <Link href="/terms" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>условия использования</Link>
+              {' '}и даю согласие на обработку персональных данных в соответствии с{' '}
+              <Link href="/privacy" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>политикой конфиденциальности</Link>
+            </span>
+          </label>
 
-            <a
-              href={`${API_URL}/api/auth/google`}
-              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-            >
-              <GoogleIcon />
-              Войти через Google
-            </a>
+          <div className="space-y-3 mt-4">
+            <Tooltip content={!consented ? 'Подтвердите пользовательское соглашение' : ''} side="top">
+              {consented ? (
+                <a
+                  href={`${API_URL}/api/auth/yandex`}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <YandexIcon />
+                  Войти через Яндекс
+                </a>
+              ) : (
+                <button disabled className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed">
+                  <YandexIcon />
+                  Войти через Яндекс
+                </button>
+              )}
+            </Tooltip>
 
-            <a
-              href="https://t.me/GhostSuperAI_bot?start=auth"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-            >
-              <TelegramIcon />
-              Войти через Telegram
-            </a>
+            <Tooltip content={!consented ? 'Подтвердите пользовательское соглашение' : ''} side="top">
+              {consented ? (
+                <a
+                  href={`${API_URL}/api/auth/google`}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <GoogleIcon />
+                  Войти через Google
+                </a>
+              ) : (
+                <button disabled className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed">
+                  <GoogleIcon />
+                  Войти через Google
+                </button>
+              )}
+            </Tooltip>
+
+            <Tooltip content={!consented ? 'Подтвердите пользовательское соглашение' : ''} side="top">
+              {consented ? (
+                <a
+                  href="https://t.me/GhostSuperAI_bot?start=auth"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
+                >
+                  <TelegramIcon />
+                  Войти через Telegram
+                </a>
+              ) : (
+                <button disabled className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed">
+                  <TelegramIcon />
+                  Войти через Telegram
+                </button>
+              )}
+            </Tooltip>
           </div>
 
           <p className="text-center text-xs text-[rgba(255,255,255,0.3)] mt-5">

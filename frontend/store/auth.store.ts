@@ -39,10 +39,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'ghostline-auth',
-      // [C-10] Use sessionStorage instead of localStorage to reduce XSS exposure.
-      // refreshToken is scoped to the tab session and not accessible cross-tab via XSS.
+      // localStorage persists across browser sessions (30-day rolling refresh token).
+      // Access token stays in memory only — never hits storage.
       storage: typeof window !== 'undefined'
-        ? createJSONStorage(() => sessionStorage)
+        ? createJSONStorage(() => localStorage)
         : undefined,
       // Persist user too — shows cached data instantly on refresh
       partialize: (state) => ({
@@ -50,8 +50,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
       }),
       onRehydrateStorage: () => (state) => {
-        // After sessionStorage rehydration — restore accessToken in memory
-        // and mark loading as false so UI shows immediately
+        // After localStorage rehydration — mark loading as false so UI shows immediately
         if (state) {
           state.isLoading = false;
         }

@@ -187,8 +187,11 @@ export default function ChatConversationPage() {
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
   const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-title helper — fires after image/video/music generation on first message
+  // Auto-title + balance refresh — fires after image/video/music generation
   const triggerAutoTitle = useCallback((prompt: string) => {
+    // Refresh Caspers balance immediately so sidebar updates without page reload
+    useAuthStore.getState().refreshUser();
+    // Generate title on first generation
     api.chats.autoTitle(id, prompt)
       .then(({ title }) => {
         if (title && title !== 'Новый чат') {
@@ -876,6 +879,8 @@ export default function ChatConversationPage() {
         createdAt: new Date().toISOString(),
       };
       commitStream(assistantMsg);
+      // Refresh Caspers balance after every AI response (tokens were deducted)
+      useAuthStore.getState().refreshUser();
       // Title arrives via separate WS 'title' event → handled in socket.ts globally
 
     } catch (err: any) {

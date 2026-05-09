@@ -6,8 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import {
-  PlusIcon, TokenIcon, SettingsIcon, TrashIcon, EditIcon,
+  PlusIcon, SettingsIcon, TrashIcon, EditIcon,
 } from '@/components/icons';
+import { CasperCoin } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { useUIStore } from '@/store/ui.store';
@@ -251,7 +252,7 @@ export function Sidebar() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  <TokenIcon size={12} className="text-accent" />
+                  <CasperCoin size={14} />
                   <span>{balanceLabel}</span>
                 </div>
                 <Link href="/billing" className="text-[11px] text-accent hover:opacity-80 transition-opacity">

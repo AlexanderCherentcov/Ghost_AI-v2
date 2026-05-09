@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@/lib/api';
-import { setAccessToken } from '@/lib/api';
+import { setAccessToken, api } from '@/lib/api';
 
 interface AuthState {
   user: User | null;
@@ -13,6 +13,8 @@ interface AuthState {
   setUser: (user: User) => void;
   clearAuth: () => void;
   setLoading: (loading: boolean) => void;
+  /** Silently re-fetch /auth/me and update user (e.g. after Caspers deduction) */
+  refreshUser: () => Promise<void>;
 }
 
 // createJSONStorage wraps localStorage in try/catch — safe on SSR (returns null).
@@ -39,6 +41,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setLoading: (isLoading) => set({ isLoading }),
+
+      refreshUser: async () => {
+        try {
+          const me = await api.auth.me();
+          set({ user: me });
+        } catch {}
+      },
     }),
     {
       name: 'ghostline-auth',

@@ -119,6 +119,30 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
+  // ── Auto-generate chat title from image/video/music prompt ──────────────
+  fastify.post('/chats/:id/auto-title', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { userId } = request.user;
+      const { id } = request.params as { id: string };
+      const { prompt } = request.body as { prompt: string };
+
+      if (!prompt?.trim()) return reply.code(400).send({ error: 'prompt required' });
+
+      const chat = await prisma.chat.findFirst({ where: { id, userId } });
+      if (!chat) return reply.code(404).send({ error: 'Chat not found' });
+
+      // Only auto-title if still default and few messages (first generation)
+      if (chat.title !== 'Новый чат') return reply.send({ title: chat.title });
+      const msgCount = await prisma.message.count({ where: { chatId: id } });
+      if (msgCount > 4) return reply.send({ title: chat.title });
+
+      const title = await generateChatTitle(prompt);
+      await prisma.chat.update({ where: { id }, data: { title } });
+      return reply.send({ title });
+    },
+  });
+
   // ── Update chat title ─────────────────────────────────────────────────────
   fastify.patch('/chats/:id', {
     preHandler: [fastify.authenticate],

@@ -187,6 +187,17 @@ export default function ChatConversationPage() {
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
   const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Auto-title helper — fires after image/video/music generation on first message
+  const triggerAutoTitle = useCallback((prompt: string) => {
+    api.chats.autoTitle(id, prompt)
+      .then(({ title }) => {
+        if (title && title !== 'Новый чат') {
+          useChatStore.getState().updateChat(id, { title });
+        }
+      })
+      .catch(() => {});
+  }, [id]);
+
   // Ref для предотвращения poll после unmount (H-09)
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -392,6 +403,7 @@ export default function ChatConversationPage() {
               : m
           ));
           lastGeneratedImageRef.current = job.mediaUrl;
+          triggerAutoTitle(prompt);
           // Counter updated on backend; no local balance update needed
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
@@ -418,7 +430,7 @@ export default function ChatConversationPage() {
       localStorage.removeItem(`pending_gen_${id}`);
       setGeneratingImage(false);
     }
-  }, [accessToken, user, messagesReady]);
+  }, [accessToken, user, messagesReady, triggerAutoTitle]);
 
   // ── Video generation ─────────────────────────────────────────────────────────
   const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions) => {
@@ -475,6 +487,7 @@ export default function ChatConversationPage() {
               ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
               : m
           ));
+          triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -506,7 +519,7 @@ export default function ChatConversationPage() {
       generatingVideoRef.current = false;
       setGeneratingVideo(false);
     }
-  }, [accessToken, messagesReady]);
+  }, [accessToken, messagesReady, triggerAutoTitle]);
 
   // ── Music generation ─────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
@@ -552,6 +565,7 @@ export default function ChatConversationPage() {
               ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
               : m
           ));
+          triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -586,7 +600,7 @@ export default function ChatConversationPage() {
       generatingMusicRef.current = false;
       setGeneratingMusic(false);
     }
-  }, [accessToken, messagesReady]);
+  }, [accessToken, messagesReady, triggerAutoTitle]);
 
   // ── Dispatcher — debounced intent detection from user typing ────────────────
   const handleInputChange = useCallback((text: string) => {

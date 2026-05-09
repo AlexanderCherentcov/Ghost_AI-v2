@@ -95,6 +95,8 @@ export const api = {
       request<Chat>(`/chats/${chatId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (chatId: string) =>
       request<void>(`/chats/${chatId}`, { method: 'DELETE' }),
+    autoTitle: (chatId: string, prompt: string) =>
+      request<{ title: string }>(`/chats/${chatId}/auto-title`, { method: 'POST', body: JSON.stringify({ prompt }) }),
   },
 
   payments: {

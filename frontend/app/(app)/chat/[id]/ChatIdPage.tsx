@@ -829,11 +829,9 @@ export default function ChatConversationPage() {
         },
       ];
 
-      const activeGuide = chatMode === 'video'
-        ? VIDEO_PROMPT_GUIDE
-        : chatMode === 'music'
-          ? MUSIC_PROMPT_GUIDE
-          : IMAGE_PROMPT_GUIDE;
+      // video/music modes always return early above, so activeGuide is only used
+      // in chat mode (when user asks AI to *write* a prompt for images)
+      const activeGuide = IMAGE_PROMPT_GUIDE;
 
       const history = isWritingPrompt
         ? [...activeGuide, ...historyBase]

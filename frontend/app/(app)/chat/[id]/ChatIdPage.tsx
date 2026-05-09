@@ -637,10 +637,19 @@ export default function ChatConversationPage() {
   // Switches to the relevant mode so widgets (model, duration, etc.) appear
   // and the user can adjust settings before clicking Send.
   const handleUsePrompt = useCallback((prompt: string, messageMode?: string) => {
-    if (messageMode === 'reel')  handleSetChatMode('video');
-    else if (messageMode === 'sound') handleSetChatMode('music');
-    else if (messageMode === 'vision') handleSetChatMode('images');
-    // For 'chat' mode messages keep the current mode — user knows what they want
+    if (messageMode === 'reel') {
+      handleSetChatMode('video');
+    } else if (messageMode === 'sound') {
+      handleSetChatMode('music');
+    } else if (messageMode === 'vision') {
+      handleSetChatMode('images');
+    } else {
+      // Chat-mode AI prompt (user asked AI to write a generation prompt) —
+      // detect video vs image by keywords and auto-switch so user can generate right away
+      const lower = prompt.toLowerCase();
+      const isVideoPrompt = ['camera', 'motion', 'shot', 'dolly', 'pan ', 'zoom', 'fps', 'cinematic move'].some(k => lower.includes(k));
+      handleSetChatMode(isVideoPrompt ? 'video' : 'images');
+    }
     setFillPrompt(prompt);
   }, [handleSetChatMode]);
 
@@ -714,12 +723,6 @@ export default function ChatConversationPage() {
         if (lastAssistant) {
           return handleGenerateImage(extractImagePrompt(lastAssistant.content));
         }
-      }
-
-      // 1b. Edit intent on last generated image (no file attached)
-      //     "сделай темнее", "добавь снег", "убери фон" → edit last image
-      if (isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
-        return handleGenerateImage(prompt, lastGeneratedImageRef.current);
       }
 
       // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.

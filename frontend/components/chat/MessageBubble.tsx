@@ -155,26 +155,27 @@ function FileChip({ name }: { name: string }) {
 
 async function downloadFile(url: string, ext = 'mp4') {
   const fname = `ghostline-${Date.now()}.${ext}`;
+  // isMobile: touch device (iOS/Android) — use Web Share API there only
+  const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
   try {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
 
-    // Try Web Share API with files first (iOS Safari 15+, some Android browsers)
-    // Note: canShare({files}) check prevents Chrome-desktop false positive
-    if (typeof navigator !== 'undefined' && 'canShare' in navigator) {
+    // Web Share API with files — mobile only (avoids desktop "Share" dialog)
+    if (isMobile && typeof navigator !== 'undefined' && 'canShare' in navigator) {
       const file = new File([blob], fname, { type: blob.type || `video/${ext}` });
       if ((navigator as any).canShare({ files: [file] })) {
         try {
           await (navigator as any).share({ files: [file], title: 'GhostLine' });
           return;
         } catch (shareErr: any) {
-          if (shareErr?.name === 'AbortError') return; // user cancelled — done
-          // share failed (e.g. Chrome Android) → fall through to blob download
+          if (shareErr?.name === 'AbortError') return; // user cancelled
+          // fall through to blob download
         }
       }
     }
 
-    // Blob URL download — works on desktop and Chrome for Android
+    // Blob URL download — reliable on desktop and Android Chrome
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -182,13 +183,11 @@ async function downloadFile(url: string, ext = 'mp4') {
     a.download = fname;
     document.body.appendChild(a);
     a.click();
-    // Delay revoke to give browser time to start the download
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     }, 5000);
   } catch {
-    // Fetch failed (e.g. CORS) — open in new tab; user can save from there
     window.open(url, '_blank');
   }
 }

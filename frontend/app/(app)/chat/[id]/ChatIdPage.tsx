@@ -634,55 +634,45 @@ export default function ChatConversationPage() {
     setDispatchResult(null);
 
     // ── Mode-based routing ───────────────────────────────────────────────────
+    // In images/video/music mode the user ALWAYS wants generation — never fall through to AI chat.
+    // isPromptComposeRequest is only relevant in chat mode (where user asks AI to *write* a prompt).
     if (chatMode === 'images' && !file) {
-      // "напиши промт...", "сгенерируй промт..." → route to AI chat with image prompt guidance
-      if (isPromptComposeRequest(prompt)) {
-        // isWritingPrompt will be set below; fall through to AI chat
-      } else if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
+      if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
         return handleGenerateImage(prompt, lastGeneratedImageRef.current);
-      } else {
-        return handleGenerateImage(prompt || 'beautiful landscape');
       }
+      return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
       if (!prompt.trim()) return;
-      if (isPromptComposeRequest(prompt)) {
-        // fall through to AI chat with video prompt guide
-      } else {
-        const lower = prompt.toLowerCase();
-        const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
-        if (isRef) {
-          // "сделай по промту", "используй это" → extract from last AI message
-          const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
-          if (lastAssistant) {
-            const extracted = extractImagePrompt(lastAssistant.content);
-            if (extracted && extracted.length > 20) return handleGenerateVideo(extracted, videoOptions);
-          }
-          showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
-          return;
+      const lower = prompt.toLowerCase();
+      const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
+      if (isRef) {
+        // "сделай по промту", "используй это" → extract from last AI message
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          const extracted = extractImagePrompt(lastAssistant.content);
+          if (extracted && extracted.length > 20) return handleGenerateVideo(extracted, videoOptions);
         }
-        return handleGenerateVideo(prompt, videoOptions);
+        showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
+        return;
       }
+      return handleGenerateVideo(prompt, videoOptions);
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;
-      if (isPromptComposeRequest(prompt)) {
-        // fall through to AI chat with music prompt guide
-      } else {
-        const lower = prompt.toLowerCase();
-        const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
-        if (isRef) {
-          // "сделай по промту" → extract from last AI message
-          const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
-          if (lastAssistant) {
-            const extracted = extractImagePrompt(lastAssistant.content);
-            if (extracted && extracted.length > 20) return handleGenerateMusic(extracted, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
-          }
-          showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
-          return;
+      const lower = prompt.toLowerCase();
+      const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
+      if (isRef) {
+        // "сделай по промту" → extract from last AI message
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
+        if (lastAssistant) {
+          const extracted = extractImagePrompt(lastAssistant.content);
+          if (extracted && extracted.length > 20) return handleGenerateMusic(extracted, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
         }
-        return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+        showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
+        return;
       }
+      return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
     }
 
     // ── Image intent routing ─────────────────────────────────────────────────

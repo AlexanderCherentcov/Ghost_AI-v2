@@ -5,9 +5,13 @@
  * Set in .env:
  *   HTTPS_PROXY=http://user:pass@194.33.35.73:8888   ← HTTP proxy (tinyproxy)
  *
- * Uses undici ProxyAgent as global dispatcher — intercepts ALL fetch() calls
- * in Node 18+ (OpenAI SDK, OpenRouter, GoAPI, raw fetch).
+ * Uses undici ProxyAgent as global dispatcher — intercepts calls made with the
+ * built-in global fetch() in Node 18+ (Cloudflare, GoAPI, raw fetch image gen).
  * Prisma/Redis TCP connections are NOT affected (they don't use fetch).
+ *
+ * ⚠️ DOES NOT cover the OpenAI SDK: it uses node-fetch internally, which ignores
+ * undici's global dispatcher. OpenRouter requests are proxied separately by
+ * passing an HttpsProxyAgent via `httpAgent` in providers/openrouter.ts.
  *
  * NOTE: undici ProxyAgent supports only HTTP/HTTPS proxy URLs (not SOCKS5).
  */

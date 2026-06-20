@@ -1,6 +1,31 @@
 import OpenAI from 'openai';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+
+// ─── Outbound proxy ─────────────────────────────────────────────────────────────
+// The OpenAI SDK uses node-fetch in Node, which IGNORES undici's global dispatcher
+// (the proxy set in lib/proxy.ts). So OpenRouter calls would otherwise leave from
+// our real IP and get geo/abuse-blocked. We must pass an http.Agent-compatible
+// proxy agent explicitly via `httpAgent`. Built once and reused for keep-alive.
+let proxyAgent: HttpsProxyAgent<string> | null | undefined;
+function getProxyAgent(): HttpsProxyAgent<string> | undefined {
+  if (proxyAgent !== undefined) return proxyAgent ?? undefined;
+  const url = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY;
+  if (url && !url.startsWith('socks')) {
+    proxyAgent = new HttpsProxyAgent(url);
+    const masked = url.replace(/:[^:@]*@/, ':***@');
+    console.log(`[OpenRouter] Routing via proxy → ${masked}`);
+  } else {
+    if (url?.startsWith('socks')) {
+      console.warn('[OpenRouter] SOCKS proxy not supported — set an http:// proxy. Calls will go DIRECT.');
+    } else {
+      console.warn('[OpenRouter] No HTTPS_PROXY set — OpenRouter calls go DIRECT (risk of block).');
+    }
+    proxyAgent = null;
+  }
+  return proxyAgent ?? undefined;
+}
 
 // Models available via OpenRouter
 export const OR_MODELS = {
@@ -17,6 +42,7 @@ function getClient() {
   return new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY ?? '',
     baseURL: OPENROUTER_BASE,
+    httpAgent: getProxyAgent(),
     defaultHeaders: {
       'HTTP-Referer': process.env.FRONTEND_URL ?? 'https://ghostline.ai',
       'X-Title': 'GhostLine AI',

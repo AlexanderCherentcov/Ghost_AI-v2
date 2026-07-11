@@ -66,6 +66,23 @@ async function fetchWithAuth<T>(path: string, options: RequestInit): Promise<T> 
   return res.json();
 }
 
+/** Загружает изображение на сервер, возвращает публичный URL (для image-to-video) */
+export async function uploadImage(file: File): Promise<string> {
+  const token = loadToken();
+  const form = new FormData();
+  form.append('file', file);
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_URL}/api/upload/image`, { method: 'POST', headers, body: form });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Не удалось загрузить изображение' }));
+    throw Object.assign(new Error(err.error ?? 'Не удалось загрузить изображение'), { status: res.status, code: err.code });
+  }
+  const data: { url: string } = await res.json();
+  return data.url;
+}
+
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     return await fetchWithAuth<T>(path, options);

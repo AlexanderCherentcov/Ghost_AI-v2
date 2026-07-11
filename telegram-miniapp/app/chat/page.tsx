@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';
-import { apiRequest, getToken } from '@/lib/auth';
+import { apiRequest, getToken, uploadImage } from '@/lib/auth';
 
 interface Message {
   id: string;
@@ -694,7 +694,8 @@ function ChatApp() {
       if (!prompt && !fileToSend) return;
       if (fileToSend && fileToSend.type.startsWith('image/')) {
         try {
-          const imgUrl = await resizeImageToBase64(fileToSend);
+          // Картинка нужна провайдеру как публичный URL — base64 data-URL GoAPI не скачает
+          const imgUrl = await uploadImage(fileToSend);
           return handleGenerateVideo(prompt, imgUrl);
         } catch {
           tg?.showAlert('Не удалось обработать изображение');

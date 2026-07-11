@@ -449,7 +449,7 @@ export default function ChatConversationPage() {
       mode: 'reel',
       tokensCost: 0,
       cacheHit: false,
-      mediaUrl: null,
+      mediaUrl: options?.imageUrl ?? null,
       createdAt: new Date().toISOString(),
     });
 
@@ -669,7 +669,26 @@ export default function ChatConversationPage() {
       return handleGenerateImage(prompt || 'beautiful landscape');
     }
     if (chatMode === 'video') {
-      if (!prompt.trim()) return;
+      const hasSourceImage = !!(file && getFileCategory(file) === 'image');
+      if (!prompt.trim() && !hasSourceImage) return;
+
+      // Image-to-video: прикреплённая картинка загружается на сервер,
+      // её публичный URL уходит провайдеру как источник видео
+      let effectiveVideoOptions = videoOptions;
+      if (hasSourceImage) {
+        try {
+          const { url } = await api.upload.image(file!);
+          const base: VideoOptions = videoOptions ?? {
+            videoModel: 'motion', duration: '8s', aspectRatio: '16:9',
+            enableAudio: false, resolution: '720p', negativePrompt: '',
+          };
+          effectiveVideoOptions = { ...base, imageUrl: url };
+        } catch {
+          showToast('Не удалось загрузить изображение', 'error');
+          return;
+        }
+      }
+
       const lower = prompt.toLowerCase();
       const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
       if (isRef) {
@@ -677,12 +696,12 @@ export default function ChatConversationPage() {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
         if (lastAssistant) {
           const extracted = extractImagePrompt(lastAssistant.content);
-          if (extracted && extracted.length > 20) return handleGenerateVideo(extracted, videoOptions);
+          if (extracted && extracted.length > 20) return handleGenerateVideo(extracted, effectiveVideoOptions);
         }
         showToast('Вставьте промт в поле ввода и нажмите отправить', 'warning');
         return;
       }
-      return handleGenerateVideo(prompt, videoOptions);
+      return handleGenerateVideo(prompt.trim() || 'animate this image', effectiveVideoOptions);
     }
     if (chatMode === 'music') {
       if (!prompt.trim()) return;

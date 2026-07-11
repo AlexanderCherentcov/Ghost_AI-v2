@@ -608,7 +608,8 @@ export function InputBar({
     sendingRef.current = true;
 
     if (chatMode === 'video') {
-      onSend(trimmed, undefined, videoOptions);
+      // Прикреплённая картинка → источник для image-to-video
+      onSend(trimmed, attachedFile ?? undefined, videoOptions);
     } else if (chatMode === 'music') {
       // Map to legacy signature: prompt=style desc, sunoTitle, sunoStyle, sunoInstrumental, lyrics
       onSend(

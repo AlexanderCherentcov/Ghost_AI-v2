@@ -129,6 +129,18 @@ services:
       - frontend
     networks:
       - ghost_net
+    # certbot продлевает сертификаты в отдельном контейнере и не умеет
+    # сигнализировать nginx — без периодического reload nginx годами
+    # отдаёт сертификат, загруженный при последнем старте (был инцидент
+    # с истёкшим SSL на ghostlineai.ru). Реюзим bind-точку entrypoint.
+    entrypoint: >
+      /bin/sh -c "
+      /docker-entrypoint.sh nginx -g 'daemon off;' &
+      NGINX_PID=$$!;
+      trap 'kill $$NGINX_PID' TERM INT;
+      while :; do sleep 6h; nginx -s reload; done &
+      wait $$NGINX_PID
+      "
 
   # ── Certbot (авто-обновление SSL) ────────────────────────────────────────────
   certbot:

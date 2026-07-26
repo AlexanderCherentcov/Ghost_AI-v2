@@ -190,7 +190,9 @@ bot.command('start', async (ctx) => {
     .text('💬 Начать чат', 'newchat_menu')
     .text('📂 Мои чаты', 'chats_menu')
     .row()
-    .url('🌐 Открыть GhostLine', FRONTEND_URL)
+    .webApp('🤖 Мини-апп', MINIAPP_URL)
+    .url('🌐 Сайт', FRONTEND_URL)
+    .row()
     .text('📦 Тарифы', 'show_plans');
 
   await ctx.reply(

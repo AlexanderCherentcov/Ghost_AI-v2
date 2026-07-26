@@ -13,6 +13,7 @@ import {
   IMAGE_VERBS, EDIT_VERBS, REF_KEYWORDS,
   isImageRequest, isImageEditRequest, isPromptComposeRequest, extractImagePrompt,
 } from '@/lib/image-intent';
+import { calcCasperCost, videoDurationToBackend, DEFAULT_CASPER_COSTS, type CasperCosts } from '@/lib/casper-costs';
 
 interface Message {
   id: string;
@@ -187,6 +188,7 @@ function ChatApp() {
   const [sunoStyle, setSunoStyle] = useState('');
   const [sunoInstrumental, setSunoInstrumental] = useState(true);
   const [videoDuration, setVideoDuration] = useState<5 | 10>(5);
+  const [casperCosts, setCasperCosts] = useState<CasperCosts>(DEFAULT_CASPER_COSTS);
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [videoEnableAudio, setVideoEnableAudio] = useState(false);
   const [videoSettingsOpen, setVideoSettingsOpen] = useState(false);
@@ -216,6 +218,13 @@ function ChatApp() {
     updateHeight();
     tgApp.onEvent?.('viewportChanged', updateHeight);
     return () => tgApp.offEvent?.('viewportChanged', updateHeight);
+  }, []);
+
+  // Цены операций в Caspers — единый источник правды (backend/src/config/plans.ts)
+  useEffect(() => {
+    apiRequest<{ casper_costs: CasperCosts }>('/plans')
+      .then((data) => { if (data.casper_costs) setCasperCosts(data.casper_costs); })
+      .catch(() => {});
   }, []);
 
   // Синхронизация chatId → URL, чтобы обновление страницы открывало тот же чат
@@ -475,7 +484,7 @@ function ChatApp() {
         body: JSON.stringify({
           prompt: prompt || 'animate this image',
           ...(chatId ? { chatId } : {}),
-          videoDuration,
+          videoDuration: videoDurationToBackend(videoDuration),
           videoAspectRatio,
           videoEnableAudio,
           ...(imageUrl ? { videoImageUrl: imageUrl } : {}),
@@ -1100,6 +1109,13 @@ function ChatApp() {
           </div>
         </div>
 
+        {/* Стоимость текущего режима в Caspers */}
+        {calcCasperCost(chatMode, model, videoDuration, casperCosts) > 0 && (
+          <div className="mb-2 text-[11px] font-medium" style={{ color: '#A78BFA' }}>
+            👻 {calcCasperCost(chatMode, model, videoDuration, casperCosts)} Caspers
+          </div>
+        )}
+
         {/* Настройки музыки */}
         {chatMode === 'music' && (
           <div className="mb-2">
@@ -1197,9 +1213,6 @@ function ChatApp() {
                   border: videoEnableAudio ? '1px solid rgba(123,92,240,0.4)' : '1px solid rgba(255,255,255,0.1)',
                 }}
               >{videoEnableAudio ? '🔊' : '🔇'}</button>
-              {videoDuration === 10 && (
-                <span style={{ color: 'rgba(255,200,80,0.7)', fontSize: 10 }}>10с = 2 генерации</span>
-              )}
 
               {/* Кнопка расширенных настроек */}
               <div className="relative ml-auto" ref={videoSettingsRef}>

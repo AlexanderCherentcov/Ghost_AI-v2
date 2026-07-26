@@ -8,6 +8,9 @@ function client(session: UserSession) {
     baseURL: `${API_URL}/api`,
     headers: { Authorization: `Bearer ${session.accessToken}` },
     timeout: 20_000,
+    // proxy: false — internal backend:4000 Docker hostname isn't reachable
+    // through the external HTTPS_PROXY/HTTP_PROXY set for AI-provider calls.
+    proxy: false,
   });
 }
 

@@ -22,6 +22,18 @@ const ADMIN_IDS = new Set(
 
 const bot = new Bot(BOT_TOKEN);
 
+// ─── Backend HTTP client ────────────────────────────────────────────────────
+// proxy: false is required — HTTPS_PROXY/HTTP_PROXY in .env are for reaching
+// external APIs (OpenRouter etc.) from a non-RU IP; routing the internal
+// backend:4000 Docker hostname through that external proxy fails outright.
+// Same fix already applied in admin-bot.ts and yokassa.ts for the same reason.
+const api = axios.create({
+  baseURL: `${API_URL}/api`,
+  headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
+  timeout: 15_000,
+  proxy: false,
+});
+
 // ─── Rate limit map for auth ───────────────────────────────────────────────────
 const authRateLimit = new Map<number, number>(); // userId -> lastAuthTime
 
@@ -39,10 +51,7 @@ const PLAN_LABELS: Record<string, string> = {
 
 async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string | null }> {
   try {
-    const res = await axios.get(`${API_URL}/api/bot/user-info`, {
-      params: { tgId: String(tgId) },
-      headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
-    });
+    const res = await api.get('/bot/user-info', { params: { tgId: String(tgId) } });
     return { plan: res.data.plan ?? 'FREE', dbName: res.data.name ?? null };
   } catch {
     return { plan: 'FREE', dbName: null };
@@ -67,14 +76,12 @@ async function mintMagicLink(from: TgFrom, redirectPath: string): Promise<string
   if (now - lastAuth < 10_000) return null; // 10s flood protection, shared across all magic-link commands
   authRateLimit.set(from.id, now);
 
-  const res = await axios.post(`${API_URL}/api/auth/telegram-bot`, {
+  const res = await api.post('/auth/telegram-bot', {
     id: from.id,
     first_name: from.first_name,
     last_name: from.last_name,
     username: from.username,
     photo_url: undefined,
-  }, {
-    headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
   });
 
   const { accessToken, refreshToken } = res.data as { accessToken: string; refreshToken: string };
@@ -100,14 +107,12 @@ bot.command('start', async (ctx) => {
       }
       authRateLimit.set(ctx.from.id, now);
 
-      const res = await axios.post(`${API_URL}/api/auth/telegram-bot`, {
+      const res = await api.post('/auth/telegram-bot', {
         id: ctx.from.id,
         first_name: ctx.from.first_name,
         last_name: ctx.from.last_name,
         username: ctx.from.username,
         photo_url: undefined,
-      }, {
-        headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
       });
 
       const { accessToken, refreshToken, isNew } = res.data as {
@@ -193,7 +198,7 @@ bot.command('help', async (ctx) => {
 async function sendPlans(ctx: any): Promise<void> {
   if (!ctx.from) return;
   try {
-    const { data } = await axios.get(`${API_URL}/api/plans`);
+    const { data } = await api.get('/plans');
     const lines = data.plans.map((p: any) =>
       `${PLAN_LABELS[p.key] ?? p.key} — <b>${p.price.toLocaleString('ru')} ₽/мес</b> · ${p.caspers_monthly} Caspers/мес`
     ).join('\n');
@@ -248,11 +253,7 @@ bot.command('promo', async (ctx) => {
   }
 
   try {
-    const res = await axios.post(
-      `${API_URL}/api/bot/promo/redeem`,
-      { tgId: String(ctx.from.id), code },
-      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } },
-    );
+    const res = await api.post('/bot/promo/redeem', { tgId: String(ctx.from.id), code });
     await ctx.reply(`✅ Промокод активирован! +${res.data.casperAmount} Caspers 👻`);
   } catch (err: any) {
     const msg = err.response?.data?.error ?? 'Не удалось активировать промокод';
@@ -514,11 +515,7 @@ bot.command('setplan', async (ctx) => {
   }
 
   try {
-    await axios.post(
-      `${API_URL}/api/admin/setplan`,
-      { userId: targetUserId, plan: plan.toUpperCase() },
-      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } }
-    );
+    await api.post('/admin/setplan', { userId: targetUserId, plan: plan.toUpperCase() });
     await ctx.reply(`✅ Пользователь <code>${targetUserId}</code> → план <b>${plan.toUpperCase()}</b>`, {
       parse_mode: 'HTML',
     });
@@ -544,11 +541,7 @@ bot.command('resetlimits', async (ctx) => {
   }
 
   try {
-    await axios.post(
-      `${API_URL}/api/admin/resetlimits`,
-      { userId: targetUserId },
-      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } }
-    );
+    await api.post('/admin/resetlimits', { userId: targetUserId });
     await ctx.reply(`✅ Лимиты сброшены для <code>${targetUserId}</code>`, {
       parse_mode: 'HTML',
     });

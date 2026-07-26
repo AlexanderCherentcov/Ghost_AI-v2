@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
-// DB 0 — text/media cache (TTL-managed, safe to lose under pressure)
+// БД 0 — кэш текста/медиа (управляется через TTL, потерю данных при нагрузке можно пережить)
 export const redis = new Redis(redisUrl, {
   db: 0,
   maxRetriesPerRequest: 3,

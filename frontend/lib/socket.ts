@@ -1,5 +1,5 @@
-// Derive WS URL from API URL: https:// → wss://, http:// → ws://
-// Falls back to NEXT_PUBLIC_WS_URL if explicitly set, otherwise auto-derives.
+// Выводим WS URL из API URL: https:// → wss://, http:// → ws://
+// Если явно задан NEXT_PUBLIC_WS_URL — используем его, иначе выводим автоматически.
 function getWsUrl(): string {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -23,30 +23,30 @@ export interface WSMessage {
   mode: 'chat' | 'think';
   prompt: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
-  // TODO: move to WS handshake
+  // TODO: перенести в WS-хендшейк
   jwt: string;
-  imageUrl?: string;    // base64 data URL of attached image
-  fileContent?: string; // extracted text from document
-  fileName?: string;    // original file name
-  fileLang?: string;    // code-fence language (js, python, …)
+  imageUrl?: string;    // base64 data URL прикреплённого изображения
+  fileContent?: string; // извлечённый текст документа
+  fileName?: string;    // исходное имя файла
+  fileLang?: string;    // язык для code-fence (js, python, …)
   preferredModel?: 'haiku' | 'deepseek';
 }
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-// [H-07] aborted flag: when true, incoming token chunks are ignored
+// [H-07] флаг aborted: если true, входящие токен-чанки игнорируются
 let aborted = false;
 const listeners = new Set<(chunk: WSChunk) => void>();
 
 export function connectWS(): WebSocket {
   if (ws && ws.readyState === WebSocket.OPEN) return ws;
 
-  // [H-08] Clear any pending reconnect timer before creating a new connection
+  // [H-08] Очищаем таймер переподключения перед созданием нового соединения
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
   ws = new WebSocket(`${WS_URL}/api/chat/stream`);
 
-  // [H-15] Connection timeout — close if not OPEN within 10 seconds
+  // [H-15] Таймаут соединения — закрываем, если не открылось за 10 секунд
   const connectTimeout = setTimeout(() => {
     if (ws && ws.readyState !== WebSocket.OPEN) {
       console.warn('[WS] Connection timeout');
@@ -61,11 +61,11 @@ export function connectWS(): WebSocket {
   ws.onmessage = (event) => {
     try {
       const chunk = JSON.parse(event.data) as WSChunk;
-      // [H-07] If stream was aborted, ignore incoming token chunks
+      // [H-07] Если стрим прерван, игнорируем входящие токен-чанки
       if (aborted && chunk.type === 'token') return;
-      // [H-07] Reset aborted flag when server sends done/error
+      // [H-07] Сбрасываем флаг aborted, когда сервер шлёт done/error
       if (chunk.type === 'done' || chunk.type === 'error') aborted = false;
-      // Background title update — update chat store directly, no need to notify listeners
+      // Фоновое обновление заголовка — обновляем стор чатов напрямую, слушателей уведомлять не нужно
       if (chunk.type === 'title' && chunk.chatId && chunk.title) {
         import('@/store/chat.store').then(({ useChatStore }) => {
           useChatStore.getState().updateChat(chunk.chatId!, { title: chunk.title });
@@ -94,9 +94,9 @@ export function disconnectWS() {
   ws = null;
 }
 
-// [H-16] Stream stall timeouts:
-//   30s  — no first token received (server hung before responding)
-//   20s  — no new token after last one (stream frozen mid-response)
+// [H-16] Таймауты зависания стрима:
+//   30с — не пришёл первый токен (сервер завис перед ответом)
+//   20с — нет нового токена после предыдущего (стрим замер посередине)
 const STALL_BEFORE_FIRST = 30_000;
 const STALL_AFTER_TOKEN  = 20_000;
 
@@ -129,7 +129,7 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
     const handler = (chunk: WSChunk) => {
       if (chunk.type === 'token') {
         firstTokenReceived = true;
-        resetStall(); // reset stall window on every token
+        resetStall(); // сбрасываем окно зависания на каждом токене
       } else if (chunk.type === 'done') {
         cleanup();
         resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false, title: chunk.title });
@@ -140,7 +140,7 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
     };
 
     listeners.add(handler);
-    resetStall(); // start stall timer immediately
+    resetStall(); // запускаем таймер зависания сразу
 
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msgWithId));
@@ -155,9 +155,9 @@ export function onToken(callback: (chunk: WSChunk) => void): () => void {
   return () => listeners.delete(callback);
 }
 
-// Abort current stream — marks aborted so further token chunks are ignored,
-// then broadcasts a synthetic 'done' so the promise resolves immediately.
-// Note: the server continues generating; we cannot cancel it via WS.
+// Прерывает текущий стрим — выставляет aborted, чтобы дальнейшие токен-чанки игнорировались,
+// затем рассылает синтетический 'done', чтобы промис резолвился немедленно.
+// Примечание: сервер продолжает генерацию — отменить её через WS нельзя.
 // [H-07]
 export function abortStream() {
   aborted = true;

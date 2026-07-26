@@ -11,8 +11,8 @@ export default function TelegramCallbackPage() {
   const { setAuth } = useAuthStore();
 
   useEffect(() => {
-    // Read params directly from window.location — useSearchParams() can return
-    // empty object during static-export hydration before Next.js router is ready
+    // Читаем параметры напрямую из window.location — useSearchParams() может вернуть
+    // пустой объект во время гидратации статического экспорта, пока роутер Next.js не готов
     const params = new URLSearchParams(window.location.search);
     const data: Record<string, string> = {};
     params.forEach((value, key) => { data[key] = value; });

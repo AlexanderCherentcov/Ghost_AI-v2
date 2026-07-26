@@ -14,7 +14,7 @@ interface ChatWindowProps {
   isLoading?: boolean;
 }
 
-// Skeleton rows: [side, width%]
+// Строки скелетона: [сторона, ширина%]
 const SKELETON_ROWS: Array<['left' | 'right', number]> = [
   ['left',  65],
   ['right', 45],
@@ -81,7 +81,7 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
         </div>
       ) : (
         <>
-          {/* Spacer pushes messages to bottom when content is short */}
+          {/* Распорка прижимает сообщения к низу, когда контента мало */}
           <div className="flex-1" />
           <div className="max-w-[720px] w-full mx-auto px-4 py-6 space-y-1">
           <AnimatePresence initial={false}>
@@ -90,7 +90,7 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
             ))}
           </AnimatePresence>
 
-          {/* Streaming message */}
+          {/* Стримящееся сообщение */}
           {isStreaming && streamContent && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -105,7 +105,7 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
             </motion.div>
           )}
 
-          {/* Typing indicator */}
+          {/* Индикатор набора текста */}
           {isStreaming && !streamContent && (
             <motion.div
               initial={{ opacity: 0 }}

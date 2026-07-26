@@ -1,5 +1,5 @@
 /**
- * AES-256-GCM message encryption
+ * Шифрование сообщений AES-256-GCM
  * ────────────────────────────────
  * Шифрует тексты сообщений перед записью в PostgreSQL.
  * Даже при краже дампа БД — только зашифрованный текст.
@@ -20,7 +20,7 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH  = 16; // байт
 const TAG_LENGTH = 16; // байт
 
-// ─── Key derivation ───────────────────────────────────────────────────────────
+// ─── Вывод ключа ──────────────────────────────────────────────────────────────
 
 let _keyCache: Buffer | null = null;
 
@@ -38,11 +38,11 @@ function getKey(): Buffer {
     throw new Error('[Crypto] ENCRYPTION_KEY must be set in production (min 16 chars)');
   }
 
-  _keyCache = createHash('sha256').update(secret).digest(); // → 32 bytes
+  _keyCache = createHash('sha256').update(secret).digest(); // → 32 байта
   return _keyCache;
 }
 
-// ─── Encryption ───────────────────────────────────────────────────────────────
+// ─── Шифрование ───────────────────────────────────────────────────────────────
 
 /**
  * Шифрует строку AES-256-GCM.
@@ -62,7 +62,7 @@ export function encrypt(plaintext: string): string {
   return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
-// ─── Decryption ───────────────────────────────────────────────────────────────
+// ─── Расшифровка ──────────────────────────────────────────────────────────────
 
 /**
  * Расшифровывает строку, зашифрованную через encrypt().

@@ -33,7 +33,7 @@ export default function OnboardingNamePage() {
     if (!name.trim() || loading) return;
     setLoading(true);
     try {
-      const user = await api.auth.updateMe({ name: name.trim(), onboardingDone: true });
+      const user = await api.auth.updateMe({ name: name.trim() });
       setUser(user);
       router.push('/onboarding/birthdate');
     } catch {

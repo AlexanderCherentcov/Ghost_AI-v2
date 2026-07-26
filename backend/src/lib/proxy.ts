@@ -1,19 +1,19 @@
 /**
- * Outbound HTTP proxy — routes all AI API calls through an external proxy
- * (Amsterdam VPS) to bypass geo-restrictions from Russian IP.
+ * Исходящий HTTP-прокси — маршрутизирует все вызовы AI API через внешний прокси
+ * (VPS в Амстердаме), чтобы обойти гео-ограничения для российского IP.
  *
- * Set in .env:
- *   HTTPS_PROXY=http://user:pass@194.33.35.73:8888   ← HTTP proxy (tinyproxy)
+ * Задаётся в .env:
+ *   HTTPS_PROXY=http://user:pass@194.33.35.73:8888   ← HTTP-прокси (tinyproxy)
  *
- * Uses undici ProxyAgent as global dispatcher — intercepts calls made with the
- * built-in global fetch() in Node 18+ (Cloudflare, GoAPI, raw fetch image gen).
- * Prisma/Redis TCP connections are NOT affected (they don't use fetch).
+ * Использует undici ProxyAgent как глобальный диспетчер — перехватывает вызовы
+ * встроенного глобального fetch() в Node 18+ (Cloudflare, GoAPI, генерация изображений через raw fetch).
+ * TCP-соединения Prisma/Redis НЕ затрагиваются (они не используют fetch).
  *
- * ⚠️ DOES NOT cover the OpenAI SDK: it uses node-fetch internally, which ignores
- * undici's global dispatcher. OpenRouter requests are proxied separately by
- * passing an HttpsProxyAgent via `httpAgent` in providers/openrouter.ts.
+ * ⚠️ НЕ покрывает OpenAI SDK: он использует node-fetch внутри, который игнорирует
+ * глобальный диспетчер undici. Запросы к OpenRouter проксируются отдельно —
+ * через `httpAgent` в providers/openrouter.ts (HttpsProxyAgent).
  *
- * NOTE: undici ProxyAgent supports only HTTP/HTTPS proxy URLs (not SOCKS5).
+ * ПРИМЕЧАНИЕ: undici ProxyAgent поддерживает только HTTP/HTTPS-прокси (не SOCKS5).
  */
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';

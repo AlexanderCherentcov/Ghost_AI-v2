@@ -25,7 +25,7 @@ interface Track {
   error?: string;
 }
 
-// ─── Audio Player ─────────────────────────────────────────────────────────────
+// ─── Аудиоплеер ───────────────────────────────────────────────────────────────
 
 function AudioPlayer({ url, filename }: { url: string; filename: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -85,7 +85,7 @@ function AudioPlayer({ url, filename }: { url: string; filename: string }) {
       />
 
       <div className="flex items-center gap-3">
-        {/* Play / Pause */}
+        {/* Пуск / Пауза */}
         <button
           onClick={togglePlay}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
@@ -104,7 +104,7 @@ function AudioPlayer({ url, filename }: { url: string; filename: string }) {
           )}
         </button>
 
-        {/* Progress */}
+        {/* Прогресс */}
         <div className="flex-1 min-w-0">
           <input
             type="range" min={0} max={100} step={0.1} value={progress}
@@ -118,7 +118,7 @@ function AudioPlayer({ url, filename }: { url: string; filename: string }) {
           </div>
         </div>
 
-        {/* Download */}
+        {/* Скачать */}
         <button
           onClick={handleDownload}
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 opacity-50 active:opacity-100 transition-opacity"
@@ -134,7 +134,7 @@ function AudioPlayer({ url, filename }: { url: string; filename: string }) {
   );
 }
 
-// ─── Track card ───────────────────────────────────────────────────────────────
+// ─── Карточка трека ───────────────────────────────────────────────────────────
 
 function TrackCard({ track }: { track: Track }) {
   const filename = track.mediaUrl?.split('/').pop()?.split('?')[0] ?? 'track.mp3';
@@ -146,7 +146,7 @@ function TrackCard({ track }: { track: Track }) {
       className="rounded-2xl p-4"
       style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
     >
-      {/* Prompt */}
+      {/* Промпт */}
       <p className="text-[13px] mb-3 line-clamp-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
         {track.prompt}
       </p>
@@ -176,7 +176,7 @@ function TrackCard({ track }: { track: Track }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Страница ─────────────────────────────────────────────────────────────────
 
 function MusicPageInner() {
   const [prompt, setPrompt] = useState('');
@@ -255,7 +255,7 @@ function MusicPageInner() {
 
   return (
     <div className="flex flex-col min-h-svh" style={{ background: 'var(--bg-void)' }}>
-      {/* Header */}
+      {/* Шапка */}
       <div className="px-4 pt-5 pb-3">
         <h1 className="text-[20px] font-semibold" style={{ color: 'var(--text-primary)' }}>
           Музыка
@@ -265,7 +265,7 @@ function MusicPageInner() {
         </p>
       </div>
 
-      {/* Input */}
+      {/* Поле ввода */}
       <div className="px-4 pb-4">
         <div
           className="rounded-2xl p-3 flex gap-2"
@@ -307,7 +307,7 @@ function MusicPageInner() {
           </button>
         </div>
 
-        {/* Mode selector */}
+        {/* Выбор режима */}
         <div className="flex gap-2 mt-3">
           {MUSIC_MODES.map((m) => (
             <button
@@ -324,7 +324,7 @@ function MusicPageInner() {
           ))}
         </div>
 
-        {/* Duration selector — only for Студия */}
+        {/* Выбор длительности — только для режима «Студия» */}
         {musicMode === 'quality' && (
           <div className="flex gap-2 mt-2">
             {MUSIC_DURATIONS.map((d) => (
@@ -344,7 +344,7 @@ function MusicPageInner() {
           </div>
         )}
 
-        {/* Suno options */}
+        {/* Настройки Suno */}
         {musicMode === 'suno' && (
           <div className="flex flex-col gap-2 mt-2">
             <input
@@ -387,7 +387,7 @@ function MusicPageInner() {
         </p>
       </div>
 
-      {/* Tracks list */}
+      {/* Список треков */}
       <div className="flex-1 px-4 pb-28 space-y-3 overflow-y-auto">
         <AnimatePresence>
           {tracks.length === 0 && !generating && (

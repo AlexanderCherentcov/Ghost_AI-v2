@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-// ─── MIME → language mapping for markdown code blocks ─────────────────────────
+// ─── Соответствие MIME → язык для блоков кода в markdown ──────────────────────
 
 const MIME_TO_LANG: Record<string, string> = {
   'application/json': 'json',
@@ -64,19 +64,19 @@ function extToLang(filename: string): string {
   return map[ext] ?? 'text';
 }
 
-// ─── Plugin ───────────────────────────────────────────────────────────────────
+// ─── Плагин ───────────────────────────────────────────────────────────────────
 
 export default async function uploadRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/upload/extract
-   * Accepts a single file (multipart), extracts text content.
-   * Returns { text, fileName, lang } ready for the AI context.
+   * Принимает один файл (multipart), извлекает из него текст.
+   * Возвращает { text, fileName, lang }, готовое для контекста ИИ.
    *
-   * Supports:
+   * Поддерживает:
    *   - PDF  → pdf-parse
    *   - DOCX → mammoth
    *   - XLSX / XLS → xlsx (SheetJS)
-   *   - All text-based files → raw UTF-8
+   *   - Все текстовые файлы → как есть, UTF-8
    */
   fastify.post('/upload/extract', {
     preHandler: [authenticate],
@@ -91,12 +91,12 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
       const mime = data.mimetype ?? '';
       const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
 
-      const MAX_CHARS = 60_000; // ~15k tokens
+      const MAX_CHARS = 60_000; // ~15 тыс. токенов
       let text = '';
       let lang = extToLang(fileName);
 
       try {
-        // ── PDF ────────────────────────────────────────────────────────────────
+        // ── PDF ──────────────────────────────────────────────────────────────
         if (mime === 'application/pdf' || ext === 'pdf') {
           const pdfParse = (await import('pdf-parse')).default;
           const result = await pdfParse(buffer);
@@ -104,7 +104,7 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           lang = 'text';
         }
 
-        // ── DOCX ──────────────────────────────────────────────────────────────
+        // ── DOCX ─────────────────────────────────────────────────────────────
         else if (
           mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
           ext === 'docx'
@@ -115,7 +115,7 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           lang = 'text';
         }
 
-        // ── DOC (legacy Word) — try mammoth anyway ─────────────────────────
+        // ── DOC (старый формат Word) — всё равно пробуем через mammoth ─────
         else if (mime === 'application/msword' || ext === 'doc') {
           try {
             const mammoth = await import('mammoth');
@@ -145,44 +145,44 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
           lang = 'csv';
         }
 
-        // ── PPTX (PowerPoint) — extract text via raw XML scan ─────────────
+        // ── PPTX (PowerPoint) — извлекаем текст сканом сырого XML ─────────
         else if (
           mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
           ext === 'pptx'
         ) {
-          // PPTX is a ZIP; scan the raw buffer for DrawingML <a:t> text runs
-          // without adding a ZIP dependency — good enough for most slides.
+          // PPTX — это ZIP; сканируем буфер напрямую в поисках текстовых фрагментов
+          // DrawingML <a:t>, не добавляя зависимость на ZIP — для большинства слайдов достаточно.
           const text_parts: string[] = [];
           try {
-            const raw = buffer.toString('latin1'); // lossless binary→string
+            const raw = buffer.toString('latin1'); // без потерь конвертирует бинарные данные в строку
             const matches = raw.match(/<a:t(?:\s[^>]*)?>([^<]+)<\/a:t>/g) ?? [];
             for (const m of matches) {
               const t = m.replace(/<[^>]+>/g, '').trim();
               if (t) text_parts.push(t);
             }
           } catch {
-            // fall through
+            // просто пропускаем — text_parts останется пустым
           }
           text = text_parts.join(' ') || `[PowerPoint файл: ${fileName} — текст не извлечён]`;
           lang = 'text';
         }
 
-        // ── All other files — try as UTF-8 text ───────────────────────────
+        // ── Все остальные файлы — пробуем как UTF-8 текст ──────────────────
         else {
           text = buffer.toString('utf-8');
-          // Quick binary check: if > 5% non-printable chars → not a text file
+          // Быстрая проверка на бинарность: если > 5% непечатаемых символов → не текстовый файл
           const nonPrintable = (text.match(/[\x00-\x08\x0e-\x1f\x7f]/g) ?? []).length;
           if (nonPrintable / text.length > 0.05) {
             return reply.code(422).send({ error: 'Файл является бинарным и не может быть прочитан' });
           }
         }
       } catch (err: any) {
-        // [M-24] Log full error server-side, return safe message to client
+        // [M-24] Логируем полную ошибку на сервере, клиенту отдаём безопасное сообщение
         fastify.log.error(err, '[upload/extract] parse error');
         return reply.code(500).send({ error: 'Не удалось обработать файл' });
       }
 
-      // Trim + truncate
+      // Обрезаем пробелы и укорачиваем текст
       text = text.trim();
       const truncated = text.length > MAX_CHARS;
       if (truncated) text = text.slice(0, MAX_CHARS) + '\n\n[... файл обрезан до 60 000 символов]';
@@ -193,8 +193,8 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/upload/image
-   * Accepts an image file (multipart), saves it to disk, returns a public URL.
-   * Used for image-to-video (Veo3.1) source images.
+   * Принимает файл изображения (multipart), сохраняет на диск, возвращает публичный URL.
+   * Используется для исходных изображений image-to-video (Veo3.1).
    */
   fastify.post('/upload/image', {
     preHandler: [authenticate],

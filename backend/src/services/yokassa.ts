@@ -1,8 +1,8 @@
 import axios from 'axios';
 import crypto from 'crypto';
 
-// YooKassa must connect directly — the global HTTP_PROXY/HTTPS_PROXY env vars
-// point to a proxy that doesn't forward HTTPS correctly from the container.
+// YooKassa должна подключаться напрямую — глобальные HTTP_PROXY/HTTPS_PROXY
+// указывают на прокси, который некорректно проксирует HTTPS из контейнера.
 const yokassaAxios = axios.create({ proxy: false });
 import { prisma } from '../lib/prisma.js';
 import { grantCaspers } from './tokens.js';
@@ -26,7 +26,7 @@ function yokassaHeaders(idempotencyKey: string) {
   };
 }
 
-// ─── Create subscription payment ─────────────────────────────────────────────
+// ─── Создание платежа за подписку ─────────────────────────────────────────────
 
 export async function createPayment(
   userId: string,
@@ -93,7 +93,7 @@ export async function createPayment(
   };
 }
 
-// ─── Create Casper top-up payment ─────────────────────────────────────────────
+// ─── Создание платежа на докупку Caspers ──────────────────────────────────────
 
 export async function createCasperPayment(
   userId: string,
@@ -156,7 +156,7 @@ export async function createCasperPayment(
   };
 }
 
-// ─── Process webhook ──────────────────────────────────────────────────────────
+// ─── Обработка вебхука ─────────────────────────────────────────────────────────
 
 export async function processWebhook(body: unknown): Promise<void> {
   const event = body as {
@@ -183,7 +183,7 @@ export async function processWebhook(body: unknown): Promise<void> {
 
   const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } });
 
-  // ── Casper top-up ──────────────────────────────────────────────────────────
+  // ── Докупка Caspers ───────────────────────────────────────────────────────
   if (payment.paymentType === 'caspers' && payment.casperAmount) {
     await prisma.user.update({
       where: { id: payment.userId },
@@ -202,7 +202,7 @@ export async function processWebhook(body: unknown): Promise<void> {
     return;
   }
 
-  // ── Subscription payment ───────────────────────────────────────────────────
+  // ── Оплата подписки ───────────────────────────────────────────────────────
   if (payment.plan) {
     const planInfo = PLANS[payment.plan as keyof typeof PLANS];
     if (planInfo) {

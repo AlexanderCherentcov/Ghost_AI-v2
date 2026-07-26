@@ -15,14 +15,14 @@ const queryClient = new QueryClient({
 });
 
 function AuthInit({ children }: { children: React.ReactNode }) {
-  // Wait for Zustand persist to hydrate from localStorage (client-only)
+  // Ждём, пока Zustand persist гидрируется из localStorage (только на клиенте)
   const [hydrated, setHydrated] = useState(false);
-  // usePathname is SSR-safe — same value on server and client, no hydration mismatch
+  // usePathname безопасен для SSR — одинаковое значение на сервере и клиенте, без рассинхрона гидратации
   const pathname = usePathname();
 
   useEffect(() => {
-    // skipHydration=true in the store — trigger it manually here on the client.
-    // This guarantees localStorage is read only in the browser, never on the server.
+    // skipHydration=true в сторе — запускаем гидратацию вручную здесь, на клиенте.
+    // Это гарантирует, что localStorage читается только в браузере, никогда на сервере.
     const unsub = useAuthStore.persist?.onFinishHydration(() => setHydrated(true));
     useAuthStore.persist?.rehydrate();
     return unsub;
@@ -31,15 +31,15 @@ function AuthInit({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
 
-    // Callback pages set their own tokens — don't interfere
+    // Callback-страницы сами выставляют токены — не вмешиваемся
     if (pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/telegram/callback')) return;
 
     const { refreshToken, user, setAuth, clearAuth } = useAuthStore.getState();
 
-    // Already authenticated with an in-memory access token (e.g. fresh OAuth login) — skip refresh
+    // Уже авторизован с access token в памяти (например, свежий OAuth-логин) — обновление не нужно
     if (user && getAccessToken()) return;
 
-    // Have a refresh token — use it to get a fresh access token
+    // Есть refresh token — используем его, чтобы получить свежий access token
     if (refreshToken) {
       api.auth.refreshToken(refreshToken)
         .then(async ({ accessToken, refreshToken: newRT }) => {
@@ -48,22 +48,22 @@ function AuthInit({ children }: { children: React.ReactNode }) {
           setAuth(me, accessToken, newRT);
         })
         .catch((err) => {
-          // Only clear auth on explicit 401 — network errors or 5xx should not log the user out
+          // Сбрасываем авторизацию только при явном 401 — сетевые ошибки и 5xx не должны разлогинивать
           if (err?.status === 401) clearAuth();
         });
       return;
     }
 
-    // No refresh token — not logged in
+    // Нет refresh token — пользователь не авторизован
     clearAuth();
   }, [hydrated, pathname]);
 
-  // Callback pages must render immediately (no waiting) so their useState initializer
-  // can capture the hash/tokens before React effects run.
+  // Callback-страницы должны рендериться немедленно (без ожидания), чтобы их useState-инициализатор
+  // успел захватить хэш/токены до запуска React-эффектов.
   const isCallback = pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/telegram/callback');
 
-  // Before localStorage is hydrated: render nothing (same on server & client → no mismatch).
-  // Once hydrated, always render children — auth redirects are handled by page components.
+  // Пока localStorage не гидрирован: не рендерим ничего (одинаково на сервере и клиенте → без рассинхрона).
+  // После гидратации всегда рендерим children — редиректы авторизации обрабатывают сами страницы.
   if (!isCallback && !hydrated) return null;
 
   return <>{children}</>;

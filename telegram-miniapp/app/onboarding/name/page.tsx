@@ -16,7 +16,7 @@ function ProgressDots({ current }: { current: number }) {
           className="h-1.5 rounded-full transition-all"
           style={{
             width: 24,
-            background: i === current ? '#7B5CF0' : i < current ? 'rgba(123,92,240,0.4)' : 'rgba(255,255,255,0.1)',
+            background: i === current ? 'var(--accent)' : i < current ? 'rgba(123,92,240,0.4)' : 'rgba(255,255,255,0.1)',
           }}
         />
       ))}

@@ -5,21 +5,10 @@ import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
 import { grantCaspers } from '../services/tokens.js';
 import { createPromoCode, deletePromoCode, normalizePromoCode, PromoError } from '../services/promo.js';
+import { checkBotSecret } from '../lib/bot-auth.js';
+import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
 
-if (!process.env.BOT_SECRET) {
-  throw new Error('BOT_SECRET is required — server refuses to start without it');
-}
-const BOT_SECRET = process.env.BOT_SECRET;
-
-function checkBotSecret(request: any, reply: any): boolean {
-  if (request.headers['x-bot-secret'] !== BOT_SECRET) {
-    reply.code(403).send({ error: 'Forbidden' });
-    return false;
-  }
-  return true;
-}
-
-// ─── Schemas ──────────────────────────────────────────────────────────────────
+// ─── Схемы ─────────────────────────────────────────────────────────────────────
 
 const setplanSchema = z.object({
   userId: z.string().min(1),
@@ -51,7 +40,7 @@ const createPromoSchema = z.object({
   createdBy:       z.string().optional(),
 });
 
-// ─── User field selector ───────────────────────────────────────────────────────
+// ─── Набор полей пользователя ──────────────────────────────────────────────────
 
 const USER_SELECT = {
   id: true,
@@ -61,13 +50,7 @@ const USER_SELECT = {
   plan: true,
   planExpiresAt: true,
   billing: true,
-  caspers_balance: true,
-  caspers_monthly: true,
-  std_messages_today: true,
-  pro_messages_today: true,
-  images_this_week: true,
-  music_this_week: true,
-  videos_this_month: true,
+  ...USAGE_COUNTERS_SELECT,
   day_start: true,
   week_start: true,
   period_start: true,
@@ -81,7 +64,7 @@ async function getUserWithBanStatus(user: any) {
   return { ...user, isBanned: banned === 1 };
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// ─── Роуты ─────────────────────────────────────────────────────────────────────
 
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
@@ -118,7 +101,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.user.count({ where }),
     ]);
 
-    // Attach ban status
+    // Прикрепляем статус бана
     const bannedKeys = users.length > 0 ? await redis.mget(...users.map(u => `banned:${u.id}`)) : [];
     const usersWithBan = users.map((u, i) => ({ ...u, isBanned: bannedKeys[i] === '1' }));
 
@@ -159,7 +142,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         plan: plan as any,
         period_start:  periodStart,
         planExpiresAt: periodEnd,
-        // Reset weekly counters
+        // Сбрасываем недельные счётчики
         images_this_week: 0,
         music_this_week:  0,
         videos_this_month: 0,
@@ -167,11 +150,11 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       },
     });
 
-    // Grant caspers for the plan
+    // Начисляем Caspers за тариф
     if (planInfo.caspers_monthly > 0) {
       await grantCaspers(userId, planInfo.caspers_monthly, planInfo.caspers_monthly, `admin_setplan_${plan.toLowerCase()}`);
     } else {
-      // FREE plan: set to 0
+      // FREE-тариф: обнуляем
       await prisma.user.update({
         where: { id: userId },
         data: { caspers_balance: 0, caspers_monthly: 0 },
@@ -207,7 +190,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // ── POST /api/admin/addcaspers ─────────────────────────────────────────────
-  // Add caspers to a user's balance directly.
+  // Начислить Caspers на баланс пользователя напрямую.
   fastify.post('/admin/addcaspers', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
@@ -225,7 +208,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // ── POST /api/admin/subcaspers ────────────────────────────────────────────
-  // Subtract caspers from a user's balance (floors at 0).
+  // Списать Caspers с баланса пользователя (не уходит ниже 0).
   fastify.post('/admin/subcaspers', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
@@ -255,7 +238,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (unban) {
       await redis.del(`banned:${userId}`);
     } else {
-      // 365-day ban flag in Redis (refreshed on each ban call)
+      // Флаг бана в Redis на 365 дней (обновляется при каждом вызове бана)
       await redis.set(`banned:${userId}`, '1', 'EX', 60 * 60 * 24 * 365);
     }
 
@@ -355,7 +338,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return { promos, total, page, limit };
   });
 
-  // ── GET /api/admin/promo/:code — details + who redeemed it ─────────────────
+  // ── GET /api/admin/promo/:code — детали + кто активировал ──────────────────
   fastify.get('/admin/promo/:code', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 
@@ -373,8 +356,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // ── DELETE /api/admin/promo/:code ──────────────────────────────────────────
-  // Hard-deletes if never used; otherwise deactivates so redemption history
-  // (who used what) stays intact for admin visibility.
+  // Полностью удаляет, если ни разу не использовался; иначе деактивирует, чтобы
+  // история активаций (кто и что использовал) осталась видна админам.
   fastify.delete('/admin/promo/:code', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
 

@@ -3,11 +3,12 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
-// ─── Outbound proxy ─────────────────────────────────────────────────────────────
-// The OpenAI SDK uses node-fetch in Node, which IGNORES undici's global dispatcher
-// (the proxy set in lib/proxy.ts). So OpenRouter calls would otherwise leave from
-// our real IP and get geo/abuse-blocked. We must pass an http.Agent-compatible
-// proxy agent explicitly via `httpAgent`. Built once and reused for keep-alive.
+// ─── Исходящий прокси ───────────────────────────────────────────────────────────
+// OpenAI SDK использует node-fetch в Node, который ИГНОРИРУЕТ глобальный диспетчер
+// undici (прокси, настроенный в lib/proxy.ts). Поэтому без явной настройки запросы
+// к OpenRouter уходили бы с нашего настоящего IP и попадали под гео/abuse-блокировку.
+// Приходится явно передавать http.Agent-совместимый прокси-агент через `httpAgent`.
+// Создаётся один раз и переиспользуется для keep-alive.
 let proxyAgent: HttpsProxyAgent<string> | null | undefined;
 function getProxyAgent(): HttpsProxyAgent<string> | undefined {
   if (proxyAgent !== undefined) return proxyAgent ?? undefined;
@@ -27,13 +28,13 @@ function getProxyAgent(): HttpsProxyAgent<string> | undefined {
   return proxyAgent ?? undefined;
 }
 
-// Models available via OpenRouter
+// Модели, доступные через OpenRouter
 export const OR_MODELS = {
   haiku:      'google/gemini-2.5-flash',
   deepseek:   'deepseek/deepseek-v3.2',
   gpt4oMini:  'openai/gpt-4o-mini',
-  sonar:      'perplexity/sonar',          // web-search model, PRO/ULTRA only
-  llama:      'meta-llama/llama-3.1-8b-instruct', // Cloudflare fallback
+  sonar:      'perplexity/sonar',          // модель веб-поиска, только PRO/ULTRA
+  llama:      'meta-llama/llama-3.1-8b-instruct', // резерв для Cloudflare
   flux:       'google/gemini-3.1-flash-image-preview',
   fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;
@@ -50,7 +51,7 @@ function getClient() {
   });
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Типы ──────────────────────────────────────────────────────────────────────
 
 export type MessageContent =
   | string
@@ -64,7 +65,7 @@ export interface ChatMessage {
   content: MessageContent;
 }
 
-// ─── One-shot JSON call (for dispatcher fallback) ─────────────────────────────
+// ─── Разовый JSON-вызов (резерв для диспетчера) ────────────────────────────────
 
 export async function callOpenRouterJSON(
   messages: ChatMessage[],
@@ -81,7 +82,7 @@ export async function callOpenRouterJSON(
   return resp.choices[0]?.message?.content ?? '';
 }
 
-// ─── Text streaming ────────────────────────────────────────────────────────────
+// ─── Стриминг текста ────────────────────────────────────────────────────────────
 
 export async function* streamOpenRouter(
   messages: ChatMessage[],
@@ -115,21 +116,21 @@ export async function* streamOpenRouter(
       return;
     } catch (err) {
       if (i === chain.length - 1) throw err;
-      // Try next model in chain
+      // Пробуем следующую модель в цепочке
     }
   }
 }
 
-// ─── Image generation (Flux via chat completions) ─────────────────────────────
-// OpenRouter exposes image models through /chat/completions.
-// The image URL is returned in choices[0].message.content.
+// ─── Генерация изображений (Flux через chat completions) ──────────────────────
+// OpenRouter отдаёт image-модели через /chat/completions.
+// URL изображения возвращается в choices[0].message.content.
 
 export async function generateImageFlux(
   prompt: string,
   model: string = OR_MODELS.flux,
-  sourceImageUrl?: string      // if provided — image editing mode
+  sourceImageUrl?: string      // если передан — режим редактирования изображения
 ): Promise<string> {
-  // Build user message: editing = [image, text], generation = [text]
+  // Собираем сообщение пользователя: редактирование = [изображение, текст], генерация = [текст]
   const userContent = sourceImageUrl
     ? [
         { type: 'image_url', image_url: { url: sourceImageUrl, detail: 'high' } },
@@ -161,7 +162,7 @@ export async function generateImageFlux(
 
   const msg = data?.choices?.[0]?.message;
 
-  // Format 1: message.images[] — OpenRouter image generation models (seedream, flux.2, etc.)
+  // Формат 1: message.images[] — модели генерации изображений OpenRouter (seedream, flux.2 и т.д.)
   const images = msg?.images;
   if (Array.isArray(images) && images.length > 0) {
     const img = images[0];
@@ -169,12 +170,12 @@ export async function generateImageFlux(
     if (img?.url) return img.url;
   }
 
-  // Format 2: data[].url (OpenAI DALL-E style)
+  // Формат 2: data[].url (в стиле OpenAI DALL-E)
   const imgData = data?.data?.[0];
   if (imgData?.url) return imgData.url;
   if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
-  // Format 3: content as array of parts
+  // Формат 3: content как массив частей
   const content = msg?.content;
   if (Array.isArray(content)) {
     for (const p of content) {
@@ -184,7 +185,7 @@ export async function generateImageFlux(
     }
   }
 
-  // Format 4: content as string URL or data-URI
+  // Формат 4: content как строка URL или data-URI
   if (typeof content === 'string' && content.trim()) {
     const t = content.trim();
     if (t.startsWith('http') || t.startsWith('data:')) return t;

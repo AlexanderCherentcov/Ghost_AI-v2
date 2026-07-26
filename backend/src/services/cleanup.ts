@@ -1,5 +1,5 @@
 /**
- * TTL Auto-Cleanup Worker
+ * Воркер автоочистки по TTL
  * ────────────────────────
  * Автоматически удаляет устаревшие данные:
  *   • Сообщения и пустые чаты старше MESSAGE_TTL_DAYS (default 60)
@@ -23,7 +23,7 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
-// ─── Video file cleanup ───────────────────────────────────────────────────────
+// ─── Очистка видеофайлов ────────────────────────────────────────────────────────
 // Удаляет файлы из uploads/videos/ которые:
 //   1. Старше VIDEO_TTL_DAYS дней по mtime
 //   2. НЕ упоминаются ни в одном Message или GenerateJob в БД
@@ -79,7 +79,7 @@ async function cleanupVideoFiles(): Promise<number> {
   return deleted;
 }
 
-// ─── Cleanup ──────────────────────────────────────────────────────────────────
+// ─── Очистка ───────────────────────────────────────────────────────────────────
 
 export async function runCleanup(): Promise<void> {
   const startMs = Date.now();
@@ -109,7 +109,7 @@ export async function runCleanup(): Promise<void> {
       },
     });
 
-    // 4. Expired plan cleanup (plan expiry handled by webhook / future cron)
+    // 4. Очистка истёкших тарифов (истечение обрабатывается вебхуком / будущим cron)
     const expiredTrials = 0;
 
     // 5. Удаляем старые записи вектор-кэша (если таблица существует)
@@ -141,7 +141,7 @@ export async function runCleanup(): Promise<void> {
   }
 }
 
-// ─── Worker ───────────────────────────────────────────────────────────────────
+// ─── Воркер ────────────────────────────────────────────────────────────────────
 
 export function startCleanupWorker(): void {
   // Запуск при старте — немного отложенный чтобы не мешать инициализации

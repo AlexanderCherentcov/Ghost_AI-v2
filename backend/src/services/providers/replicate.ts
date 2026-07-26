@@ -6,7 +6,7 @@ const headers = () => ({
   'Content-Type': 'application/json',
 });
 
-// ─── Stable Diffusion XL ─────────────────────────────────────────────────────
+// ─── Stable Diffusion XL ───────────────────────────────────────────────────────
 
 export async function generateImageSDXL(prompt: string): Promise<string> {
   const response = await axios.post(
@@ -25,11 +25,11 @@ export async function generateImageSDXL(prompt: string): Promise<string> {
 
   const predictionId: string = response.data.id;
 
-  // Poll for completion
+  // Опрашиваем до завершения
   return pollPrediction(predictionId);
 }
 
-// ─── Music generation (Musicgen) ─────────────────────────────────────────────
+// ─── Генерация музыки (Musicgen) ─────────────────────────────────────────────
 
 export async function generateMusic(prompt: string, duration = 15): Promise<string> {
   const response = await axios.post(
@@ -48,7 +48,7 @@ export async function generateMusic(prompt: string, duration = 15): Promise<stri
   return pollPrediction(response.data.id);
 }
 
-// ─── Poll helper ─────────────────────────────────────────────────────────────
+// ─── Вспомогательная функция опроса ───────────────────────────────────────────
 
 async function pollPrediction(
   predictionId: string,

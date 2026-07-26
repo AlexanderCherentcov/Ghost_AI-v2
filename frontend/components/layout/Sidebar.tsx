@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,8 +13,8 @@ import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { useUIStore } from '@/store/ui.store';
 import { api, type Chat } from '@/lib/api';
-import { truncate } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/Toast';
+import { truncate, formatNumber, cn } from '@/lib/utils';
 
 function groupChats(chats: Chat[]) {
   const now = Date.now();
@@ -42,27 +42,34 @@ export function Sidebar() {
   const { user } = useAuthStore();
   const { chats, activeChat, addChat, updateChat, removeChat } = useChatStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { show } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+
+  // Дневной лимит FREE-тарифа — с бэкенда (GET /plans), не захардкожен
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+  useEffect(() => {
+    api.payments.plans().then((data) => setDailyLimit(data.free.limits.std_messages_daily)).catch(() => {});
+  }, []);
 
   const plan = user?.plan ?? 'FREE';
   const stdToday = user?.std_messages_today ?? 0;
   const caspersBalance = user?.caspers_balance ?? 0;
 
-  // FREE plan: show std message progress; paid: show caspers balance
-  const showMsgProgress = plan === 'FREE';
+  // FREE-тариф: показываем прогресс стандартных сообщений; платный: баланс Caspers
+  const showMsgProgress = plan === 'FREE' && dailyLimit !== null;
   const tokenPercent = showMsgProgress
-    ? Math.min((stdToday / 5) * 100, 100)
-    : 0; // not used for paid plans
+    ? Math.min((stdToday / dailyLimit!) * 100, 100)
+    : 0; // не используется для платных тарифов
 
   const balanceLabel = showMsgProgress
-    ? `${stdToday}/5 сегодня`
-    : `${caspersBalance.toLocaleString('ru-RU')} Caspers`;
+    ? `${stdToday}/${dailyLimit} сегодня`
+    : `${formatNumber(caspersBalance)} Caspers`;
 
   const grouped = groupChats(chats);
 
   function handleNewChat() {
-    // Clear store so sidebar doesn't keep highlighting the old chat
+    // Сбрасываем стор, чтобы сайдбар не продолжал подсвечивать старый чат
     useChatStore.getState().setActiveChat(null);
     useChatStore.getState().setMessages([]);
     router.push('/chat');
@@ -81,15 +88,20 @@ export function Sidebar() {
         router.push('/chat');
       }
     } catch {
-      // silently ignore — chat stays in list
+      // молча игнорируем — чат остаётся в списке
     }
   }
 
   async function handleRenameChat(chatId: string) {
     if (!editTitle.trim()) return;
-    await api.chats.update(chatId, { title: editTitle });
-    updateChat(chatId, { title: editTitle });
-    setEditingId(null);
+    try {
+      await api.chats.update(chatId, { title: editTitle });
+      updateChat(chatId, { title: editTitle });
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось переименовать чат', 'error');
+    } finally {
+      setEditingId(null);
+    }
   }
 
   function startEdit(chatId: string, currentTitle: string, e: React.MouseEvent) {
@@ -119,7 +131,7 @@ export function Sidebar() {
               color: 'var(--text-primary)',
             }}
           >
-            {/* Clickable title area */}
+            {/* Кликабельная область заголовка */}
             <Link
               href={`/chat/${chat.id}`}
               className="flex-1 min-w-0 py-2.5"
@@ -143,7 +155,7 @@ export function Sidebar() {
                 <span className="block truncate">{truncate(chat.title, 28)}</span>
               )}
             </Link>
-            {/* Action buttons — always visible on mobile, hover-only on desktop */}
+            {/* Кнопки действий — всегда видны на мобильных, на десктопе только при наведении */}
             <span className="flex items-center gap-0.5 flex-shrink-0 md:opacity-0 md:group-hover:opacity-60 transition-opacity">
               <button
                 onClick={(e) => startEdit(chat.id, chat.title, e)}
@@ -175,7 +187,7 @@ export function Sidebar() {
       className="flex flex-col h-screen bg-[var(--bg-surface)] border-r border-[var(--border)] flex-shrink-0 overflow-hidden"
       style={{ position: 'fixed', top: 0, left: 0, zIndex: 40 }}
     >
-      {/* Logo + toggle — two different layouts to avoid overflow clipping */}
+      {/* Лого + переключатель — две разные раскладки, чтобы избежать обрезки при переполнении */}
       {sidebarOpen ? (
         <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
           <GhostIcon size={24} className="text-accent flex-shrink-0" />
@@ -209,7 +221,7 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* New Chat */}
+      {/* Новый чат */}
       <div className="px-3 mb-4">
         <button
           onClick={handleNewChat}
@@ -225,10 +237,10 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Divider */}
+      {/* Разделитель */}
       <div className="mx-3 border-t border-[var(--border)] mb-4" />
 
-      {/* Chat history — hidden when collapsed */}
+      {/* История чатов — скрыта в свёрнутом виде */}
       {sidebarOpen && (
         <div className="flex-1 overflow-y-auto px-3 min-h-0">
           <ChatSection label="Сегодня"    items={grouped.today} />
@@ -244,9 +256,9 @@ export function Sidebar() {
       )}
       {!sidebarOpen && <div className="flex-1" />}
 
-      {/* Bottom */}
+      {/* Низ */}
       <div className="p-3 border-t border-[var(--border)]">
-        {/* Token bar — only when expanded */}
+        {/* Полоса токенов — только в развёрнутом виде */}
         {sidebarOpen && (
           <div className="mb-3 space-y-2">
             <div>
@@ -272,7 +284,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* User info */}
+        {/* Информация о пользователе */}
         <div className={cn('flex items-center', sidebarOpen ? 'gap-3' : 'justify-center')}>
           {user?.avatarUrl ? (
             <img src={user.avatarUrl} alt={user.name ?? 'User'} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />

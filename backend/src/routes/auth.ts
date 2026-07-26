@@ -4,14 +4,16 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { notifyNewUser } from '../services/admin-notify.js';
 import { PLANS } from '../services/yokassa.js';
+import { FREE_WELCOME_CASPERS } from '../config/plans.js';
 import { redeemCaspersPromo, PromoError } from '../services/promo.js';
+import { checkBotSecret } from '../lib/bot-auth.js';
+import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
 
-// ─── Trial setup ──────────────────────────────────────────────────────────────
-
-const FREE_WELCOME_CASPERS = 100;
+// ─── Настройка нового пользователя ────────────────────────────────────────────
 
 async function setupTrialForNewUser(userId: string): Promise<void> {
-  // New users get a welcome bonus of 100 Caspers so they can try paid features
+  // Приветственный бонус — сумма из config/plans.ts (FREE_WELCOME_CASPERS),
+  // единственного места, где она задаётся.
   await prisma.user.update({
     where: { id: userId },
     data: { caspers_balance: { increment: FREE_WELCOME_CASPERS } },
@@ -21,7 +23,7 @@ async function setupTrialForNewUser(userId: string): Promise<void> {
   }).catch(() => {});
 }
 
-// ─── Schemas ──────────────────────────────────────────────────────────────────
+// ─── Схемы ─────────────────────────────────────────────────────────────────────
 
 const telegramWebAppSchema = z.object({
   initData: z.string(),
@@ -43,7 +45,7 @@ const updateProfileSchema = z.object({
   onboardingDone: z.boolean().optional(),
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Вспомогательные функции ──────────────────────────────────────────────────
 
 function signTokens(fastify: FastifyInstance, userId: string, email?: string) {
   const accessToken = fastify.jwt.sign(
@@ -96,10 +98,10 @@ function verifyTelegramWebApp(initData: string): {
   return JSON.parse(params.get('user') ?? '{}');
 }
 
-// ─── Plugin ───────────────────────────────────────────────────────────────────
+// ─── Плагин ───────────────────────────────────────────────────────────────────
 
 export default async function authRoutes(fastify: FastifyInstance) {
-  // ── Telegram WebApp auth ──────────────────────────────────────────────────
+  // ── Авторизация через Telegram WebApp ─────────────────────────────────────
   fastify.post('/auth/telegram-webapp', async (request, reply) => {
     const { initData } = telegramWebAppSchema.parse(request.body);
 
@@ -131,7 +133,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       response_type: 'code',
       client_id: process.env.YANDEX_CLIENT_ID ?? '',
       redirect_uri: `${process.env.API_URL}/api/auth/yandex/callback`,
-      force_confirm: 'yes', // Always show account chooser
+      force_confirm: 'yes', // Всегда показывать выбор аккаунта
     });
     return reply.redirect(`https://oauth.yandex.ru/authorize?${params}`);
   });
@@ -139,7 +141,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/auth/yandex/callback', async (request, reply) => {
     const { code } = yandexCallbackSchema.parse(request.query);
 
-    // Exchange code for token
+    // Обмениваем код на токен
     const tokenRes = await fetch('https://oauth.yandex.ru/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -153,7 +155,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const tokenData = (await tokenRes.json()) as { access_token: string };
 
-    // Get user info
+    // Получаем данные пользователя
     const infoRes = await fetch('https://login.yandex.ru/info?format=json', {
       headers: { Authorization: `OAuth ${tokenData.access_token}` },
     });
@@ -192,7 +194,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const { accessToken, refreshToken } = signTokens(fastify, user.id, user.email ?? undefined);
 
-    // Redirect to frontend with tokens in query (frontend stores in httpOnly cookie via API)
+    // Редиректим на фронтенд с токенами в query (фронтенд сохраняет их в httpOnly cookie через API)
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
       `${process.env.FRONTEND_URL}/auth/callback/#access=${accessToken}&refresh=${refreshToken}&redirect=${encodeURIComponent(redirectUrl)}`
@@ -206,7 +208,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       client_id: process.env.GOOGLE_CLIENT_ID ?? '',
       redirect_uri: `${process.env.API_URL}/api/auth/google/callback`,
       scope: 'openid email profile',
-      prompt: 'select_account', // Always show account chooser
+      prompt: 'select_account', // Всегда показывать выбор аккаунта
       access_type: 'offline',
     });
     return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
@@ -270,12 +272,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
   });
 
-  // ── Telegram bot-based login (called by bot with x-bot-secret header) ────
+  // ── Вход через Telegram-бота (вызывается ботом с заголовком x-bot-secret) ─
   fastify.post('/auth/telegram-bot', async (request, reply) => {
-    const secret = (request.headers['x-bot-secret'] ?? '') as string;
-    if (secret !== (process.env.BOT_SECRET ?? '')) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
+    if (!checkBotSecret(request, reply)) return;
 
     const body = request.body as {
       id: number; first_name?: string; last_name?: string;
@@ -300,12 +299,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return { ...tokens, isNew: !user.onboardingDone };
   });
 
-  // ── Bot: get user info by Telegram ID (plan, name) ───────────────────────
+  // ── Бот: получить данные пользователя по Telegram ID (план, имя) ─────────
   fastify.get('/bot/user-info', async (request, reply) => {
-    const secret = (request.headers['x-bot-secret'] ?? '') as string;
-    if (secret !== (process.env.BOT_SECRET ?? '')) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
+    if (!checkBotSecret(request, reply)) return;
     const { tgId } = request.query as { tgId?: string };
     if (!tgId) return reply.code(400).send({ error: 'tgId required' });
 
@@ -320,12 +316,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // ── Bot: redeem a CASPERS promo code by Telegram ID ───────────────────────
+  // ── Бот: активировать промокод CASPERS по Telegram ID ─────────────────────
   fastify.post('/bot/promo/redeem', async (request, reply) => {
-    const secret = (request.headers['x-bot-secret'] ?? '') as string;
-    if (secret !== (process.env.BOT_SECRET ?? '')) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
+    if (!checkBotSecret(request, reply)) return;
     const { tgId, code } = request.body as { tgId?: string; code?: string };
     if (!tgId || !code) return reply.code(400).send({ error: 'tgId и code обязательны' });
 
@@ -341,7 +334,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // ── Telegram OAuth verify (called from frontend after oauth.telegram.org) ─
+  // ── Проверка Telegram OAuth (вызывается фронтендом после oauth.telegram.org) ─
   fastify.post('/auth/telegram/verify', async (request, reply) => {
     const body = request.body as Record<string, string>;
     const { hash, ...fields } = body;
@@ -373,8 +366,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return { ...tokens, user, isNew: !user.onboardingDone };
   });
 
-  // ── Telegram OAuth Widget callback ───────────────────────────────────────
-  // Telegram redirects here with query params: id, first_name, last_name,
+  // ── Callback виджета Telegram OAuth ───────────────────────────────────────
+  // Telegram редиректит сюда с query-параметрами: id, first_name, last_name,
   // username, photo_url, auth_date, hash
   fastify.get('/auth/telegram/callback', async (request, reply) => {
     const q = request.query as Record<string, string>;
@@ -384,7 +377,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.redirect(`${process.env.FRONTEND_URL}/login?error=no_data`);
     }
 
-    // Verify HMAC-SHA256
+    // Проверяем HMAC-SHA256
     const checkString = Object.keys(fields)
       .sort()
       .map((k) => `${k}=${fields[k]}`)
@@ -426,7 +419,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     );
   });
 
-  // ── Refresh token ─────────────────────────────────────────────────────────
+  // ── Обновление токена ──────────────────────────────────────────────────────
   fastify.post('/auth/refresh', async (request, reply) => {
     const body = request.body as { refreshToken?: string };
     if (!body?.refreshToken) return reply.code(400).send({ error: 'No refresh token' });
@@ -444,7 +437,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // ── Me endpoints ──────────────────────────────────────────────────────────
+  // ── Эндпоинты профиля (/me) ────────────────────────────────────────────────
   fastify.get('/me', {
     preHandler: [fastify.authenticate],
     handler: async (request) => {
@@ -460,29 +453,20 @@ export default async function authRoutes(fastify: FastifyInstance) {
           plan: true,
           planExpiresAt: true,
           billing: true,
-          // Caspers
-          caspers_balance: true,
-          caspers_monthly: true,
-          // Daily counters
-          std_messages_today: true,
-          pro_messages_today: true,
-          // FREE tier weekly/monthly counters
-          images_this_week: true,
-          music_this_week: true,
-          videos_this_month: true,
-          // Period timestamps
+          ...USAGE_COUNTERS_SELECT,
+          // Метки начала периодов
           day_start: true,
           week_start: true,
           month_start: true,
           period_start: true,
-          // Profile
+          // Профиль
           purposes: true,
           responseStyle: true,
           onboardingDone: true,
           createdAt: true,
         },
       });
-      // Auto-heal legacy users: if they have a name they completed onboarding before this field existed
+      // Автоисправление для старых пользователей: если есть имя — значит, онбординг пройден ещё до появления этого поля
       let onboardingDone = user.onboardingDone;
       if (!onboardingDone && user.name) {
         await prisma.user.update({ where: { id: userId }, data: { onboardingDone: true } });
@@ -533,13 +517,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/me/transactions', {
     preHandler: [fastify.authenticate],
     handler: async () => {
-      // Token transaction history removed in billing refactor
+      // История транзакций токенов удалена при рефакторинге биллинга
       return { transactions: [], total: 0, page: 1, limit: 20 };
     },
   });
 }
 
-// Extend Fastify with authenticate decorator
+// Расширяем Fastify декоратором authenticate
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;

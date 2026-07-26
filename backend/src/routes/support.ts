@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { FREE_LIMITS } from '../config/plans.js';
+import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
 
 const SUPPORT_BOT_TOKEN = process.env.SUPPORT_BOT_TOKEN ?? '';
 const SUPPORT_GROUP_ID  = process.env.SUPPORT_GROUP_ID ?? '';
@@ -24,7 +26,7 @@ async function sendToTelegram(text: string) {
 }
 
 const supportRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/support/message  — works for both authenticated and anonymous users
+  // POST /api/support/message — работает и для авторизованных, и для анонимных пользователей
   fastify.post('/support/message', async (request, reply) => {
     const body = bodySchema.parse(request.body);
 
@@ -34,7 +36,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     let userId    = '—';
     let usage     = '';
 
-    // Optional authentication
+    // Опциональная авторизация
     try {
       await request.jwtVerify();
       const sub = (request.user as unknown as { userId: string }).userId;
@@ -45,13 +47,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
           name: true,
           email: true,
           plan: true,
-          caspers_balance:    true,
-          caspers_monthly:    true,
-          std_messages_today: true,
-          pro_messages_today: true,
-          images_this_week:   true,
-          music_this_week:    true,
-          videos_this_month:   true,
+          ...USAGE_COUNTERS_SELECT,
         },
       });
       if (user) {
@@ -65,12 +61,12 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
             ? `⚡ Про сегодня: ${user.pro_messages_today}`
             : '',
           `Caspers: ${user.caspers_balance}/${user.caspers_monthly}/мес`,
-          user.plan === 'FREE' ? `🖼 Картинки/нед: ${user.images_this_week}/5` : '',
-          user.plan === 'FREE' ? `🎬 Видео/мес: ${user.videos_this_month}/3` : '',
+          user.plan === 'FREE' ? `🖼 Картинки/нед: ${user.images_this_week}/${FREE_LIMITS.images_weekly}` : '',
+          user.plan === 'FREE' ? `🎬 Видео/мес: ${user.videos_this_month}/${FREE_LIMITS.videos_monthly}` : '',
         ].filter(Boolean).join('\n');
       }
     } catch {
-      // anonymous — use email from body
+      // анонимный пользователь — используем email из тела запроса
     }
 
     const text =

@@ -12,7 +12,7 @@ export type RequestType =
   | 'video_pro_8s'
   | 'music_generate';
 
-// ─── Casper costs (chat_std is always free) ───────────────────────────────────
+// ─── Стоимость в Caspers (chat_std всегда бесплатен) ──────────────────────────
 
 export const CASPER_COSTS: Record<RequestType, number> = {
   chat_std:       0,
@@ -39,7 +39,7 @@ export const FREE_DAILY_LIMITS = {
   std_messages: FREE_LIMITS.std_messages_daily,
 };
 
-// ─── Pro chat free quota per plan per day (-1 = unlimited) ───────────────────
+// ─── Бесплатная дневная квота про-чата по тарифам (-1 = безлимит) ────────────
 
 export const PRO_FREE_QUOTA: Record<string, number> = {
   FREE:  0,
@@ -49,7 +49,7 @@ export const PRO_FREE_QUOTA: Record<string, number> = {
   ULTRA: -1,
 } as const;
 
-// ─── Input sanitization ───────────────────────────────────────────────────────
+// ─── Санитизация ввода ─────────────────────────────────────────────────────────
 
 export function sanitizeInput(text: string): string {
   return text
@@ -60,7 +60,7 @@ export function sanitizeInput(text: string): string {
     .slice(0, 16000);
 }
 
-// ─── Reset daily/weekly/monthly counters if period ended ──────────────────────
+// ─── Сброс дневных/недельных/месячных счётчиков по окончании периода ─────────
 
 export async function checkResets(userId: string): Promise<void> {
   const now = new Date();
@@ -80,7 +80,7 @@ export async function checkResets(userId: string): Promise<void> {
 
   const updates: Record<string, unknown> = {};
 
-  // Daily reset (std/pro chat counters)
+  // Дневной сброс (счётчики обычного/про чата)
   const dayEnd = new Date(user.day_start);
   dayEnd.setDate(dayEnd.getDate() + 1);
   if (now >= dayEnd) {
@@ -89,7 +89,7 @@ export async function checkResets(userId: string): Promise<void> {
     updates.day_start = now;
   }
 
-  // Weekly reset (FREE tier: images + music)
+  // Недельный сброс (FREE-тариф: картинки + музыка)
   const weekEnd = new Date(user.week_start);
   weekEnd.setDate(weekEnd.getDate() + 7);
   if (now >= weekEnd) {
@@ -98,7 +98,7 @@ export async function checkResets(userId: string): Promise<void> {
     updates.week_start       = now;
   }
 
-  // Monthly reset (FREE tier: videos — 3/месяц)
+  // Месячный сброс (FREE-тариф: видео — 3/месяц)
   const monthEnd = new Date(user.month_start);
   monthEnd.setDate(monthEnd.getDate() + 30);
   if (now >= monthEnd) {
@@ -106,9 +106,9 @@ export async function checkResets(userId: string): Promise<void> {
     updates.month_start       = now;
   }
 
-  // Monthly caspers grant: when period_start + 30 days passed (paid plans only)
-  // Uses optimistic locking (updateMany with period_start condition) + atomic increment
-  // to prevent race-condition double-grants.
+  // Месячное начисление Caspers: когда прошло period_start + 30 дней (только платные тарифы)
+  // Используем оптимистичную блокировку (updateMany с условием по period_start) + атомарный
+  // инкремент, чтобы избежать двойного начисления при гонке.
   let didGrantMonthly = false;
   if (user.caspers_monthly > 0) {
     const periodEnd = new Date(user.period_start);
@@ -117,7 +117,7 @@ export async function checkResets(userId: string): Promise<void> {
       const granted = await prisma.user.updateMany({
         where: {
           id: userId,
-          period_start: user.period_start,   // optimistic lock — only fires once
+          period_start: user.period_start,   // оптимистичная блокировка — сработает только один раз
           caspers_monthly: { gt: 0 },
         },
         data: {
@@ -134,29 +134,29 @@ export async function checkResets(userId: string): Promise<void> {
     }
   }
 
-  // Apply the remaining counter resets (if any) separately
+  // Применяем оставшиеся сбросы счётчиков (если есть) отдельно
   if (Object.keys(updates).length > 0) {
     await prisma.user.update({ where: { id: userId }, data: updates });
   }
 
-  // Suppress unused variable warning
+  // Подавляем предупреждение о неиспользуемой переменной
   void didGrantMonthly;
 }
 
-// ─── Resolve video request type from model + duration ─────────────────────────
+// ─── Определение типа видео-запроса по модели + длительности ─────────────────
 
 export function resolveVideoRequestType(
   model: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality' = 'standard',
   duration: '4s' | '8s' = '8s',
 ): RequestType {
-  // cinema = Veo 3.1 Pro (expensive), motion/standard = Veo 3.1 Fast, reality = Kling (std pricing)
+  // cinema = Veo 3.1 Pro (дорогая), motion/standard = Veo 3.1 Fast, reality = Kling (стандартная цена)
   if (model === 'pro' || model === 'cinema') {
     return duration === '4s' ? 'video_pro_4s' : 'video_pro_8s';
   }
   return duration === '4s' ? 'video_std_4s' : 'video_std_8s';
 }
 
-// ─── Check limits & deduct (unified for both FREE and paid tiers) ──────────────
+// ─── Проверка лимитов и списание (единая логика для FREE и платных тарифов) ──
 
 export async function checkAndDeduct(
   userId: string,
@@ -182,7 +182,7 @@ export async function checkAndDeduct(
     const plan = user.plan as string;
     const cost = CASPER_COSTS[requestType];
 
-    // ── std chat ──────────────────────────────────────────────────────────────
+    // ── обычный чат ───────────────────────────────────────────────────────────
     if (requestType === 'chat_std') {
       if (plan === 'FREE') {
         if (user.std_messages_today >= FREE_DAILY_LIMITS.std_messages) {
@@ -193,20 +193,20 @@ export async function checkAndDeduct(
         }
         await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
       } else {
-        // Paid plans: std chat is always free (no deduction)
+        // Платные тарифы: обычный чат всегда бесплатный (списание не нужно)
         await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
       }
       return;
     }
 
-    // ── pro chat ──────────────────────────────────────────────────────────────
+    // ── про-чат ───────────────────────────────────────────────────────────────
     if (requestType === 'chat_pro') {
       const freeQuota = PRO_FREE_QUOTA[plan] ?? 0;
 
       if (freeQuota === 0 && plan !== 'ULTRA') {
-        // No free pro quota — check if FREE plan (pro unavailable)
+        // Бесплатной про-квоты нет — проверяем, не FREE ли план (про недоступен)
         if (plan === 'FREE' || plan === 'BASIC') {
-          // Check caspers
+          // Проверяем Caspers
           if (user.caspers_balance < cost) {
             throw Object.assign(
               new Error('Недостаточно Caspers для про-сообщения'),
@@ -216,20 +216,20 @@ export async function checkAndDeduct(
         }
       }
 
-      // Check free quota first (PRO/VIP plans have daily free pro messages)
+      // Сначала проверяем бесплатную квоту (у PRO/VIP есть дневные бесплатные про-сообщения)
       if (freeQuota === -1) {
-        // ULTRA: unlimited pro — just track
+        // ULTRA: безлимитный про — просто считаем
         await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
         return;
       }
 
       if (freeQuota > 0 && user.pro_messages_today < freeQuota) {
-        // Use free quota
+        // Используем бесплатную квоту
         await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
         return;
       }
 
-      // Deduct from caspers
+      // Списываем Caspers
       if (user.caspers_balance < cost) {
         throw Object.assign(
           new Error('Недостаточно Caspers'),
@@ -249,7 +249,7 @@ export async function checkAndDeduct(
       return;
     }
 
-    // ── image generation ──────────────────────────────────────────────────────
+    // ── генерация изображений ────────────────────────────────────────────────
     if (requestType === 'image_generate' || requestType === 'image_edit') {
       if (user.caspers_balance < cost) {
         throw Object.assign(
@@ -262,7 +262,7 @@ export async function checkAndDeduct(
       return;
     }
 
-    // ── music generation ──────────────────────────────────────────────────────
+    // ── генерация музыки ─────────────────────────────────────────────────────
     if (requestType === 'music_generate') {
       if (user.caspers_balance < cost) {
         throw Object.assign(
@@ -275,7 +275,7 @@ export async function checkAndDeduct(
       return;
     }
 
-    // ── video generation ──────────────────────────────────────────────────────
+    // ── генерация видео ──────────────────────────────────────────────────────
     if (
       requestType === 'video_std_4s' ||
       requestType === 'video_std_8s' ||
@@ -295,7 +295,7 @@ export async function checkAndDeduct(
   });
 }
 
-// ─── Refund caspers on API error ──────────────────────────────────────────────
+// ─── Возврат Caspers при ошибке API ───────────────────────────────────────────
 
 export async function refundCaspers(
   userId: string,
@@ -303,18 +303,18 @@ export async function refundCaspers(
 ): Promise<void> {
   try {
     const cost = CASPER_COSTS[requestType];
-    if (cost === 0) return; // nothing to refund
+    if (cost === 0) return; // возвращать нечего
 
-    // Check if the user actually had caspers deducted (i.e. not FREE tier limits)
+    // Проверяем, реально ли списывались Caspers (а не лимиты FREE-тарифа)
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { plan: true },
     });
     if (!user) return;
 
-    // For pro chat: only refund if caspers were actually deducted (not free quota)
+    // Для про-чата: возвращаем, только если Caspers реально списывались (не из бесплатной квоты)
     if (requestType === 'chat_pro') {
-      // Best-effort: just refund cost
+      // Best-effort: просто возвращаем стоимость
     }
 
     await prisma.$executeRaw`
@@ -327,15 +327,15 @@ export async function refundCaspers(
       data: { userId, amount: cost, reason: `refund_${requestType}` },
     }).catch(() => {});
   } catch {
-    // Refund is best-effort
+    // Возврат делается по принципу best-effort
   }
 }
 
-// ─── Legacy alias for compatibility ──────────────────────────────────────────
+// ─── Устаревший алиас для обратной совместимости ─────────────────────────────
 
 export const refundCounter = refundCaspers;
 
-// ─── Deduct caspers directly (used by yokassa.ts) ────────────────────────────
+// ─── Прямое списание Caspers (используется в yokassa.ts) ─────────────────────
 
 export async function deductCaspers(
   userId: string,
@@ -361,7 +361,7 @@ export async function deductCaspers(
   });
 }
 
-// ─── Grant caspers (used on plan purchase/renewal) ───────────────────────────
+// ─── Начисление Caspers (при покупке/продлении тарифа) ───────────────────────
 
 export async function grantCaspers(
   userId: string,
@@ -375,7 +375,7 @@ export async function grantCaspers(
       caspers_balance: { increment: amount },
       caspers_monthly: monthly,
       period_start: new Date(),
-      // Reset daily counters on plan change
+      // Сбрасываем дневные счётчики при смене тарифа
       std_messages_today: 0,
       pro_messages_today: 0,
       day_start: new Date(),
@@ -386,8 +386,8 @@ export async function grantCaspers(
   }).catch(() => {});
 }
 
-// ─── Legacy: kept for type compatibility with chat.ts ─────────────────────────
-// (chat.ts imports this but uses the new checkAndDeduct above)
+// ─── Устаревшее: оставлено для совместимости типов с chat.ts ─────────────────
+// (chat.ts импортирует это, но использует новый checkAndDeduct выше)
 
 export interface PlanLimits {
   std_messages_daily: number;

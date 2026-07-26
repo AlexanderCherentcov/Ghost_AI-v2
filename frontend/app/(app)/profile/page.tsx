@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/ui/Toast';
 import { UserIcon } from '@/components/icons';
 import { formatDate, cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -27,6 +28,7 @@ function applyFontSize(size: FontSize) {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { show } = useToast();
   const { user, setUser, clearAuth } = useAuthStore();
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
@@ -42,11 +44,16 @@ export default function ProfilePage() {
   async function handleSave() {
     if (!name.trim() || saving) return;
     setSaving(true);
-    const updated = await api.auth.updateMe({ name });
-    setUser(updated);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      const updated = await api.auth.updateMe({ name });
+      setUser(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось сохранить имя', 'error');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleLogout() {
@@ -103,7 +110,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Plan info */}
+        {/* Информация о тарифе */}
         <div className="card">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl p-3" style={{ background: 'var(--bg-elevated)' }}>
@@ -155,7 +162,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Font size */}
+            {/* Размер шрифта */}
             <div>
               <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Размер шрифта</p>
               <div className="grid grid-cols-3 gap-2">
@@ -184,7 +191,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Settings link (desktop shortcut, always visible) */}
+        {/* Ссылка на настройки (ярлык для десктопа, всегда видна) */}
         <div className="card">
           <h2 className="font-medium mb-3" style={{ color: 'var(--text-primary)' }}>Дополнительно</h2>
           <Link

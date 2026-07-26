@@ -19,9 +19,9 @@ export class ChatStreamError extends Error {
 }
 
 /**
- * Opens a fresh WS connection per message (mirrors how the web frontend
- * connects), streams tokens through onToken for periodic Telegram message
- * edits, and resolves once the server sends `done`.
+ * Открывает новое WS-соединение на каждое сообщение (так же, как это делает
+ * веб-фронтенд), передаёт токены через onToken для периодической правки
+ * сообщения в Telegram и резолвится, когда сервер пришлёт `done`.
  */
 export function streamChat(
   session: UserSession,
@@ -82,7 +82,7 @@ export function streamChat(
       } else if (msg.type === 'error') {
         finish(() => reject(new ChatStreamError(msg.code ?? 'SERVER_ERROR', msg.message ?? 'Ошибка сервера')));
       }
-      // 'title' events are ignored — the bot doesn't render a live sidebar
+      // события 'title' игнорируются — у бота нет живого сайдбара для их отображения
     });
 
     ws.on('error', () => {

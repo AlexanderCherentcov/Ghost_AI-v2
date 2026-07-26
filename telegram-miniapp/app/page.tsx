@@ -25,8 +25,8 @@ function TgInit() {
       try {
         const initData = window.Telegram?.WebApp?.initData ?? '';
 
-        // If user already has a token — skip the loading screen and go straight to chat.
-        // Silently refresh the token in the background so it stays fresh.
+        // Если у пользователя уже есть токен — пропускаем экран загрузки и сразу переходим в чат.
+        // Токен тихо обновляется в фоне, чтобы оставаться свежим.
         const existingToken = getToken();
         if (existingToken && initData) {
           initAuth(initData).catch(() => {});
@@ -34,7 +34,7 @@ function TgInit() {
           return;
         }
 
-        // Phase 1: 0 → 30% — prepare
+        // Этап 1: 0 → 30% — подготовка
         setProgress(10);
         await tick(120);
         setProgress(30);
@@ -45,13 +45,13 @@ function TgInit() {
           return;
         }
 
-        // Phase 2: 30 → 70% — auth request
+        // Этап 2: 30 → 70% — запрос авторизации
         setStatus('Авторизация...');
         setProgress(50);
         const { isNew, user } = await initAuth(initData);
         setProgress(80);
 
-        // Phase 3: 80 → 100% — redirect
+        // Этап 3: 80 → 100% — редирект
         setStatus('Добро пожаловать!');
         await tick(200);
         setProgress(100);
@@ -80,7 +80,7 @@ function TgInit() {
         {status}
       </p>
 
-      {/* Progress bar */}
+      {/* Индикатор прогресса */}
       <div className="w-48 h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
         <div
           className="h-full rounded-full transition-all duration-300 ease-out"

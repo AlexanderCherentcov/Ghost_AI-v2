@@ -14,7 +14,7 @@ async function downloadImageFile(url: string) {
     const blob = await res.blob();
     const ext = blob.type.includes('png') ? 'png' : 'jpg';
     const fname = `ghostline-${Date.now()}.${ext}`;
-    // Web Share API (iOS 15+, Android Chrome) → "Save to Photos / Gallery"
+    // Web Share API (iOS 15+, Android Chrome) → "Сохранить в Фото / Галерею"
     if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
       const file = new File([blob], fname, { type: blob.type });
       if ((navigator as any).canShare({ files: [file] })) {
@@ -22,7 +22,7 @@ async function downloadImageFile(url: string) {
         return;
       }
     }
-    // Desktop fallback
+    // Запасной вариант для десктопа
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -32,13 +32,13 @@ async function downloadImageFile(url: string) {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   } catch (err: any) {
-    if (err?.name === 'AbortError') return; // user cancelled share sheet
+    if (err?.name === 'AbortError') return; // пользователь отменил окно шаринга
     window.open(url, '_blank');
   }
 }
 
 export function ImageViewer({ url, onClose }: ImageViewerProps) {
-  // Close on Escape
+  // Закрытие по Escape
   useEffect(() => {
     if (!url) return;
     function onKey(e: KeyboardEvent) {
@@ -60,7 +60,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
           style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }}
           onClick={onClose}
         >
-          {/* Image */}
+          {/* Изображение */}
           <motion.img
             initial={{ scale: 0.92, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -72,7 +72,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
             onClick={(e) => e.stopPropagation()}
           />
 
-          {/* Bottom toolbar */}
+          {/* Нижний тулбар */}
           <motion.div
             initial={{ y: 16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -84,7 +84,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
             <button
               onClick={() => downloadImageFile(url)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
-              style={{ background: '#7B5CF0', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'white' }}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

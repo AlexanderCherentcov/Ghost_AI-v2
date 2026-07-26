@@ -1,13 +1,13 @@
 /**
- * Admin notification service
- * ──────────────────────────
- * Sends Telegram messages to all configured admin chat IDs via the admin bot token.
- * Fail-silent: never throws — main flow must not break if Telegram is down.
+ * Сервис уведомлений администраторов
+ * ───────────────────────────────────
+ * Отправляет сообщения в Telegram на все настроенные chat ID админов через токен админ-бота.
+ * Fail-silent: никогда не бросает исключение — основной поток не должен ломаться, если Telegram недоступен.
  */
 
 import axios from 'axios';
 
-// Must bypass HTTP_PROXY — the global proxy doesn't forward HTTPS correctly (same issue as YooKassa)
+// Должен обходить HTTP_PROXY — глобальный прокси некорректно проксирует HTTPS (та же проблема, что и у YooKassa)
 const notifyAxios = axios.create({ proxy: false });
 
 const TOKEN  = process.env.ADMIN_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
@@ -89,7 +89,7 @@ export async function notifyAbuse(info: {
 export async function notifyApiError(info: {
   userId: string;
   userName?: string | null;
-  operation: string; // 'image_gen' | 'video_gen' | 'music_gen' | 'chat'
+  operation: string; // 'image_gen' | 'video_gen' | 'music_gen' | 'chat' — тип операции
   error: string;
   context?: string;
 }): Promise<void> {

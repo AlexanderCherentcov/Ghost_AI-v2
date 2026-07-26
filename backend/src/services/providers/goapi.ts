@@ -11,7 +11,7 @@ function headers() {
   };
 }
 
-// ─── Generic helpers ───────────────────────────────────────────────────────────
+// ─── Общие вспомогательные функции ─────────────────────────────────────────────
 
 async function createTask(model: string, taskType: string, input: Record<string, unknown>): Promise<string> {
   const res = await fetch(`${GOAPI_BASE}/api/v1/task`, {
@@ -56,7 +56,7 @@ async function pollTask(
     if (status === 'failed' || status === 'error') {
       throw new Error(`GoAPI task failed: ${JSON.stringify(data?.data?.task_result ?? data).slice(0, 300)}`);
     }
-    // pending / processing — continue
+    // pending / processing — продолжаем опрос
   }
   throw new Error('GoAPI task timed out after 10 minutes');
 }
@@ -64,7 +64,7 @@ async function pollTask(
 function extractVideoUrl(data: any): string {
   const output = data?.data?.output ?? data?.output;
   const url: string | undefined =
-    output?.video ??          // Veo3.1 returns { output: { video: "..." } }
+    output?.video ??          // Veo3.1 возвращает { output: { video: "..." } }
     output?.video_url ??
     output?.works?.[0]?.video?.resource_without_watermark ??
     output?.works?.[0]?.video?.resource ??
@@ -75,7 +75,7 @@ function extractVideoUrl(data: any): string {
   return url;
 }
 
-// ─── Kling V-2.5 video generation ─────────────────────────────────────────────
+// ─── Генерация видео Kling V-2.5 ───────────────────────────────────────────────
 
 export interface KlingVideoOptions {
   duration?: 5 | 10;
@@ -132,9 +132,9 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
   return extractVideoUrl(data);
 }
 
-// ─── Veo3.1 video generation ──────────────────────────────────────────────────
+// ─── Генерация видео Veo3.1 ────────────────────────────────────────────────────
 // Standard = veo3.1-video-fast, Pro = veo3.1-video
-// Supports both text-to-video and image-to-video (image_url)
+// Поддерживает и text-to-video, и image-to-video (image_url)
 
 export type VeoModel = 'standard' | 'pro';
 export type VeoDuration = '4s' | '8s';
@@ -147,7 +147,7 @@ export interface Veo3Options {
   aspectRatio?: '16:9' | '9:16';
   generateAudio?: boolean;
   negativePrompt?: string;
-  /** Image URL for image-to-video generation */
+  /** URL изображения для генерации image-to-video */
   imageUrl?: string;
 }
 
@@ -182,27 +182,27 @@ export async function generateVideoVeo3(prompt: string, options: Veo3Options = {
   return extractVideoUrl(data);
 }
 
-// ─── DiffRhythm music generation (fallback) ───────────────────────────────────
+// ─── Генерация музыки DiffRhythm (резервный вариант) ───────────────────────────
 // txt2audio-base: $0.02 — ~95 сек
 // txt2audio-full: $0.02 — ~4:45
 
 export type DiffRhythmMode = 'base' | 'full';
 
 /**
- * Auto-assign timestamps to plain lyrics lines.
- * DiffRhythm requires format: [MM:SS.ms] line
- * We spread lines evenly starting at 10s.
+ * Автоматически проставляет тайм-коды к обычным строкам текста песни.
+ * DiffRhythm требует формат: [MM:SS.ms] строка
+ * Равномерно распределяем строки, начиная с 10 секунды.
  *
- * Filters out:
- *  - Section headers: [Chorus], [Verse 1], etc.
- *  - Instrumental directions: (flute solo), (string swell), etc.
+ * Отфильтровывает:
+ *  - Заголовки секций: [Chorus], [Verse 1] и т.д.
+ *  - Инструментальные указания: (flute solo), (string swell) и т.д.
  */
 function formatLyricsWithTimestamps(lyrics: string, mode: DiffRhythmMode): string {
-  const totalSeconds = mode === 'full' ? 270 : 85; // leave headroom
+  const totalSeconds = mode === 'full' ? 270 : 85; // оставляем запас
   const startAt = 10;
 
-  // If lyrics already have timestamps like [00:10.00] — pass through as-is,
-  // only stripping pure instrumental-direction lines in parentheses.
+  // Если в тексте уже есть тайм-коды вида [00:10.00] — передаём как есть,
+  // убирая только чисто инструментальные строки в скобках.
   const hasTimestamps = /^\[\d{2}:\d{2}\.\d{2}\]/m.test(lyrics);
   if (hasTimestamps) {
     return lyrics
@@ -210,7 +210,7 @@ function formatLyricsWithTimestamps(lyrics: string, mode: DiffRhythmMode): strin
       .map((l) => l.trim())
       .filter((l) => {
         if (!l) return false;
-        // Strip lines that are purely instrumental directions (e.g. [00:10.00] (Ney flute solo))
+        // Убираем строки, которые целиком являются инструментальными указаниями (напр. [00:10.00] (Ney flute solo))
         const withoutTs = l.replace(/^\[\d{2}:\d{2}\.\d{2}\]\s*/, '');
         return !/^\(.*\)\s*$/.test(withoutTs);
       })
@@ -222,8 +222,8 @@ function formatLyricsWithTimestamps(lyrics: string, mode: DiffRhythmMode): strin
     .map((l) => l.trim())
     .filter((l) => {
       if (!l) return false;
-      if (l.startsWith('[')) return false; // section headers like [Chorus]
-      if (/^\(.*\)\s*$/.test(l)) return false; // pure instrumental directions like (flute solo)
+      if (l.startsWith('[')) return false; // заголовки секций вроде [Chorus]
+      if (/^\(.*\)\s*$/.test(l)) return false; // чисто инструментальные указания вроде (flute solo)
       return true;
     });
 
@@ -248,7 +248,7 @@ export async function generateMusicDiffRhythm(
 ): Promise<string> {
   const taskType = mode === 'full' ? 'txt2audio-full' : 'txt2audio-base';
 
-  // Format lyrics with timestamps if provided
+  // Форматируем текст песни с тайм-кодами, если он передан
   const formattedLyrics = lyrics?.trim()
     ? formatLyricsWithTimestamps(lyrics.trim(), mode)
     : '';
@@ -270,7 +270,7 @@ export async function generateMusicDiffRhythm(
   return url;
 }
 
-// ─── Kling Lip Sync ────────────────────────────────────────────────────────────
+// ─── Kling: синхронизация губ (Lip Sync) ───────────────────────────────────────
 // videoUrl — URL видео-файла
 // audioUrl — URL аудио-файла (mp3/wav)
 

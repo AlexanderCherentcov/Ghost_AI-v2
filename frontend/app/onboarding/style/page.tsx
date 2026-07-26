@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 
 const STYLES = [
@@ -52,15 +53,21 @@ function ProgressDots({ current }: { current: number }) {
 
 export default function OnboardingStylePage() {
   const router = useRouter();
+  const { show } = useToast();
   const { setUser } = useAuthStore();
   const [selected, setSelected] = useState('ghost');
   const [loading, setLoading] = useState(false);
 
   async function handleFinish() {
     setLoading(true);
-    const user = await api.auth.updateMe({ responseStyle: selected, onboardingDone: true });
-    setUser(user);
-    router.push('/chat');
+    try {
+      const user = await api.auth.updateMe({ responseStyle: selected, onboardingDone: true });
+      setUser(user);
+      router.push('/chat');
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось сохранить, попробуйте ещё раз', 'error');
+      setLoading(false);
+    }
   }
 
   return (

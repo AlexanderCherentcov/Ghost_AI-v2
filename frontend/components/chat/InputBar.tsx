@@ -2,484 +2,32 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon, CasperCoin, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
+import { SendIcon, ChatIcon, ImageIcon, VideoIcon, MusicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { useToast } from '@/components/ui/Toast';
 
-// ─── File helpers ─────────────────────────────────────────────────────────────
+import { ACCEPT, getFileCategory, fileIcon, formatSize } from './inputbar/fileHelpers';
+import type { VideoQuality, VideoModel, VideoOptions, MusicMode, MusicOptions, ChatMode } from './inputbar/types';
+import { DEFAULT_CASPER_COSTS, calcCaspers, getCostDisplay } from './inputbar/costs';
+import type { CasperCosts, CostDisplay } from './inputbar/costs';
+import { CostBadge } from './inputbar/CostBadge';
+import { CustomSelect } from './inputbar/CustomSelect';
+import { VideoWidget } from './inputbar/VideoWidget';
+import { MusicWidget } from './inputbar/MusicWidget';
+import { ImageWidget } from './inputbar/ImageWidget';
+import { ModelPill } from './inputbar/ModelPill';
 
-const ACCEPT = [
-  'image/*',
-  '.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx','.odt','.ods',
-  '.txt','.md','.markdown','.mdx','.rst','.log','.csv','.tsv',
-  '.html','.htm','.xml','.css','.scss','.js','.jsx','.ts','.tsx',
-  '.json','.yaml','.yml','.toml','.ini','.env','.py','.java','.go','.rs',
-  '.rb','.php','.sql','.sh','.bash','.graphql',
-].join(',');
+// Реэкспорт — компонент раньше был одним файлом, снаружи на эти имена
+// (ChatIdPage.tsx, app/chat/page.tsx, InputBar.test.ts) уже есть импорты
+// из '@/components/chat/InputBar'; после разбивки на модули они продолжают работать.
+export type { FileCategory } from './inputbar/fileHelpers';
+export { getFileCategory };
+export type { VideoQuality, VideoModel, VideoOptions, MusicMode, MusicOptions, ChatMode };
+export type { CasperCosts, CostDisplay };
+export { DEFAULT_CASPER_COSTS, calcCaspers };
 
-const TEXT_EXTS = new Set(['txt','md','markdown','mdx','rst','log','csv','tsv','html','htm','xml','css','scss','js','jsx','ts','tsx','json','yaml','yml','toml','ini','env','py','java','go','rs','rb','php','sql','sh','bash','graphql']);
-const BINARY_EXTS = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods']);
-const IMAGE_EXTS  = new Set(['jpg','jpeg','png','gif','webp','bmp','avif','tiff','svg','ico']);
-
-export type FileCategory = 'image' | 'text' | 'binary';
-export function getFileCategory(file: File): FileCategory {
-  if (file.type.startsWith('image/')) return 'image';
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (IMAGE_EXTS.has(ext)) return 'image';
-  if (BINARY_EXTS.has(ext)) return 'binary';
-  return 'text';
-}
-
-function fileIcon(file: File): string {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (IMAGE_EXTS.has(ext) || file.type.startsWith('image/')) return '🖼️';
-  if (ext === 'pdf') return '📄';
-  if (['doc','docx','odt'].includes(ext)) return '📝';
-  if (['xls','xlsx','csv'].includes(ext)) return '📊';
-  if (['js','jsx','ts','tsx'].includes(ext)) return '⚡';
-  if (['py'].includes(ext)) return '🐍';
-  if (['sql'].includes(ext)) return '🗄️';
-  if (['md','markdown'].includes(ext)) return '📋';
-  return '📎';
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-// ─── Video types ──────────────────────────────────────────────────────────────
-
-export type VideoQuality = 'motion' | 'cinema' | 'reality';
-// legacy compat
-export type VideoModel = VideoQuality | 'standard' | 'pro';
-
-export interface VideoOptions {
-  videoModel: VideoQuality;
-  duration: '4s' | '8s';
-  aspectRatio: '16:9' | '9:16';
-  enableAudio: boolean;
-  resolution: '720p' | '1080p';
-  imageUrl?: string;
-  negativePrompt: string;
-}
-
-// ─── Music types ──────────────────────────────────────────────────────────────
-
-export type MusicMode = 'short' | 'long' | 'quality' | 'suno'; // keep legacy
-
-export interface MusicOptions {
-  title: string;
-  style: string;
-  instrumental: boolean;
-  lyrics: string;
-}
-
-// ─── Chat mode ────────────────────────────────────────────────────────────────
-
-export type ChatMode = 'chat' | 'images' | 'video' | 'music';
-
-// ─── Casper cost calculator ───────────────────────────────────────────────────
-
-function calcCaspers(mode: ChatMode, videoOpts: VideoOptions): number {
-  if (mode === 'music') return 5;
-  if (mode === 'images') return 10;
-  if (mode === 'video') {
-    const isPro = videoOpts.videoModel === 'cinema';
-    if (isPro) return videoOpts.duration === '4s' ? 50 : 90;
-    return videoOpts.duration === '4s' ? 25 : 40;
-  }
-  return 0;
-}
-
-// ─── Plan-aware cost display ──────────────────────────────────────────────────
-//
-// Returns what to show next to a widget header or toolbar:
-//   { type:'free', label:'3/5 нед.' }   → FREE user with remaining quota
-//   { type:'caspers', amount: 10 }       → paid user OR FREE quota exhausted
-//   null                                 → chat mode (no cost)
-
-type CostDisplay =
-  | { type: 'free'; label: string }
-  | { type: 'caspers'; amount: number }
-  | null;
-
-function getCostDisplay(
-  mode: ChatMode,
-  videoOpts: VideoOptions,
-  userPlan?: string,
-  userImages?: number,
-  userMusic?: number,
-  userVideos?: number,
-  preferredModel?: 'haiku' | 'deepseek' | undefined,
-  userProFreeRemaining?: number,
-): CostDisplay {
-  if (mode === 'chat') {
-    if (preferredModel !== 'deepseek') return null;
-    if (!userPlan) return null; // still loading
-    if (userPlan === 'ULTRA') return { type: 'free', label: 'безлимит' };
-    if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
-      return { type: 'free', label: `${userProFreeRemaining} сегодня` };
-    }
-    if (!userProFreeRemaining && userPlan === 'FREE') return null; // FREE can't use pro
-    return { type: 'caspers', amount: 1 };
-  }
-
-  if (mode === 'images') {
-    return { type: 'caspers', amount: 10 };
-  }
-
-  if (mode === 'music') {
-    return { type: 'caspers', amount: 5 };
-  }
-
-  if (mode === 'video') {
-    return { type: 'caspers', amount: calcCaspers('video', videoOpts) };
-  }
-
-  return null;
-}
-
-// ─── Reusable cost badge ──────────────────────────────────────────────────────
-function CostBadge({ cost, size = 12 }: { cost: CostDisplay; size?: number }) {
-  if (!cost) return null;
-  if (cost.type === 'free') {
-    return (
-      <span className="text-[11px] font-medium" style={{ color: '#4ade80' }}>
-        {cost.label}
-      </span>
-    );
-  }
-  return (
-    <span className="flex items-center gap-1 text-[12px] font-semibold tabular-nums" style={{ color: 'var(--accent)' }}>
-      {cost.amount}
-      <CasperCoin size={size} />
-    </span>
-  );
-}
-
-// ─── Video quality options ────────────────────────────────────────────────────
-
-const VIDEO_QUALITIES: { key: VideoQuality; label: string; icon: React.ReactNode }[] = [
-  { key: 'motion',  label: 'Standard', icon: <VideoIcon size={13} /> },
-  { key: 'cinema',  label: 'Pro',      icon: <VideoIcon size={13} /> },
-  { key: 'reality', label: 'Reality',  icon: <VideoIcon size={13} /> },
-];
-
-// ─── Custom select (styled dropdown, replaces native <select>) ────────────────
-
-function CustomSelect<T extends string>({
-  value, onChange, options, direction = 'up',
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  options: Array<{ value: T; label: string; icon?: React.ReactNode }>;
-  direction?: 'up' | 'down';
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const current = options.find((o) => o.value === value) ?? options[0];
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[12px] font-medium transition-all hover:border-[rgba(255,255,255,0.2)]"
-        style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-      >
-        {current.icon && <span className="flex-shrink-0 opacity-70">{current.icon}</span>}
-        <span>{current.label}</span>
-        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" className="opacity-40 ml-0.5">
-          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-        </svg>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            className={cn(
-              'absolute left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl',
-              direction === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-            )}
-            style={{ minWidth: '130px' }}
-          >
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={cn(
-                  'w-full text-left px-3 py-2 text-[12px] flex items-center gap-2 transition-colors hover:bg-[var(--bg-void)]',
-                  value === opt.value ? 'text-accent' : ''
-                )}
-                style={value !== opt.value ? { color: 'var(--text-primary)' } : {}}
-              >
-                {opt.icon && <span className="flex-shrink-0 opacity-70">{opt.icon}</span>}
-                <span className="flex-1">{opt.label}</span>
-                {value === opt.value && (
-                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M3.5 10.5l5 5L17 6"/>
-                  </svg>
-                )}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ─── Widget panels ────────────────────────────────────────────────────────────
-
-function VideoWidget({
-  options, onChange, userPlan, userVideos,
-}: {
-  options: VideoOptions;
-  onChange: (o: VideoOptions) => void;
-  userPlan?: string;
-  userVideos?: number;
-}) {
-  const cost = getCostDisplay('video', options, userPlan, undefined, undefined, userVideos);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 6 }}
-      transition={{ duration: 0.18 }}
-      className="rounded-xl border mb-2"
-      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
-    >
-      <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
-        <CostBadge cost={cost} size={13} />
-      </div>
-
-      <div className="px-4 py-3 flex flex-col gap-3">
-        {/* Model + Resolution row */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Модель</span>
-            <CustomSelect<VideoQuality>
-              value={options.videoModel}
-              onChange={(v) => onChange({ ...options, videoModel: v })}
-              options={VIDEO_QUALITIES.map((q) => ({ value: q.key, label: q.label, icon: q.icon }))}
-              direction="up"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Разрешение</span>
-            <CustomSelect<'720p' | '1080p'>
-              value={options.resolution}
-              onChange={(v) => onChange({ ...options, resolution: v })}
-              options={[
-                { value: '720p',  label: '720p' },
-                { value: '1080p', label: '1080p' },
-              ]}
-              direction="up"
-            />
-          </div>
-        </div>
-
-        {/* Duration + Aspect + Audio */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1">
-            {(['4s', '8s'] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => onChange({ ...options, duration: d })}
-                className={cn(
-                  'px-3 py-1 rounded-lg text-[11px] font-medium border transition-all',
-                  options.duration === d
-                    ? 'bg-[rgba(123,92,240,0.15)] text-accent border-[rgba(123,92,240,0.4)]'
-                    : 'border-[var(--border)] hover:border-[rgba(255,255,255,0.25)]'
-                )}
-                style={options.duration !== d ? { color: 'var(--text-secondary)' } : {}}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-1">
-            {(['16:9', '9:16'] as const).map((ar) => (
-              <button
-                key={ar}
-                type="button"
-                onClick={() => onChange({ ...options, aspectRatio: ar })}
-                className={cn(
-                  'px-3 py-1 rounded-lg text-[11px] font-medium border transition-all',
-                  options.aspectRatio === ar
-                    ? 'bg-[rgba(123,92,240,0.15)] text-accent border-[rgba(123,92,240,0.4)]'
-                    : 'border-[var(--border)] hover:border-[rgba(255,255,255,0.25)]'
-                )}
-                style={options.aspectRatio !== ar ? { color: 'var(--text-secondary)' } : {}}
-              >
-                {ar}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onChange({ ...options, enableAudio: !options.enableAudio })}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-medium border transition-all',
-              options.enableAudio
-                ? 'bg-[rgba(123,92,240,0.15)] text-accent border-[rgba(123,92,240,0.4)]'
-                : 'border-[var(--border)] hover:border-[rgba(255,255,255,0.25)]'
-            )}
-            style={!options.enableAudio ? { color: 'var(--text-secondary)' } : {}}
-          >
-            {options.enableAudio ? '🔊' : '🔇'} Звук
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function MusicWidget({
-  options, onChange, onGenerateLyrics, generatingLyrics, topic, userPlan, userMusic,
-}: {
-  options: MusicOptions;
-  onChange: (o: MusicOptions) => void;
-  onGenerateLyrics: () => void;
-  generatingLyrics: boolean;
-  topic: string;
-  userPlan?: string;
-  userMusic?: number;
-}) {
-  const cost = getCostDisplay('music', {} as VideoOptions, userPlan, undefined, userMusic, undefined);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 6 }}
-      transition={{ duration: 0.18 }}
-      className="rounded-xl border mb-2"
-      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
-    >
-      <div className="px-4 py-2.5 flex items-center justify-end border-b" style={{ borderColor: 'var(--border)' }}>
-        <CostBadge cost={cost} size={13} />
-      </div>
-
-      <div className="px-4 py-3 flex flex-col gap-2.5">
-        {/* Title + Style */}
-        <div className="flex gap-2">
-          <input
-            value={options.title}
-            onChange={(e) => onChange({ ...options, title: e.target.value })}
-            placeholder="Название трека"
-            title="Введите название трека, например: «Ночной город» или «Летнее утро»"
-            maxLength={100}
-            className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)', fontSize: '16px' }}
-          />
-          <input
-            value={options.style}
-            onChange={(e) => onChange({ ...options, style: e.target.value })}
-            placeholder="Стиль / жанр"
-            title="Укажите жанр или настроение, например: «lo-fi, грустный» или «поп, энергичный»"
-            maxLength={100}
-            className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)', fontSize: '16px' }}
-          />
-        </div>
-
-        {/* Instrumental toggle */}
-        <button
-          type="button"
-          onClick={() => onChange({ ...options, instrumental: !options.instrumental, lyrics: options.instrumental ? options.lyrics : '' })}
-          className={cn(
-            'self-start flex items-center gap-2 px-3 py-1 rounded-lg text-[11px] font-medium border transition-all',
-            options.instrumental
-              ? 'bg-[rgba(123,92,240,0.15)] text-accent border-[rgba(123,92,240,0.4)]'
-              : 'border-[var(--border)] hover:border-[rgba(255,255,255,0.25)]'
-          )}
-          style={!options.instrumental ? { color: 'var(--text-secondary)' } : {}}
-        >
-          {options.instrumental ? '🎹 Инструментал' : '🎤 С вокалом'}
-        </button>
-
-        {/* Lyrics area */}
-        {!options.instrumental && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Текст песни (необязательно)</span>
-              <Tooltip
-                content="Введите название трека для генерации"
-                disabled={!!topic.trim() || generatingLyrics}
-                side="top"
-              >
-                <button
-                  type="button"
-                  onClick={onGenerateLyrics}
-                  disabled={generatingLyrics || !topic.trim()}
-                  className={cn(
-                    'text-[11px] px-2.5 py-0.5 rounded-md border transition-all',
-                    generatingLyrics || !topic.trim()
-                      ? 'opacity-40 cursor-not-allowed border-[var(--border)]'
-                      : 'border-[rgba(123,92,240,0.4)] text-accent hover:bg-[rgba(123,92,240,0.1)]'
-                  )}
-                >
-                  {generatingLyrics ? '✨ Генерирую...' : '✨ Сгенерировать текст'}
-                </button>
-              </Tooltip>
-            </div>
-            <textarea
-              value={options.lyrics}
-              onChange={(e) => onChange({ ...options, lyrics: e.target.value })}
-              placeholder={'Текст песни...\n\nИли нажмите «Сгенерировать текст» — текст сгенерируется автоматически по названию трека.'}
-              rows={4}
-              maxLength={10000}
-              className="w-full rounded-lg px-3 py-2 text-[12px] outline-none resize-none placeholder:opacity-30 leading-relaxed"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: '16px' }}
-            />
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-function ImageWidget({ userPlan, userImages }: { userPlan?: string; userImages?: number }) {
-  const cost = getCostDisplay('images', {} as VideoOptions, userPlan, userImages, undefined, undefined);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 6 }}
-      transition={{ duration: 0.18 }}
-      className="rounded-xl border mb-2 px-4 py-3 flex items-center justify-between"
-      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
-    >
-      <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-        <ImageIcon size={13} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />
-        Опишите изображение в строке ниже
-      </p>
-      <CostBadge cost={cost} size={13} />
-    </motion.div>
-  );
-}
-
-
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Основной компонент ───────────────────────────────────────────────────────
 
 interface InputBarProps {
   onSend: (
@@ -503,17 +51,17 @@ interface InputBarProps {
   onUpgradeRequired?: () => void;
   chatMode?: ChatMode;
   setChatMode?: (m: ChatMode) => void;
-  // Dispatcher pre-fill from parent
+  // Автозаполнение от диспетчера, приходит от родителя
   dispatchResult?: { category: string; autoFill: Record<string, unknown> } | null;
-  // Notify parent of input changes (for debounced dispatch)
+  // Уведомляет родителя об изменениях ввода (для дебаунс-диспетчера)
   onInputChange?: (text: string) => void;
-  // Fill textarea with an external prompt value (e.g. "Use this prompt" button)
+  // Заполняет textarea внешним значением промта (например, кнопкой "Использовать этот промт")
   fillPrompt?: string;
-  // User's current usage counters (for FREE plan limit display)
+  // Текущие счётчики использования пользователя (для отображения лимита FREE-тарифа)
   userImages?: number;            // images_this_week
   userMusic?: number;             // music_this_week
   userVideos?: number;            // videos_this_month
-  userProFreeRemaining?: number;  // remaining free pro chat requests today
+  userProFreeRemaining?: number;  // остаток бесплатных pro-запросов сегодня
 }
 
 export function InputBar({
@@ -525,9 +73,17 @@ export function InputBar({
   fillPrompt,
   userImages, userMusic, userVideos, userProFreeRemaining,
 }: InputBarProps) {
+  const { show } = useToast();
   const [value, setValue] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
+
+  // Стоимость операций в Caspers — с бэкенда (GET /plans), DEFAULT_CASPER_COSTS
+  // используется только как запасной вариант, пока запрос не завершился.
+  const [casperCosts, setCasperCosts] = useState<CasperCosts>(DEFAULT_CASPER_COSTS);
+  useEffect(() => {
+    api.payments.plans().then((data) => setCasperCosts(data.casper_costs)).catch(() => {});
+  }, []);
 
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
     videoModel: 'motion',
@@ -549,7 +105,7 @@ export function InputBar({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendingRef = useRef(false);
 
-  // Apply dispatcher pre-fill
+  // Применяем автозаполнение от диспетчера
   useEffect(() => {
     if (!dispatchResult) return;
     const { category, autoFill } = dispatchResult;
@@ -574,17 +130,17 @@ export function InputBar({
     } else if (category === 'image' && setChatMode) {
       setChatMode('images');
     } else if (category === 'search' && setChatMode) {
-      // Keep chat mode — search handled by backend routing
+      // Остаёмся в режиме чата — поиск обрабатывается маршрутизацией на бэкенде
     }
   }, [dispatchResult]);
 
-  // Fill textarea when parent passes a prompt via "Use this prompt" button
+  // Заполняем textarea, когда родитель передаёт промт через кнопку "Использовать этот промт"
   const prevFillRef = useRef<string | undefined>();
   useEffect(() => {
     if (!fillPrompt || fillPrompt === prevFillRef.current) return;
     prevFillRef.current = fillPrompt;
     setValue(fillPrompt);
-    // Resize after state update
+    // Пересчитываем размер после обновления состояния
     requestAnimationFrame(() => {
       const ta = textareaRef.current;
       if (ta) {
@@ -611,7 +167,7 @@ export function InputBar({
       // Прикреплённая картинка → источник для image-to-video
       onSend(trimmed, attachedFile ?? undefined, videoOptions);
     } else if (chatMode === 'music') {
-      // Map to legacy signature: prompt=style desc, sunoTitle, sunoStyle, sunoInstrumental, lyrics
+      // Приводим к старой сигнатуре: prompt=описание стиля, sunoTitle, sunoStyle, sunoInstrumental, lyrics
       onSend(
         trimmed || musicOptions.style || musicOptions.title || 'создай трек',
         undefined, undefined,
@@ -653,8 +209,8 @@ export function InputBar({
         instrumental: musicOptions.instrumental,
       });
       setMusicOptions((prev) => ({ ...prev, lyrics }));
-    } catch {
-      // silent fail
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось сгенерировать текст песни', 'error');
     } finally {
       setGeneratingLyrics(false);
     }
@@ -666,7 +222,7 @@ export function InputBar({
   }
 
   const hasContent = value.trim() || attachedFile;
-  const toolbarCost = getCostDisplay(chatMode, videoOptions, userPlan, userImages, userMusic, userVideos, preferredModel, userProFreeRemaining);
+  const toolbarCost = getCostDisplay(chatMode, videoOptions, casperCosts, userPlan, userImages, userMusic, userVideos, preferredModel, userProFreeRemaining);
   const category = attachedFile ? getFileCategory(attachedFile) : null;
 
   const activePlaceholder = chatMode === 'images'
@@ -681,7 +237,7 @@ export function InputBar({
     <div className="flex-shrink-0 px-4 pt-2 pb-0 lg:pb-4">
       <div className="max-w-[720px] mx-auto">
 
-        {/* Sliding widgets */}
+        {/* Выезжающие виджеты */}
         <AnimatePresence>
           {chatMode === 'video' && (
             <VideoWidget
@@ -690,6 +246,7 @@ export function InputBar({
               onChange={setVideoOptions}
               userPlan={userPlan}
               userVideos={userVideos}
+              casperCosts={casperCosts}
             />
           )}
           {chatMode === 'music' && (
@@ -702,14 +259,15 @@ export function InputBar({
               topic={value.trim() || musicOptions.title || musicOptions.style}
               userPlan={userPlan}
               userMusic={userMusic}
+              casperCosts={casperCosts}
             />
           )}
           {chatMode === 'images' && (
-            <ImageWidget key="image-widget" userPlan={userPlan} userImages={userImages} />
+            <ImageWidget key="image-widget" userPlan={userPlan} userImages={userImages} casperCosts={casperCosts} />
           )}
         </AnimatePresence>
 
-        {/* Pro upgrade hint — search intent or document in std mode */}
+        {/* Подсказка перейти на Про — намерение поиска или документ в стандартном режиме */}
         <AnimatePresence>
           {chatMode === 'chat' && preferredModel !== 'deepseek' && setPreferredModel && (
             (dispatchResult?.category === 'search') ||
@@ -741,7 +299,7 @@ export function InputBar({
           )}
         </AnimatePresence>
 
-        {/* Attached file preview */}
+        {/* Превью прикреплённого файла */}
         {attachedFile && (
           <motion.div
             initial={{ opacity: 0, y: 4 }}
@@ -768,7 +326,7 @@ export function InputBar({
           </motion.div>
         )}
 
-        {/* Input container */}
+        {/* Контейнер поля ввода */}
         <div
           className={cn(
             'flex flex-col bg-[var(--bg-input)] border rounded-2xl px-4 pt-3.5 pb-2.5 transition-all',
@@ -801,10 +359,10 @@ export function InputBar({
             )}
           />
 
-          {/* Toolbar */}
+          {/* Тулбар */}
           <div className="flex items-center gap-1.5 mt-2">
 
-            {/* Attach — hidden in music mode */}
+            {/* Прикрепить — скрыто в режиме музыки */}
             {chatMode !== 'music' && (
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -817,7 +375,7 @@ export function InputBar({
               </button>
             )}
 
-            {/* Mode selector */}
+            {/* Селектор режима */}
             <CustomSelect<ChatMode>
               value={chatMode}
               onChange={(m) => { if (m === 'chat') setChatMode?.('chat'); else toggleMode(m); }}
@@ -829,7 +387,7 @@ export function InputBar({
               ]}
             />
 
-            {/* Model pill — chat mode only */}
+            {/* Пилюля модели — только в режиме чата */}
             {chatMode === 'chat' && setPreferredModel && (
               <ModelPill
                 preferredModel={preferredModel}
@@ -840,10 +398,10 @@ export function InputBar({
               />
             )}
 
-            {/* Push send to the right */}
+            {/* Прижимаем кнопку отправки вправо */}
             <div className="flex-1" />
 
-            {/* Cost + Send */}
+            {/* Стоимость + Отправка */}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {toolbarCost && <CostBadge cost={toolbarCost} size={13} />}
 
@@ -881,110 +439,6 @@ export function InputBar({
           GhostLine может ошибаться. Проверяйте важную информацию.
         </p>
       </div>
-    </div>
-  );
-}
-
-// ─── Model pill (chat mode) ────────────────────────────────────────────────────
-
-const MODEL_OPTIONS: { key: 'haiku' | 'deepseek'; label: string }[] = [
-  { key: 'haiku',    label: 'Стандарт' },
-  { key: 'deepseek', label: 'Про' },
-];
-
-function ModelPill({
-  preferredModel, setPreferredModel, userPlan, onUpgradeRequired, userProFreeRemaining,
-}: {
-  preferredModel?: 'haiku' | 'deepseek' | undefined;
-  setPreferredModel: (m: 'haiku' | 'deepseek' | undefined) => void;
-  userPlan?: string;
-  onUpgradeRequired?: () => void;
-  userProFreeRemaining?: number;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  // default to 'haiku' if undefined
-  const currentKey = preferredModel ?? 'haiku';
-  const current = MODEL_OPTIONS.find((o) => o.key === currentKey) ?? MODEL_OPTIONS[0];
-
-  function proLabel(): React.ReactNode {
-    if (!userPlan) return null; // still loading
-    if (userPlan === 'ULTRA') return <span className="text-[10px] opacity-50 ml-1">∞</span>;
-    if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
-      return (
-        <span className="text-[10px] ml-1" style={{ color: '#4ade80' }}>
-          {userProFreeRemaining} бесп.
-        </span>
-      );
-    }
-    if (userPlan === 'FREE') return null;
-    return (
-      <span className="flex items-center gap-0.5 text-[10px] ml-1" style={{ color: 'var(--accent)' }}>
-        1<CasperCoin size={10} />
-      </span>
-    );
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-[12px] transition-colors rounded-md px-1.5 py-0.5"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        {current.label}
-        <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-        </svg>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            className="absolute bottom-full mb-2 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl"
-            style={{ minWidth: '150px' }}
-          >
-            {MODEL_OPTIONS.map((opt) => {
-              const locked = opt.key === 'deepseek' && userPlan === 'FREE';
-              const isPro = opt.key === 'deepseek';
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => {
-                    if (locked) { onUpgradeRequired?.(); setOpen(false); return; }
-                    setPreferredModel(opt.key);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    'w-full text-left px-4 py-2.5 text-[12px] transition-colors flex items-center justify-between hover:bg-[var(--bg-void)]',
-                    currentKey === opt.key ? 'text-accent' : ''
-                  )}
-                  style={currentKey !== opt.key ? { color: 'var(--text-primary)' } : {}}
-                >
-                  <span>{opt.label}</span>
-                  {locked ? (
-                    <span className="text-[10px] text-[rgba(123,92,240,0.7)] ml-2">PRO</span>
-                  ) : isPro ? proLabel() : null}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

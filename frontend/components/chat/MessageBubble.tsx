@@ -14,7 +14,7 @@ interface MessageBubbleProps {
   onUsePrompt?: (prompt: string, messageMode?: string) => void;
 }
 
-// Extract the first code block from a message (used for "Use prompt" button)
+// Извлекает первый блок кода из сообщения (используется кнопкой "Использовать промт")
 function extractCodeBlock(content: string): string | null {
   const m = content.match(/```[^\n]*\n?([\s\S]+?)```/);
   const text = m?.[1]?.trim();
@@ -48,7 +48,7 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
       transition={{ duration: 0.25 }}
       className={`flex gap-3 py-3 group ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Ghost avatar */}
+      {/* Аватар призрака */}
       {!isUser && (
         <div className="flex-shrink-0 mt-0.5">
           <GhostIcon size={24} className="text-accent" />
@@ -57,9 +57,9 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
 
       <div className={`relative max-w-[85%] ${isUser ? 'order-first' : ''}`}>
         {isUser ? (
-          /* User bubble */
+          /* Пузырь пользователя */
           <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[18px_4px_18px_18px] px-4 py-3 text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-            {/* Image preview */}
+            {/* Превью изображения */}
             {message.mediaUrl && (
               <div className="mb-2 rounded-xl overflow-hidden max-w-[260px]">
                 <img
@@ -70,17 +70,17 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
                 />
               </div>
             )}
-            {/* File attachment chip (for non-image files) */}
+            {/* Чип прикреплённого файла (для файлов, не являющихся изображением) */}
             {!message.mediaUrl && message.fileName && (
               <FileChip name={message.fileName} />
             )}
-            {/* Text content */}
+            {/* Текстовое содержимое */}
             {message.content && message.content !== `[Файл: ${message.fileName}]` && (
               <span>{message.content}</span>
             )}
           </div>
         ) : (
-          /* Ghost response */
+          /* Ответ призрака */
           <div className="flex-1">
             {message.mediaUrl ? (
               <MediaContent
@@ -97,7 +97,7 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
               </div>
             )}
 
-            {/* Actions */}
+            {/* Действия */}
             <div className="mt-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={handleCopy}
@@ -155,13 +155,13 @@ function FileChip({ name }: { name: string }) {
 
 async function downloadFile(url: string, ext = 'mp4') {
   const fname = `ghostline-${Date.now()}.${ext}`;
-  // isMobile: touch device (iOS/Android) — use Web Share API there only
+  // isMobile: сенсорное устройство (iOS/Android) — Web Share API используем только там
   const isMobile = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
   try {
     const res = await fetch(url, { mode: 'cors' });
     const blob = await res.blob();
 
-    // Web Share API with files — mobile only (avoids desktop "Share" dialog)
+    // Web Share API с файлами — только мобильные (избегаем десктопного диалога "Поделиться")
     if (isMobile && typeof navigator !== 'undefined' && 'canShare' in navigator) {
       const file = new File([blob], fname, { type: blob.type || `video/${ext}` });
       if ((navigator as any).canShare({ files: [file] })) {
@@ -169,13 +169,13 @@ async function downloadFile(url: string, ext = 'mp4') {
           await (navigator as any).share({ files: [file], title: 'GhostLine' });
           return;
         } catch (shareErr: any) {
-          if (shareErr?.name === 'AbortError') return; // user cancelled
-          // fall through to blob download
+          if (shareErr?.name === 'AbortError') return; // пользователь отменил
+          // проваливаемся дальше к скачиванию через blob
         }
       }
     }
 
-    // Blob URL download — reliable on desktop and Android Chrome
+    // Скачивание через Blob URL — надёжно работает на десктопе и в Android Chrome
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -192,7 +192,7 @@ async function downloadFile(url: string, ext = 'mp4') {
   }
 }
 
-// ─── AI Disclaimer ───────────────────────────────────────────────────────────
+// ─── Дисклеймер про AI ───────────────────────────────────────────────────────
 
 function AiDisclaimer() {
   return (
@@ -202,7 +202,7 @@ function AiDisclaimer() {
   );
 }
 
-// ─── Generating placeholder ───────────────────────────────────────────────────
+// ─── Плейсхолдер генерации ───────────────────────────────────────────────────
 
 function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
@@ -213,7 +213,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
         isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : isMusic ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
       }`}
     >
-      {/* Shimmer overlay */}
+      {/* Оверлей мерцания */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
         <div
           className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite]"
@@ -222,7 +222,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
           }}
         />
       </div>
-      {/* Icon */}
+      {/* Иконка */}
       {isVideo ? (
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
@@ -241,7 +241,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
           <path d="M3 22l7-7 6 6 4-4 9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       )}
-      {/* Dots loader */}
+      {/* Индикатор точками */}
       <div className="flex gap-2">
         {[0, 1, 2].map((i) => (
           <div
@@ -396,7 +396,7 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
   );
 }
 
-// ─── Audio Card ───────────────────────────────────────────────────────────────
+// ─── Карточка аудио ─────────────────────────────────────────────────────────────
 
 function AudioCard({ mediaUrl }: { mediaUrl: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -450,7 +450,7 @@ function AudioCard({ mediaUrl }: { mediaUrl: string }) {
       />
 
       <div className="flex items-center gap-3">
-        {/* Play/Pause button */}
+        {/* Кнопка Play/Pause */}
         <button
           onClick={togglePlay}
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-accent text-white hover:opacity-90 transition-opacity"
@@ -468,7 +468,7 @@ function AudioCard({ mediaUrl }: { mediaUrl: string }) {
           )}
         </button>
 
-        {/* Progress + time */}
+        {/* Прогресс + время */}
         <div className="flex-1 min-w-0">
           <input
             type="range"
@@ -488,12 +488,12 @@ function AudioCard({ mediaUrl }: { mediaUrl: string }) {
           </div>
         </div>
 
-        {/* Download */}
+        {/* Скачать */}
         <a
           href={mediaUrl}
           download={filename}
           onClick={(e) => {
-            // Use fetch+blob for cross-origin URLs to force download
+            // Для кросс-доменных URL используем fetch+blob, чтобы принудительно скачать
             if (!mediaUrl.startsWith(window.location.origin)) {
               e.preventDefault();
               fetch(mediaUrl)
@@ -520,7 +520,7 @@ function AudioCard({ mediaUrl }: { mediaUrl: string }) {
   );
 }
 
-// ─── Video Viewer modal ───────────────────────────────────────────────────────
+// ─── Модалка просмотра видео ────────────────────────────────────────────────────
 
 function VideoViewer({ url, onClose }: { url: string; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -579,7 +579,7 @@ function VideoViewer({ url, onClose }: { url: string; onClose: () => void }) {
           <button
             onClick={() => downloadFile(url, 'mp4')}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
-            style={{ background: '#7B5CF0', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'white' }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

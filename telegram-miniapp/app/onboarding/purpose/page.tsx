@@ -38,7 +38,7 @@ function PurposeForm() {
     <div className="flex flex-col min-h-screen px-5 pt-10" style={{ background: 'var(--bg-primary)' }}>
       <div className="flex gap-2 mb-8">
         {[0,1,2].map((i) => (
-          <div key={i} className="h-1.5 rounded-full" style={{ width: 24, background: i === 1 ? '#7B5CF0' : i < 1 ? 'rgba(123,92,240,0.4)' : 'rgba(255,255,255,0.1)' }} />
+          <div key={i} className="h-1.5 rounded-full" style={{ width: 24, background: i === 1 ? 'var(--accent)' : i < 1 ? 'rgba(123,92,240,0.4)' : 'rgba(255,255,255,0.1)' }} />
         ))}
       </div>
 
@@ -54,9 +54,9 @@ function PurposeForm() {
               onClick={() => toggle(p)}
               className="px-4 py-2 rounded-2xl text-sm border transition-all"
               style={{
-                borderColor: active ? '#7B5CF0' : 'rgba(255,255,255,0.1)',
+                borderColor: active ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
                 background: active ? 'rgba(123,92,240,0.12)' : 'transparent',
-                color: active ? '#7B5CF0' : 'rgba(255,255,255,0.5)',
+                color: active ? 'var(--accent)' : 'rgba(255,255,255,0.5)',
               }}
             >
               {p}

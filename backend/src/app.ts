@@ -31,7 +31,7 @@ import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 
-// ─── Build app ────────────────────────────────────────────────────────────────
+// ─── Сборка приложения ──────────────────────────────────────────────────────
 
 export async function buildApp() {
   const fastify = Fastify({
@@ -44,23 +44,23 @@ export async function buildApp() {
     },
   });
 
-  // ── Plugins ───────────────────────────────────────────────────────────────
+  // ── Плагины ───────────────────────────────────────────────────────────────
   await fastify.register(helmet, { global: true });
 
-  // Support comma-separated CORS_ORIGINS env var, e.g.:
+  // Поддержка CORS_ORIGINS через запятую, например:
   // "https://ghostlineai.ru,https://www.ghostlineai.ru,https://t.me"
   const corsOrigins: Set<string> = new Set([
     ...(process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     process.env.FRONTEND_URL ?? 'http://localhost:3000',
     process.env.MINIAPP_URL ?? 'http://localhost:3001',
-    // Production domains — always allowed regardless of env vars
+    // Продовые домены — разрешены всегда, независимо от env-переменных
     'https://ghostlineai.ru',
     'https://www.ghostlineai.ru',
     'https://miniapp.ghostlineai.ru',
   ].filter(Boolean));
 
-  // Auto-add www. variants so both ghostlineai.ru and www.ghostlineai.ru are always accepted.
-  // Skip localhost / 127.0.0.1 — www.localhost is not a valid origin.
+  // Автоматически добавляем www.-варианты, чтобы принимались и ghostlineai.ru, и www.ghostlineai.ru.
+  // localhost / 127.0.0.1 пропускаем — www.localhost не валидный origin.
   const extraOrigins: string[] = [];
   for (const o of corsOrigins) {
     const isLocal = o.includes('localhost') || o.includes('127.0.0.1');
@@ -72,7 +72,7 @@ export async function buildApp() {
 
   await fastify.register(cors, {
     origin: (origin, cb) => {
-      // Allow requests with no origin (mobile apps, bot callbacks)
+      // Разрешаем запросы без origin (мобильные приложения, коллбэки бота)
       if (!origin) { cb(null, true); return; }
       if (corsOrigins.has(origin)) { cb(null, true); return; }
       cb(new Error(`CORS: origin ${origin} not allowed`), false);
@@ -92,9 +92,9 @@ export async function buildApp() {
     max: 200,
     timeWindow: '1 minute',
     skipOnError: true,
-    // Use real client IP from nginx X-Real-IP header.
-    // Without this, all users appear as the Docker bridge IP (172.18.0.x)
-    // and share one rate-limit bucket, causing innocent users to get 429.
+    // Берём реальный IP клиента из заголовка nginx X-Real-IP.
+    // Без этого все пользователи выглядят как IP моста Docker (172.18.0.x)
+    // и делят один rate-limit-бакет — из-за чего невиновным пользователям прилетает 429.
     keyGenerator: (req) =>
       (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
     errorResponseBuilder: (_req, context) => ({
@@ -104,18 +104,18 @@ export async function buildApp() {
   });
 
   await fastify.register(websocket, {
-    options: { maxPayload: 4194304 }, // 4MB — allows images as base64
+    options: { maxPayload: 4194304 }, // 4MB — достаточно для изображений в base64
   });
 
-  // Multipart (file upload for document extraction)
+  // Multipart (загрузка файлов для извлечения текста из документов)
   await fastify.register(multipart, {
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB max file
+    limits: { fileSize: 20 * 1024 * 1024 }, // максимум 20 МБ на файл
   });
 
-  // ── Decorators ────────────────────────────────────────────────────────────
+  // ── Декораторы ────────────────────────────────────────────────────────────
   fastify.decorate('authenticate', authenticate);
 
-  // ── Stricter rate limit for auth endpoints (20 req/min per IP) ───────────
+  // ── Более строгий rate limit для auth-эндпоинтов (20 запросов/мин на IP) ──
   await fastify.register(async (authScope) => {
     await authScope.register(rateLimit, {
       max: 20,
@@ -131,7 +131,7 @@ export async function buildApp() {
     await authScope.register(authRoutes, { prefix: '/api' });
   });
 
-  // ── Routes ────────────────────────────────────────────────────────────────
+  // ── Роуты ─────────────────────────────────────────────────────────────────
   await fastify.register(chatRoutes, { prefix: '/api' });
   await fastify.register(uploadRoutes, { prefix: '/api' });
   await fastify.register(paymentRoutes, { prefix: '/api' });
@@ -142,10 +142,10 @@ export async function buildApp() {
   await fastify.register(plansRoutes,    { prefix: '/api' });
   await fastify.register(dispatchRoutes, { prefix: '/api' });
 
-  // ── Static image serving (generated images saved to disk) ────────────────
+  // ── Раздача изображений (сгенерированные картинки, сохранённые на диск) ──
   fastify.get('/images/:filename', async (request, reply) => {
     const { filename } = request.params as { filename: string };
-    // Prevent path traversal
+    // Защита от path traversal
     if (filename.includes('/') || filename.includes('..')) {
       return reply.code(400).send({ error: 'Invalid filename' });
     }
@@ -155,13 +155,13 @@ export async function buildApp() {
     const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
     reply.header('Content-Type', mime);
     reply.header('Cache-Control', 'public, max-age=31536000');
-    // Allow cross-origin embedding (Helmet defaults to same-origin which blocks <img> from frontend domain)
+    // Разрешаем кросс-доменную вставку (Helmet по умолчанию ставит same-origin, что блокирует <img> с домена фронтенда)
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
     return reply.send(fs.createReadStream(filepath));
   });
 
-  // ── Static video serving (generated videos saved to disk) ─────────────────
-  // Supports HTTP Range requests so <video> seeking works on mobile/Telegram.
+  // ── Раздача видео (сгенерированные ролики, сохранённые на диск) ──────────
+  // Поддерживает HTTP Range-запросы, чтобы перемотка <video> работала на мобильных и в Telegram.
   fastify.get('/videos/:filename', async (request, reply) => {
     const { filename } = request.params as { filename: string };
     if (filename.includes('/') || filename.includes('..')) {
@@ -194,7 +194,7 @@ export async function buildApp() {
     return reply.send(fs.createReadStream(filepath));
   });
 
-  // ── Static audio serving (generated tracks saved to disk) ────────────────
+  // ── Раздача аудио (сгенерированные треки, сохранённые на диск) ───────────
   fastify.get('/audio/:filename', async (request, reply) => {
     const { filename } = request.params as { filename: string };
     if (filename.includes('/') || filename.includes('..')) {
@@ -225,7 +225,7 @@ export async function buildApp() {
     uptime: process.uptime(),
   }));
 
-  // ── Global error handler ──────────────────────────────────────────────────
+  // ── Глобальный обработчик ошибок ──────────────────────────────────────────
   fastify.setErrorHandler((error, _request, reply) => {
     fastify.log.error(error);
 
@@ -240,7 +240,7 @@ export async function buildApp() {
       return reply.code(error.statusCode).send({ error: error.message });
     }
 
-    // Custom application error codes (thrown without statusCode)
+    // Собственные коды ошибок приложения (выбрасываются без statusCode)
     const codeToStatus: Record<string, number> = {
       LIMIT_MESSAGES: 402,
       LIMIT_IMAGES: 402,
@@ -257,32 +257,32 @@ export async function buildApp() {
   return fastify;
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+// ─── Запуск ───────────────────────────────────────────────────────────────────
 
 async function start() {
-  // Set up outbound proxy FIRST — before any HTTP calls to AI APIs
+  // Настраиваем исходящий прокси ПЕРВЫМ — до любых HTTP-вызовов к AI API
   setupProxy();
 
   const fastify = await buildApp();
 
-  // Connect to DB and Redis
+  // Подключаемся к БД и Redis
   await prisma.$connect();
   await redis.connect();
 
-  // No legacy backfill needed — Caspers system migration handled via SQL migration file
+  // Обратный бэкфилл не нужен — миграция на систему Caspers сделана SQL-миграцией
 
-  // Initialize optional vector cache (requires pgvector + EMBEDDING_API_KEY)
+  // Инициализируем опциональный векторный кэш (нужны pgvector + EMBEDDING_API_KEY)
   await initVectorCache();
 
-  // Start BullMQ workers
+  // Запускаем воркеры BullMQ
   startVisionWorker();
   startSoundWorker();
   startReelWorker();
 
-  // Start TTL auto-cleanup (runs daily)
+  // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();
 
-  // Listen
+  // Слушаем порт
   const port = parseInt(process.env.PORT ?? '4000');
   const host = process.env.HOST ?? '0.0.0.0';
 
@@ -290,7 +290,7 @@ async function start() {
   fastify.log.info(`GhostLine backend running on http://${host}:${port}`);
 }
 
-// Graceful shutdown
+// Плавное завершение работы
 process.on('SIGINT', async () => {
   await prisma.$disconnect();
   await redis.disconnect();

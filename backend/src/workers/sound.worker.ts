@@ -109,9 +109,9 @@ export function startSoundWorker() {
             model: 'V5_5',
           });
         } catch (sunoErr: any) {
-          // Fallback to DiffRhythm only if Suno fails and there are no lyrics
-          // (DiffRhythm can't follow style but works for simple background music)
-          if (lyrics?.trim()) throw sunoErr; // lyrics require Suno — propagate error
+          // Резерв на DiffRhythm только если Suno упал и текста песни нет
+          // (DiffRhythm не умеет следовать стилю, но подходит для простой фоновой музыки)
+          if (lyrics?.trim()) throw sunoErr; // текст песни требует Suno — пробрасываем ошибку
           console.warn(`[SoundWorker] Suno failed, falling back to DiffRhythm: ${sunoErr.message}`);
           externalUrl = await generateMusicDiffRhythm(prompt, diffMode);
         }

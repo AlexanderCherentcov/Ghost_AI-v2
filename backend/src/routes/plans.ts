@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { PLANS, FREE_LIMITS, CASPER_COSTS, CASPER_PRICE_TIERS } from '../config/plans.js';
+import { PLANS, FREE_LIMITS, FREE_WELCOME_CASPERS, CASPER_COSTS, CASPER_PRICE_TIERS } from '../config/plans.js';
 
 /**
- * Public endpoint — no auth required.
- * Returns all plan data so frontend and miniapp stay in sync with backend.
+ * Публичный эндпоинт — авторизация не требуется.
+ * Отдаёт все данные о тарифах, чтобы frontend и miniapp оставались синхронизированы с бэкендом.
  */
 export default async function plansRoutes(fastify: FastifyInstance) {
   fastify.get('/plans', async (_request, reply) => {
@@ -27,6 +27,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
       free: {
         ...PLANS.FREE,
         limits: FREE_LIMITS,
+        welcome_caspers: FREE_WELCOME_CASPERS,
       },
       casper_costs: CASPER_COSTS,
       casper_price_tiers: CASPER_PRICE_TIERS,

@@ -1,117 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/components/ui/Toast';
-import { api } from '@/lib/api';
+import { api, type PlansResponse } from '@/lib/api';
+import { calculateCasperPrice, pricePerCasper, fakeCyclePrice, freeTierTagline } from '@/lib/pricing';
 import { CheckIcon } from '@/components/icons';
-import { cn } from '@/lib/utils';
-
-// Plans with fake discount display:
-// - Monthly: shown crossed-out = actual × 2 (fake 50% off)
-// - Yearly: actual = price × 12 × 0.8, crossed-out = fake_monthly × 12
-const PLANS = [
-  {
-    key: 'BASIC',
-    name: 'Базовый',
-    price: 790,         // real monthly
-    price_yearly: 7584, // real yearly (790 * 12 * 0.8)
-    caspers: 300,
-    proFreeDaily: 0,
-    badge: undefined as string | undefined,
-    features: [
-      'Стандартный чат: безлимит',
-      '300 Caspers в месяц',
-      'Про чат: за Caspers (1/сообщ.)',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
-      'Музыка — 5 Caspers/трек',
-    ],
-  },
-  {
-    key: 'PRO',
-    name: 'Про',
-    price: 1690,
-    price_yearly: 16224, // 1690 * 12 * 0.8
-    caspers: 700,
-    proFreeDaily: 20,
-    badge: 'Популярный',
-    features: [
-      'Стандартный чат: безлимит',
-      '700 Caspers в месяц',
-      'Про чат: 20 запросов/день бесплатно',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
-      'Музыка — 5 Caspers/трек',
-    ],
-  },
-  {
-    key: 'VIP',
-    name: 'VIP',
-    price: 3990,
-    price_yearly: 38304, // 3990 * 12 * 0.8
-    caspers: 1800,
-    proFreeDaily: 50,
-    badge: undefined,
-    features: [
-      'Стандартный чат: безлимит',
-      '1 800 Caspers в месяц',
-      'Про чат: 50 запросов/день бесплатно',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
-      'Музыка — 5 Caspers/трек',
-    ],
-  },
-  {
-    key: 'ULTRA',
-    name: 'Ультра',
-    price: 5990,
-    price_yearly: 57504, // 5990 * 12 * 0.8
-    caspers: 2800,
-    proFreeDaily: -1,
-    badge: 'Максимум',
-    features: [
-      'Стандартный чат: безлимит',
-      '2 800 Caspers в месяц',
-      'Про чат: безлимит',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
-      'Музыка — 5 Caspers/трек',
-    ],
-  },
-];
-
-function calculateCasperPrice(amount: number): number {
-  if (amount <= 0) return 0;
-  const tiers = [
-    { max: 100, price: 3.0 },
-    { max: 100, price: 2.9 },
-    { max: 100, price: 2.8 },
-    { max: 100, price: 2.7 },
-    { max: 100, price: 2.6 },
-    { max: 100, price: 2.5 },
-    { max: 100, price: 2.4 },
-    { max: 100, price: 2.3 },
-    { max: 100, price: 2.2 },
-    { max: 100, price: 2.1 },
-  ];
-  let total = 0;
-  let remaining = amount;
-  for (const tier of tiers) {
-    if (remaining <= 0) break;
-    const inTier = Math.min(remaining, tier.max);
-    total += inTier * tier.price;
-    remaining -= inTier;
-  }
-  return Math.round(total);
-}
-
-function pricePerCasper(amount: number): number {
-  if (amount <= 0) return 3.0;
-  const total = calculateCasperPrice(amount);
-  return Math.round((total / amount) * 10) / 10;
-}
+import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
+import { cn, formatNumber } from '@/lib/utils';
 
 export default function BillingPage() {
   const { user, setUser } = useAuthStore();
@@ -120,13 +17,22 @@ export default function BillingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [casperSlider, setCasperSlider] = useState(100);
 
-  // ── Discount promo (applies at plan checkout) ─────────────────────────────
+  // Тарифы и тиры цен на Caspers — только с бэкенда (GET /plans), без локальных копий цифр
+  const [plansData, setPlansData] = useState<PlansResponse | null>(null);
+  useEffect(() => {
+    api.payments.plans().then(setPlansData).catch(() => show('Не удалось загрузить тарифы', 'error'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const plans = plansData?.plans ?? [];
+  const casperTiers = plansData?.casper_price_tiers ?? [];
+
+  // ── Промокод на скидку (применяется при оплате тарифа) ────────────────────
   const [promoCode, setPromoCode] = useState('');
   const [promoApplying, setPromoApplying] = useState(false);
   const [promoDiscounts, setPromoDiscounts] = useState<Record<string, number>>({});
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
 
-  // ── Caspers-grant promo (redeemed immediately) ────────────────────────────
+  // ── Промокод на Caspers (активируется сразу) ───────────────────────────────
   const [casperPromoCode, setCasperPromoCode] = useState('');
   const [casperPromoLoading, setCasperPromoLoading] = useState(false);
 
@@ -140,7 +46,7 @@ export default function BillingPage() {
     setPromoDiscounts({});
     try {
       const results = await Promise.allSettled(
-        PLANS.map((p) => api.promo.preview(code, p.key).then((r) => [p.key, r.discountPercent] as const))
+        plans.map((p) => api.promo.preview(code, p.key).then((r) => [p.key, r.discountPercent] as const))
       );
       const discounts: Record<string, number> = {};
       let firstError: string | null = null;
@@ -208,8 +114,8 @@ export default function BillingPage() {
     }
   }
 
-  const casperTotal = calculateCasperPrice(casperSlider);
-  const casperPPU = pricePerCasper(casperSlider);
+  const casperTotal = calculateCasperPrice(casperSlider, casperTiers);
+  const casperPPU = pricePerCasper(casperSlider, casperTiers);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
@@ -222,7 +128,7 @@ export default function BillingPage() {
 
       <div className="flex-1 max-w-5xl mx-auto w-full px-6 py-6 space-y-8">
 
-        {/* Casper balance display */}
+        {/* Отображение баланса Caspers */}
         {user && (
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5">
             <div className="flex items-center justify-between">
@@ -232,7 +138,7 @@ export default function BillingPage() {
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl font-medium text-white">
-                    {user.caspers_balance.toLocaleString('ru-RU')}
+                    {formatNumber(user.caspers_balance)}
                   </span>
                   <span className="text-[rgba(255,255,255,0.5)] text-sm">Caspers</span>
                 </div>
@@ -242,16 +148,20 @@ export default function BillingPage() {
                   </p>
                 )}
               </div>
-              {plan === 'FREE' && (
+              {plan === 'FREE' && plansData && (
                 <div className="text-right">
-                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">🎁 100 Caspers при регистрации</p>
-                  <p className="text-xs text-[rgba(255,255,255,0.4)]">5 сообщений/день</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">
+                    🎁 {plansData.free.welcome_caspers} Caspers при регистрации
+                  </p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">
+                    {plansData.free.limits.std_messages_daily} сообщений/день
+                  </p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">Остальное — за Caspers</p>
                 </div>
               )}
             </div>
 
-            {/* Casper-grant promo code — redeems immediately */}
+            {/* Промокод на Caspers — активируется сразу */}
             <div className="mt-4 pt-4 border-t border-[var(--border)] flex items-center gap-2">
               <input
                 type="text"
@@ -273,7 +183,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Monthly/Yearly toggle */}
+        {/* Переключатель Месяц/Год */}
         <div className="flex items-center gap-3">
           <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>
             Месяц
@@ -300,7 +210,7 @@ export default function BillingPage() {
           )}
         </div>
 
-        {/* Plan cards — 4 columns */}
+        {/* Карточки тарифов — 4 колонки */}
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Подписки</h2>
@@ -324,16 +234,18 @@ export default function BillingPage() {
             </div>
           </div>
 
+          {!plansData && (
+            <p className="text-sm text-[rgba(255,255,255,0.4)]">Загрузка тарифов...</p>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map(({ key, name, price, price_yearly, caspers, badge, features }) => {
+            {plans.map(({ key, label: name, price, price_yearly, caspers_monthly: caspers, badge, features }) => {
               const basePrice = billingCycle === 'yearly' ? price_yearly : price;
               const discountPercent = promoDiscounts[key];
               const realPrice = discountPercent
                 ? Math.round(basePrice * (1 - discountPercent / 100))
                 : basePrice;
-              // Fake crossed-out: actual × 2 (monthly), or fake_monthly × 12 (yearly)
-              const fakeMonthly = price * 2;
-              const fakePrice = billingCycle === 'yearly' ? fakeMonthly * 12 : fakeMonthly;
+              const fakePrice = fakeCyclePrice(price, billingCycle);
 
               return (
                 <motion.div
@@ -365,17 +277,17 @@ export default function BillingPage() {
                     )}
                   </div>
 
-                  {/* Price with fake discount */}
+                  {/* Цена с фейковой скидкой */}
                   <div className="mb-1">
                     <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
-                      {fakePrice.toLocaleString('ru-RU')} ₽
+                      {formatNumber(fakePrice)} ₽
                     </span>
                     <span className="text-xs font-medium bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
                       {billingCycle === 'yearly' ? 'Скидка 70%' : 'Скидка 50%'}
                     </span>
                   </div>
                   <div className="text-2xl font-medium mb-1">
-                    {realPrice.toLocaleString('ru-RU')} ₽
+                    {formatNumber(realPrice)} ₽
                     <span className="text-sm text-[rgba(255,255,255,0.3)]">
                       {billingCycle === 'yearly' ? '/год' : '/мес'}
                     </span>
@@ -387,17 +299,15 @@ export default function BillingPage() {
                   )}
 
                   <p className="text-[11px] text-accent mb-3">
-                    {caspers.toLocaleString('ru-RU')} Caspers/мес
+                    {formatNumber(caspers)} Caspers/мес
                   </p>
 
-                  <ul className="space-y-1.5 mb-5 flex-1 mt-2">
-                    {features.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-xs text-[rgba(255,255,255,0.4)]">
-                        <CheckIcon size={12} className="text-accent flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
+                  <PlanFeatureList
+                    features={features}
+                    checkIcon={<CheckIcon size={12} className="text-accent flex-shrink-0" />}
+                    textClassName="text-xs"
+                    className="space-y-1.5 mb-5 flex-1 mt-2"
+                  />
 
                   <button
                     onClick={() => handleBuy(key)}
@@ -418,13 +328,15 @@ export default function BillingPage() {
             })}
           </div>
 
-          {/* FREE plan strip */}
+          {/* Плашка бесплатного плана */}
           <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-5 py-3 mt-2">
             <div>
               <span className="font-medium text-white text-sm">Бесплатный план</span>
-              <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
-                🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
-              </span>
+              {plansData && (
+                <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
+                  {freeTierTagline(plansData.free.welcome_caspers, plansData.free.limits.std_messages_daily)}
+                </span>
+              )}
             </div>
             {plan === 'FREE' && (
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-accent/40 text-accent bg-accent/10 whitespace-nowrap ml-3">
@@ -434,7 +346,7 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Casper top-up section */}
+        {/* Секция докупки Caspers */}
         <div className={cn(
           'bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 space-y-4',
           !isPaid && 'opacity-60'
@@ -451,7 +363,7 @@ export default function BillingPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-[rgba(255,255,255,0.6)]">Количество:</span>
-              <span className="font-medium text-white">{casperSlider.toLocaleString('ru-RU')} Caspers</span>
+              <span className="font-medium text-white">{formatNumber(casperSlider)} Caspers</span>
             </div>
             <input
               type="range"
@@ -476,7 +388,7 @@ export default function BillingPage() {
             </div>
             <div className="flex justify-between font-medium">
               <span className="text-[rgba(255,255,255,0.7)]">Итого:</span>
-              <span className="text-accent">{casperTotal.toLocaleString('ru-RU')} ₽</span>
+              <span className="text-accent">{formatNumber(casperTotal)} ₽</span>
             </div>
           </div>
 
@@ -487,7 +399,7 @@ export default function BillingPage() {
           >
             {loading === 'caspers'
               ? 'Загрузка...'
-              : `Купить ${casperSlider.toLocaleString('ru-RU')} Caspers за ${casperTotal.toLocaleString('ru-RU')} ₽`}
+              : `Купить ${formatNumber(casperSlider)} Caspers за ${formatNumber(casperTotal)} ₽`}
           </button>
         </div>
 

@@ -7,6 +7,7 @@ import { GhostIcon } from '@/components/icons/GhostIcon';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { freeTierTagline } from '@/lib/pricing';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -46,6 +47,14 @@ export default function RegisterPage() {
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState(false);
   const [consented, setConsented] = useState(false);
+  // Бонус/лимит FREE-тарифа — с бэкенда, не захардкожены
+  const [tagline, setTagline] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.payments.plans()
+      .then((data) => setTagline(freeTierTagline(data.free.welcome_caspers, data.free.limits.std_messages_daily)))
+      .catch(() => {});
+  }, []);
 
   // ── Telegram Mini App: auto-authenticate with initData ────────────────────
   useEffect(() => {
@@ -113,7 +122,7 @@ export default function RegisterPage() {
             </p>
           </div>
 
-          {/* Consent checkbox — must be checked before OAuth buttons become active */}
+          {/* Чекбокс согласия — должен быть отмечен, прежде чем кнопки OAuth станут активны */}
           <label className="flex items-start gap-3 cursor-pointer group mb-1">
             <div className="mt-0.5 flex-shrink-0">
               <input
@@ -216,9 +225,9 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">
-          🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
-        </p>
+        {tagline && (
+          <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">{tagline}</p>
+        )}
       </motion.div>
     </div>
   );

@@ -14,7 +14,7 @@ export async function* streamGemini(
 ): AsyncGenerator<StreamChunk> {
   const geminiModel = genAI.getGenerativeModel({ model });
 
-  // Convert messages to Gemini format
+  // Преобразуем сообщения в формат Gemini
   const history = messages.slice(0, -1).map((m) => ({
     role: m.role === 'user' ? 'user' : 'model',
     parts: [{ text: m.content }],

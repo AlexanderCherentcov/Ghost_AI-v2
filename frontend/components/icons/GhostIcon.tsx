@@ -29,7 +29,7 @@ export function GhostIcon({ size = 24, className = '', animated = false }: Ghost
       {/* Eyes */}
       <circle cx="14" cy="20" r="3" fill="currentColor" />
       <circle cx="26" cy="20" r="3" fill="currentColor" />
-      {/* Eye glow */}
+      {/* Свечение глаз */}
       <circle cx="14" cy="20" r="1.5" fill="white" fillOpacity="0.6" />
       <circle cx="26" cy="20" r="1.5" fill="white" fillOpacity="0.6" />
     </svg>

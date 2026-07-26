@@ -25,7 +25,7 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  // [H-16] Abort fetch after 30 seconds to avoid hanging requests
+  // [H-16] Прерываем запрос через 30 секунд, чтобы не зависал
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
@@ -41,7 +41,7 @@ async function request<T>(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') throw new Error('Запрос превысил время ожидания');
-    // [M-23] Retry once on network error for GET requests
+    // [M-23] Один повтор при сетевой ошибке для GET-запросов
     const isGet = !options.method || options.method === 'GET';
     if (isGet && !_isRetry) {
       await new Promise(r => setTimeout(r, 1000));
@@ -62,7 +62,7 @@ async function request<T>(
   return res.json();
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Авторизация ────────────────────────────────────────────────────────────
 export const api = {
   auth: {
     me: () => request<User>('/me'),
@@ -119,13 +119,13 @@ export const api = {
   },
 
   promo: {
-    /** Redeem a CASPERS-type promo code — grants Caspers immediately. */
+    /** Активировать промокод типа CASPERS — начисляет Caspers сразу. */
     redeem: (code: string) =>
       request<{ ok: true; casperAmount: number }>('/promo/redeem', {
         method: 'POST',
         body: JSON.stringify({ code }),
       }),
-    /** Preview a DISCOUNT_PERCENT promo for a plan before checkout — no side effects. */
+    /** Предпросмотр промокода типа DISCOUNT_PERCENT для тарифа перед оплатой — без побочных эффектов. */
     preview: (code: string, plan: string) =>
       request<{ ok: true; discountPercent: number; code: string }>('/promo/preview', {
         method: 'POST',
@@ -134,7 +134,7 @@ export const api = {
   },
 
   upload: {
-    /** Upload an image file. Returns a public URL for use in image-to-video. */
+    /** Загрузить изображение. Возвращает публичный URL для использования в image-to-video. */
     image: async (file: File): Promise<{ url: string; fileName: string }> => {
       const form = new FormData();
       form.append('file', file);
@@ -152,7 +152,7 @@ export const api = {
       }
       return res.json();
     },
-    /** Upload a file for text extraction. Returns extracted text + metadata. */
+    /** Загрузить файл для извлечения текста. Возвращает текст и метаданные. */
     extract: async (file: File): Promise<{ text: string; fileName: string; lang: string; truncated: boolean }> => {
       const form = new FormData();
       form.append('file', file);
@@ -213,7 +213,7 @@ export const api = {
   },
 };
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Типы ─────────────────────────────────────────────────────────────────────
 export interface User {
   id: string;
   name: string | null;
@@ -226,18 +226,18 @@ export interface User {
   // Caspers
   caspers_balance:    number;
   caspers_monthly:    number;
-  // Daily counters
+  // Дневные счётчики
   std_messages_today: number;
   pro_messages_today: number;
-  // FREE tier weekly counters
+  // Недельные/месячные счётчики FREE-тарифа
   images_this_week:   number;
   music_this_week:    number;
   videos_this_month:  number;
-  // Period timestamps
+  // Метки начала периодов
   day_start:    string;
   week_start:   string;
   period_start: string;
-  // Profile
+  // Профиль
   purposes: string[];
   responseStyle: string;
   onboardingDone: boolean;
@@ -260,7 +260,7 @@ export interface Message {
   tokensCost: number;
   cacheHit: boolean;
   mediaUrl: string | null;
-  fileName?: string | null; // for optimistic display of attached file name
+  fileName?: string | null; // для оптимистичного отображения имени прикреплённого файла
   createdAt: string;
 }
 
@@ -292,12 +292,29 @@ export interface PaymentsResponse {
 }
 
 export interface PlanInfo {
+  key: string;
+  label: string;
   price: number;
   price_yearly: number;
-  label: string;
   caspers_monthly: number;
   pro_free_daily: number;
+  badge: string | null;
+  popular: boolean;
+  features: string[];
+}
+export interface FreeLimits {
+  std_messages_daily: number;
+  images_weekly: number;
+  music_weekly: number;
+  videos_monthly: number;
+}
+export interface CasperPriceTier {
+  max: number;
+  price: number;
 }
 export interface PlansResponse {
-  plans: Record<string, PlanInfo>;
+  plans: PlanInfo[];
+  free: PlanInfo & { limits: FreeLimits; welcome_caspers: number };
+  casper_costs: Record<string, number>;
+  casper_price_tiers: CasperPriceTier[];
 }

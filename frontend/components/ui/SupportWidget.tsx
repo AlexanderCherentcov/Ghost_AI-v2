@@ -42,7 +42,7 @@ export function SupportWidget() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Плавающая кнопка */}
       <button
         onClick={() => setOpen(true)}
         className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-accent shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 transition-transform"

@@ -8,7 +8,7 @@ export interface RouterResult {
   provider: Provider;
   complexity: Complexity;
   model: string;
-  /** Fallback chain — tried in order if primary model fails */
+  /** Цепочка резервных моделей — пробуются по очереди, если основная не сработала */
   fallbackModels?: string[];
   maxTokens?: number;
 }
@@ -33,9 +33,9 @@ const COMPLEX_KEYWORDS = [
   'explain in detail','help me understand',
 ];
 
-// Keywords that signal the user wants fresh info from the web
+// Ключевые слова, сигнализирующие, что пользователю нужна свежая информация из интернета
 const SEARCH_KEYWORDS = [
-  // Russian
+  // Русский
   'найди','найти','поищи','поиск','погугли','загугли',
   'что сейчас','что сегодня','последние новости','свежие новости',
   'актуально','актуальная','актуальный','актуальные',
@@ -45,7 +45,7 @@ const SEARCH_KEYWORDS = [
   'погода','курс доллара','курс евро','цена биткоин',
   'последняя версия','последний релиз','вышел ли',
   'есть ли информация о','свежая информация',
-  // English
+  // Английский
   'search for','find information','look up','google it',
   'latest news','current news','recent news',
   'what is happening','right now','today\'s',
@@ -93,13 +93,13 @@ export function route(
   logger?: FastifyBaseLogger,
   hasImage = false,
   plan?: string,
-  _preferredModel?: 'haiku' | 'deepseek',  // kept for API compat, ignored — DeepSeek is always primary
+  _preferredModel?: 'haiku' | 'deepseek',  // оставлено для совместимости API, игнорируется — DeepSeek всегда основной
   mode?: string,
 ): RouterResult {
   const complexity = classifyComplexity(prompt, hasImage, hasDocument);
   const isPaid = plan !== 'FREE' && plan !== undefined;
 
-  // ── Images always need a vision-capable model — DeepSeek V3.2 cannot see images ──
+  // ── Изображениям всегда нужна модель с vision — DeepSeek V3.2 не умеет видеть картинки ──
   if (hasImage) {
     logger?.debug({ plan, model: OR_MODELS.haiku }, '[AIRouter] Image → Gemini Flash (vision)');
     return {
@@ -111,7 +111,7 @@ export function route(
     };
   }
 
-  // ── Std chat (mode === 'chat') → Cloudflare Llama, fallback OpenRouter Llama ──
+  // ── Обычный чат (mode === 'chat') → Cloudflare Llama, резерв OpenRouter Llama ──
   if (mode === 'chat' || (!mode && !hasDocument)) {
     logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare Llama');
     return {
@@ -123,8 +123,8 @@ export function route(
     };
   }
 
-  // ── Pro chat (mode === 'think') ────────────────────────────────────────────
-  // Search queries → Sonar (all paid plans)
+  // ── Про-чат (mode === 'think') ──────────────────────────────────────────────
+  // Поисковые запросы → Sonar (на всех платных тарифах)
   if (isPaid && !hasDocument && isSearchQuery(prompt)) {
     logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Pro search query → Sonar');
     return {
@@ -135,7 +135,7 @@ export function route(
     };
   }
 
-  // Pro chat (including documents): DeepSeek V3.2 primary, Gemini Flash → GPT-4o-mini fallback.
+  // Про-чат (включая документы): основная модель DeepSeek V3.2, резерв Gemini Flash → GPT-4o-mini.
   logger?.debug({ plan, model: OR_MODELS.deepseek }, '[AIRouter] Pro chat → DeepSeek V3.2');
   return {
     provider: 'openrouter-deepseek',

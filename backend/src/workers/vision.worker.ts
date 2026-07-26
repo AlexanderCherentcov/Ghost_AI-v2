@@ -25,7 +25,7 @@ interface VisionJob {
   prompt: string;
   chatId: string | null;
   size: '1024x1024' | '1792x1024' | '1024x1792';
-  sourceImageUrl?: string; // image editing mode
+  sourceImageUrl?: string; // режим редактирования изображения
 }
 
 export function startVisionWorker() {
@@ -39,8 +39,8 @@ export function startVisionWorker() {
         data: { status: 'processing' },
       });
 
-      // For image editing use fluxFill; plain generation uses Gemini Flash.
-      // If primary fails (empty images, content policy), fall back to FLUX.2 Pro.
+      // Для редактирования изображения используем fluxFill; обычная генерация — Gemini Flash.
+      // Если основная модель падает (пустые изображения, content policy) — резерв FLUX.2 Pro.
       const primaryModel = sourceImageUrl ? OR_MODELS.fluxFill : OR_MODELS.flux;
       let mediaUrl: string;
       try {
@@ -50,11 +50,11 @@ export function startVisionWorker() {
         mediaUrl = await generateImageFlux(prompt, OR_MODELS.fluxFill, sourceImageUrl);
       }
 
-      // Always serve from our own server — avoids CORS/expiry issues with external CDN URLs
+      // Всегда раздаём с нашего сервера — так избегаем проблем CORS/истечения ссылок на внешних CDN
       if (mediaUrl.startsWith('data:')) {
         mediaUrl = saveDataUri(mediaUrl);
       } else if (mediaUrl.startsWith('http')) {
-        // Download external URL and save to disk
+        // Скачиваем внешний URL и сохраняем на диск
         const imgRes = await fetch(mediaUrl);
         if (!imgRes.ok) throw new Error(`Failed to download image: ${imgRes.status}`);
         const contentType = imgRes.headers.get('content-type') ?? 'image/jpeg';
@@ -71,14 +71,14 @@ export function startVisionWorker() {
         data: { status: 'done', mediaUrl },
       });
 
-      // Save assistant message with image to chat history
+      // Сохраняем сообщение ассистента с изображением в историю чата
       if (chatId) {
         await prisma.message.create({
           data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl },
         }).catch((e) => console.error('[VisionWorker] Failed to save assistant message:', e.message));
       }
 
-      // Cache for future identical prompts (30-day TTL)
+      // Кэшируем для будущих идентичных промптов (TTL 30 дней)
       setMediaCached('vision', prompt, mediaUrl).catch(() => {});
 
       return { mediaUrl };

@@ -15,9 +15,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, accessToken } = useAuthStore();
   const { setChats } = useChatStore();
   const { sidebarOpen } = useUIStore();
-  // Tracks the user ID for which chats have already been fetched.
-  // Prevents duplicate requests on token refresh while ensuring the list
-  // loads after page refresh (when accessToken arrives asynchronously).
+  // Хранит ID пользователя, для которого чаты уже загружены.
+  // Предотвращает повторные запросы при обновлении токена и при этом гарантирует,
+  // что список загрузится после перезагрузки страницы (когда accessToken приходит асинхронно).
   const loadedChatsForRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -31,12 +31,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user?.id || !accessToken) return;
-    if (loadedChatsForRef.current === user.id) return; // already loaded for this user
+    if (loadedChatsForRef.current === user.id) return; // уже загружено для этого пользователя
     loadedChatsForRef.current = user.id;
     api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
   }, [user?.id, accessToken]);
 
-  // ── Telegram Mini App: notify ready + expand ──────────────────────────────
+  // ── Telegram Mini App: сигнал готовности + разворачивание на весь экран ──
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
     if (!tg) return;
@@ -47,10 +47,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── Visual viewport height + offset (keyboard-aware) ─────────────────────
-  // iOS Safari scrolls the visual viewport when keyboard opens (offsetTop > 0).
-  // We track both height AND offsetTop so our fixed container always exactly
-  // covers the visual viewport — input/nav stay pinned above the keyboard.
+  // ── Высота и отступ visual viewport (с учётом клавиатуры) ─────────────────
+  // iOS Safari прокручивает visual viewport при открытии клавиатуры (offsetTop > 0).
+  // Отслеживаем и height, и offsetTop, чтобы фиксированный контейнер всегда точно
+  // покрывал видимую область — поле ввода и навигация остаются над клавиатурой.
   useEffect(() => {
     const update = () => {
       const vv = window.visualViewport;
@@ -68,7 +68,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ── iPhone screen-lock recovery ────────────────────────────────────────────
+  // ── Восстановление после блокировки экрана на iPhone ──────────────────────
   useEffect(() => {
     let lastRefreshAt = 0;
     const handleVisibilityChange = () => {
@@ -97,9 +97,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     /*
-     * position:fixed prevents iOS from scrolling the layout viewport when
-     * the soft keyboard appears. Combined with --app-h (visualViewport),
-     * the container always fits the real visible area exactly.
+     * position:fixed не даёт iOS прокручивать layout viewport при появлении
+     * экранной клавиатуры. В сочетании с --app-h (visualViewport) контейнер
+     * всегда точно соответствует реальной видимой области.
      */
     <div
       className="flex overflow-hidden"
@@ -110,16 +110,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         right: 0,
         height: 'var(--app-h, 100dvh)',
         background: 'var(--bg-primary)',
-        /* Prevent any touch-scroll on the shell itself */
+        /* Запрещаем touch-скролл самой оболочки */
         touchAction: 'none',
       }}
     >
-      {/* Sidebar — desktop only, position:fixed internally */}
+      {/* Сайдбар — только десктоп, внутри уже position:fixed */}
       <div className="hidden lg:block">
         <Sidebar />
       </div>
 
-      {/* Content column: page content + bottom nav */}
+      {/* Колонка контента: содержимое страницы + нижняя навигация */}
       <div
         className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-[margin] duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-[260px]' : 'lg:ml-[60px]'}`}
         style={{ minWidth: 0 }}
@@ -127,7 +127,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {children}
         </main>
-        {/* BottomNav is in the flex flow (not fixed) — reliable on all browsers */}
+        {/* BottomNav в обычном flex-потоке (не fixed) — надёжно работает во всех браузерах */}
         <BottomNav />
       </div>
     </div>

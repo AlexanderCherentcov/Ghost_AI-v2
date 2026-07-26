@@ -11,124 +11,10 @@ import { InputBar, type ChatMode, type VideoOptions, type MusicMode } from '@/co
 import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
-
-const IMAGE_VERBS = [
-  // imperative
-  'нарисуй', 'создай', 'сгенерируй', 'сделай', 'покажи',
-  // 1st-person future (mobile dictation / typos)
-  'нарисую', 'сгенерирую',
-  // infinitive
-  'нарисовать', 'создать', 'сгенерировать', 'сделать',
-  // english
-  'draw', 'generate', 'create', 'make',
-];
-const IMAGE_NOUNS = [
-  'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
-  'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
-];
-const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
-
-// Filler words that don't constitute an image description
-const INTENT_FILLERS = [
-  'хотел', 'хотела', 'хочу', 'хочется', 'бы', 'можешь', 'можно',
-  'пожалуйста', 'мне', 'я', 'давай', 'давайте', 'хотелось',
-];
-
-function isOnlyImageIntent(text: string): boolean {
-  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-  const meaningful = words.filter(w =>
-    !IMAGE_VERBS.includes(w) &&
-    !IMAGE_NOUNS.includes(w) &&
-    !INTENT_FILLERS.includes(w)
-  );
-  return meaningful.length === 0;
-}
-
-// Keywords that mean user is REFERENCING a previous message/prompt
-const REF_KEYWORDS = [
-  'по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата',
-];
-
-// Edit-intent keywords — used when user has attached an image and wants to modify it
-const EDIT_VERBS = [
-  'измени', 'изменить', 'отредактируй', 'отредактировать', 'сделай', 'поменяй', 'поменять',
-  'добавь', 'добавить', 'убери', 'убрать', 'замени', 'заменить', 'преврати', 'превратить',
-  'перекрась', 'раскрась', 'нарисуй', 'стилизуй', 'edit', 'change', 'modify', 'transform',
-  'remove', 'add', 'make it', 'turn into',
-];
-
-function isImageRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
-  return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
-}
-
-// Returns true if user attached an image and wants to edit it
-function isImageEditRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  return EDIT_VERBS.some((v) => lower.includes(v));
-}
-
-// Returns true if user wants AI to WRITE/COMPOSE a prompt — NOT generate an image.
-// e.g. "создай мне промт для изображения битвы", "напиши промт 9:18"
-// Exception: "сгенерируй по этому промту" — user is USING a previously written prompt.
-function isPromptComposeRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (REF_KEYWORDS.some((ref) => lower.includes(ref))) return false;
-  return lower.includes('промт') || lower.includes('prompt') || lower.includes('промпт');
-}
-
-// Extract clean image prompt from markdown (strips headers, bold markers, bullet points etc.)
-function extractImagePrompt(content: string): string {
-  // 1. Code block ```...``` — highest priority, unambiguous
-  const codeBlock = content.match(/```[^\n]*\n?([\s\S]+?)```/);
-  if ((codeBlock?.[1]?.trim().length ?? 0) > 20) return codeBlock![1].trim().slice(0, 600);
-
-  // 2. Inline code `...` > 20 chars
-  const inline = content.match(/`([^`]{20,})`/);
-  if (inline?.[1]?.trim()) return inline[1].trim().slice(0, 600);
-
-  // 3. Bold **...** > 30 chars that's NOT a section header (doesn't end with : or —)
-  const boldMatches = content.match(/\*\*([^*]{30,})\*\*/g);
-  if (boldMatches?.length) {
-    const candidates = boldMatches
-      .map((m) => m.replace(/\*\*/g, '').trim())
-      .filter((t) => !t.endsWith(':') && !t.endsWith('—') && !t.endsWith('-'))
-      .sort((a, b) => b.length - a.length);
-    if (candidates[0]) return candidates[0].slice(0, 600);
-  }
-
-  // 4. Quoted text "..." or «...» > 30 chars
-  const quoted = content.match(/["""«]([^"""»\n]{30,})["""»]/);
-  if (quoted?.[1]?.trim()) return quoted[1].trim().slice(0, 600);
-
-  // 5. Find a line that looks like an image prompt (has visual keywords, not an intro sentence)
-  const IMAGE_KEYWORDS = ['4k', '8k', 'photorealistic', 'detailed', 'style', 'lighting',
-    'portrait', 'landscape', 'digital art', 'cinematic', 'high quality', 'beautiful',
-    'stunning', 'realistic', 'illustration', 'render', 'resolution'];
-  const INTRO_PREFIXES = ['конечно', 'вот ', 'используй', 'этот промт', 'данный', 'можно',
-    'вы можете', 'для генерации', 'для создания', 'ниже', 'предлагаю', 'here ', 'this '];
-  const lines = content
-    .replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s+/g, '').replace(/`/g, '')
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 30 && !l.endsWith(':'));
-  const keywordLine = lines.find((l) => IMAGE_KEYWORDS.some((kw) => l.toLowerCase().includes(kw)));
-  if (keywordLine) return keywordLine.slice(0, 600);
-  const nonIntroLine = lines.find((l) => !INTRO_PREFIXES.some((p) => l.toLowerCase().startsWith(p)));
-  if (nonIntroLine) return nonIntroLine.slice(0, 600);
-  if (lines.length) return lines.sort((a, b) => b.length - a.length)[0].slice(0, 600);
-
-  // Final fallback: strip all markdown
-  return content
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '')
-    .replace(/---+/g, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-    .slice(0, 600);
-}
+import {
+  IMAGE_VERBS, REF_KEYWORDS,
+  isOnlyImageIntent, isImageRequest, isImageEditRequest, isPromptComposeRequest, extractImagePrompt,
+} from '@/lib/image-intent';
 
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -163,8 +49,8 @@ async function readFileAsText(file: File): Promise<string> {
 
 export default function ChatConversationPage() {
   const pathname = usePathname();
-  // In static export all /chat/* routes are served from /chat/index/index.html,
-  // so params.id is always 'index'. Read the real chat ID from the browser URL instead.
+  // В статическом экспорте все маршруты /chat/* отдаются из /chat/index/index.html,
+  // поэтому params.id всегда равен 'index'. Настоящий ID чата читаем из URL браузера.
   const segments = pathname.split('/').filter(Boolean);
   const id = segments[segments.length - 1] || 'index';
   const router = useRouter();
@@ -187,11 +73,11 @@ export default function ChatConversationPage() {
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
   const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-title + balance refresh — fires after image/video/music generation
+  // Автозаголовок + обновление баланса — срабатывает после генерации картинки/видео/музыки
   const triggerAutoTitle = useCallback((prompt: string) => {
-    // Refresh Caspers balance immediately so sidebar updates without page reload
+    // Обновляем баланс Caspers сразу, чтобы сайдбар обновился без перезагрузки страницы
     useAuthStore.getState().refreshUser();
-    // Generate title on first generation
+    // Генерируем заголовок при первой генерации
     api.chats.autoTitle(id, prompt)
       .then(({ title }) => {
         if (title && title !== 'Новый чат') {
@@ -216,14 +102,14 @@ export default function ChatConversationPage() {
   // Предотвращает повторный auto-send для того же чата
   const autoSentChatRef = useRef<string | null>(null);
 
-  // Load messages + resume any pending generation job after page refresh
+  // Загружаем сообщения + возобновляем незавершённую задачу генерации после перезагрузки страницы
   useEffect(() => {
-    // Wait for accessToken — it lives only in memory and is restored async
-    // via refreshToken call in providers.tsx. Without this guard the request
-    // fires before the token is ready and gets a 401.
+    // Ждём accessToken — он живёт только в памяти и восстанавливается асинхронно
+    // через вызов refreshToken в providers.tsx. Без этой проверки запрос
+    // уйдёт раньше, чем токен будет готов, и получит 401.
     if (!accessToken) return;
-    // Prevent double-fetch for the same chat (e.g. silent token refresh mid-session).
-    // Use ID-based tracking so switching to a different chat always re-fetches.
+    // Предотвращаем повторную загрузку для того же чата (например, при тихом обновлении токена в середине сессии).
+    // Отслеживаем по ID, чтобы переключение на другой чат всегда вызывало повторную загрузку.
     if (loadedChatIdRef.current === id) return;
     loadedChatIdRef.current = id;
     setMessagesReady(false);
@@ -235,24 +121,24 @@ export default function ChatConversationPage() {
         setMessages(messages);
         setMessagesReady(true);
 
-        // Restore last generated image URL so edit requests keep context after page reload
+        // Восстанавливаем URL последней сгенерированной картинки, чтобы запросы редактирования сохраняли контекст после перезагрузки
         const lastImg = [...messages].reverse().find(
           (m) => m.role === 'assistant' && m.mode === 'vision' && m.mediaUrl && m.mediaUrl !== '__loading__'
         );
         if (lastImg?.mediaUrl) lastGeneratedImageRef.current = lastImg.mediaUrl;
 
-        // Resume pending generation job if the user refreshed mid-generation
+        // Возобновляем незавершённую задачу генерации, если пользователь обновил страницу во время генерации
         const stored = localStorage.getItem(`pending_gen_${id}`);
         if (!stored) return;
         try {
           const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel'; prompt: string };
-          // If the result already landed in DB messages, just clean up
+          // Если результат уже попал в сообщения из БД — просто убираем след
           const alreadyDone = messages.some(
             (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
           );
           if (alreadyDone) { localStorage.removeItem(`pending_gen_${id}`); return; }
 
-          // Add placeholder and resume polling
+          // Добавляем плейсхолдер и возобновляем опрос
           const placeholderId = `resumed-${Date.now()}`;
           useChatStore.getState().addMessage({
             id: placeholderId, role: 'assistant', content: '', mode,
@@ -295,10 +181,10 @@ export default function ChatConversationPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, accessToken]);
 
-  // Auto-send initial prompt — waits until history is loaded (messagesReady) to avoid race condition
+  // Автоотправка начального промта — ждёт загрузки истории (messagesReady), чтобы избежать гонки
   useEffect(() => {
-    if (!messagesReady) return; // wait for history to load before auto-sending
-    if (autoSentChatRef.current === id) return; // already auto-sent for this chat
+    if (!messagesReady) return; // ждём загрузки истории перед автоотправкой
+    if (autoSentChatRef.current === id) return; // для этого чата уже отправлено автоматически
 
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
@@ -320,7 +206,7 @@ export default function ChatConversationPage() {
     const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
-    autoSentChatRef.current = id; // mark this chat as auto-sent before async work
+    autoSentChatRef.current = id; // помечаем чат как автоотправленный до начала асинхронной работы
     ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialMusicDuration',
      'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
@@ -353,7 +239,7 @@ export default function ChatConversationPage() {
     })();
   }, [id, messagesReady]);
 
-  // Connect WS
+  // Подключаем WS
   useEffect(() => {
     connectWS();
     const unsub = onToken((chunk: WSChunk) => {
@@ -362,7 +248,7 @@ export default function ChatConversationPage() {
     return unsub;
   }, []);
 
-  // ── Inline image generation ──────────────────────────────────────────────────
+  // ── Встроенная генерация изображений ──────────────────────────────────────────
   const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string) => {
     if (!accessToken || !messagesReady) return;
     setGeneratingImage(true);
@@ -407,7 +293,7 @@ export default function ChatConversationPage() {
           ));
           lastGeneratedImageRef.current = job.mediaUrl;
           triggerAutoTitle(prompt);
-          // Counter updated on backend; no local balance update needed
+          // Счётчик обновляется на бэкенде; локально баланс обновлять не нужно
         } else if (job.status === 'failed') {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
@@ -435,7 +321,7 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, user, messagesReady, triggerAutoTitle]);
 
-  // ── Video generation ─────────────────────────────────────────────────────────
+  // ── Генерация видео ────────────────────────────────────────────────────────────
   const handleGenerateVideo = useCallback(async (prompt: string, options?: VideoOptions) => {
     if (!accessToken || !messagesReady) return;
     if (generatingVideoRef.current) return;
@@ -524,7 +410,7 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady, triggerAutoTitle]);
 
-  // ── Music generation ─────────────────────────────────────────────────────────
+  // ── Генерация музыки ───────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if (!accessToken || !messagesReady) return;
     if (generatingMusicRef.current) return;
@@ -594,7 +480,7 @@ export default function ChatConversationPage() {
       } else if (err.code === 'LIMIT_MUSIC_UNAVAILABLE') {
         setLimitType('LIMIT_MUSIC_UNAVAILABLE');
       } else if (err.code === 'PLAN_RESTRICTED') {
-        showToast('Генерация музыки доступна начиная с тарифа Пробный', 'error');
+        showToast('Генерация музыки доступна только на платных тарифах', 'error');
         router.push('/billing');
       } else {
         showToast(err.message ?? 'Ошибка генерации музыки', 'error');
@@ -605,15 +491,15 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady, triggerAutoTitle]);
 
-  // ── Dispatcher — debounced intent detection from user typing ────────────────
+  // ── Диспетчер — определение намерения по вводу пользователя с задержкой ────────
   const handleInputChange = useCallback((text: string) => {
-    // Only auto-detect when in chat mode; skip if user already opened a widget
+    // Автоопределение только в режиме чата; пропускаем, если пользователь уже открыл виджет
     if (chatMode !== 'chat') return;
     if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
     if (text.trim().length < 4) { setDispatchResult(null); return; }
     dispatchTimerRef.current = setTimeout(async () => {
       try {
-        // Pass last 3 messages as context so dispatcher understands "давай", "сделай это" etc.
+        // Передаём последние 3 сообщения как контекст, чтобы диспетчер понимал "давай", "сделай это" и т.п.
         const recentContext = useChatStore.getState().messages
           .slice(-3)
           .map((m) => ({ role: m.role as 'user' | 'assistant', content: String(m.content).slice(0, 400) }));
@@ -621,21 +507,21 @@ export default function ChatConversationPage() {
         if (result.category !== 'chat') setDispatchResult(result);
         else setDispatchResult(null);
       } catch {
-        // silent — dispatcher is best-effort
+        // молча игнорируем — диспетчер работает по принципу best-effort
       }
     }, 800);
   }, [chatMode]);
 
-  // Clear dispatch result when user explicitly switches mode
+  // Сбрасываем результат диспетчера при явном переключении режима пользователем
   const handleSetChatMode = useCallback((m: ChatMode) => {
     setChatMode(m);
     setDispatchResult(null);
     if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
   }, []);
 
-  // "⚡ Использовать промт" — fills InputBar with the prompt.
-  // Switches to the relevant mode so widgets (model, duration, etc.) appear
-  // and the user can adjust settings before clicking Send.
+  // "⚡ Использовать промт" — заполняет InputBar промтом.
+  // Переключает на нужный режим, чтобы появились виджеты (модель, длительность и т.п.)
+  // и пользователь мог настроить параметры перед отправкой.
   const handleUsePrompt = useCallback((prompt: string, messageMode?: string) => {
     if (messageMode === 'reel') {
       handleSetChatMode('video');
@@ -644,8 +530,8 @@ export default function ChatConversationPage() {
     } else if (messageMode === 'vision') {
       handleSetChatMode('images');
     } else {
-      // Chat-mode AI prompt (user asked AI to write a generation prompt) —
-      // detect video vs image by keywords and auto-switch so user can generate right away
+      // Промт из режима чата (пользователь попросил AI написать промт для генерации) —
+      // по ключевым словам определяем видео это или картинка и переключаемся автоматически
       const lower = prompt.toLowerCase();
       const isVideoPrompt = ['camera', 'motion', 'shot', 'dolly', 'pan ', 'zoom', 'fps', 'cinematic move'].some(k => lower.includes(k));
       handleSetChatMode(isVideoPrompt ? 'video' : 'images');
@@ -653,15 +539,15 @@ export default function ChatConversationPage() {
     setFillPrompt(prompt);
   }, [handleSetChatMode]);
 
-  // ── Main send handler ────────────────────────────────────────────────────────
+  // ── Главный обработчик отправки ─────────────────────────────────────────────────
   const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
-    // Clear dispatch suggestion on every send
+    // Сбрасываем предложение диспетчера при каждой отправке
     setDispatchResult(null);
 
-    // ── Mode-based routing ───────────────────────────────────────────────────
-    // In images/video/music mode the user ALWAYS wants generation — never fall through to AI chat.
-    // isPromptComposeRequest is only relevant in chat mode (where user asks AI to *write* a prompt).
+    // ── Маршрутизация по режиму ────────────────────────────────────────────────
+    // В режимах картинок/видео/музыки пользователь ВСЕГДА хочет генерацию — никогда не уходим в обычный AI-чат.
+    // isPromptComposeRequest актуален только в режиме чата (где пользователь просит AI *написать* промт).
     if (chatMode === 'images' && !file) {
       if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
         return handleGenerateImage(prompt, lastGeneratedImageRef.current);
@@ -692,7 +578,7 @@ export default function ChatConversationPage() {
       const lower = prompt.toLowerCase();
       const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
       if (isRef) {
-        // "сделай по промту", "используй это" → extract from last AI message
+        // "сделай по промту", "используй это" → извлекаем из последнего сообщения AI
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
         if (lastAssistant) {
           const extracted = extractImagePrompt(lastAssistant.content);
@@ -708,7 +594,7 @@ export default function ChatConversationPage() {
       const lower = prompt.toLowerCase();
       const isRef = REF_KEYWORDS.some(kw => lower.includes(kw));
       if (isRef) {
-        // "сделай по промту" → extract from last AI message
+        // "сделай по промту" → извлекаем из последнего сообщения AI
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
         if (lastAssistant) {
           const extracted = extractImagePrompt(lastAssistant.content);
@@ -720,14 +606,14 @@ export default function ChatConversationPage() {
       return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
     }
 
-    // ── Image intent routing ─────────────────────────────────────────────────
-    // Flag: user wants AI to WRITE an image prompt (not generate an image directly)
+    // ── Маршрутизация намерения по картинке ───────────────────────────────────
+    // Флаг: пользователь хочет, чтобы AI НАПИСАЛ промт для картинки (а не сгенерировал её напрямую)
     let isWritingPrompt = false;
 
     if (!file && prompt) {
       const lower = prompt.toLowerCase().trim();
 
-      // 1. Verb-only: bare verb OR verb + pronoun/ref keyword (no image noun needed)
+      // 1. Только глагол: одиночный глагол ИЛИ глагол + местоимение/ссылочное слово (существительное про картинку не нужно)
       //    "сгенерируй", "нарисуй его", "создай по этому промту"
       const verbOnly = IMAGE_VERBS.some(v =>
         lower === v ||
@@ -744,14 +630,14 @@ export default function ChatConversationPage() {
         }
       }
 
-      // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.
+      // 2. Пользователь хочет, чтобы AI НАПИСАЛ промт — содержит "промт", но НЕ как ссылку.
       //    "напиши промт битва ангелов", "создай промт для изображения 9:18"
-      //    → route to AI with image-prompt guidance injected into history
+      //    → уходим в обычный AI-чат с добавленной в историю инструкцией по промтам для картинок
       if (isPromptComposeRequest(prompt)) {
         isWritingPrompt = true;
-        // fall through to regular AI chat below
+        // проваливаемся в обычный AI-чат ниже
       } else if (isImageRequest(prompt)) {
-        // 3. Has reference keyword → extract prompt from last assistant message
+        // 3. Есть ссылочное ключевое слово → извлекаем промт из последнего сообщения ассистента
         //    "сгенерируй изображение по этому промту", "нарисуй картинку по нему"
         const isRef = REF_KEYWORDS.some((kw) => lower.includes(kw));
         if (isRef) {
@@ -760,12 +646,12 @@ export default function ChatConversationPage() {
             return handleGenerateImage(extractImagePrompt(lastAssistant.content));
           }
         }
-        // 4. Intent-only ("хочу картинку", "хотел бы сделать изображение") → switch to images mode
+        // 4. Только намерение ("хочу картинку", "хотел бы сделать изображение") → переключаемся в режим картинок
         if (isOnlyImageIntent(prompt)) {
           handleSetChatMode('images');
           return;
         }
-        // 5. Prompt has real description → generate directly
+        // 5. В промте есть реальное описание → генерируем напрямую
         return handleGenerateImage(prompt);
       }
     }
@@ -785,7 +671,7 @@ export default function ChatConversationPage() {
           imageUrl = await resizeImageToBase64(file);
           fileDisplayUrl = imageUrl;
 
-          // Image editing: user attached an image and wants to modify it
+          // Редактирование картинки: пользователь прикрепил изображение и хочет его изменить
           if (prompt && isImageEditRequest(prompt)) {
             return handleGenerateImage(prompt, imageUrl);
           }
@@ -868,8 +754,8 @@ export default function ChatConversationPage() {
         },
       ];
 
-      // video/music modes always return early above, so activeGuide is only used
-      // in chat mode (when user asks AI to *write* a prompt for images)
+      // Режимы video/music всегда завершаются выше через return, поэтому activeGuide используется
+      // только в режиме чата (когда пользователь просит AI *написать* промт для картинки)
       const activeGuide = IMAGE_PROMPT_GUIDE;
 
       const history = isWritingPrompt
@@ -901,9 +787,9 @@ export default function ChatConversationPage() {
         createdAt: new Date().toISOString(),
       };
       commitStream(assistantMsg);
-      // Refresh Caspers balance after every AI response (tokens were deducted)
+      // Обновляем баланс Caspers после каждого ответа AI (токены были списаны)
       useAuthStore.getState().refreshUser();
-      // Title arrives via separate WS 'title' event → handled in socket.ts globally
+      // Заголовок приходит отдельным WS-событием 'title' → обрабатывается глобально в socket.ts
 
     } catch (err: any) {
       setStreaming(false);
@@ -911,6 +797,8 @@ export default function ChatConversationPage() {
         setLimitType('LIMIT_MESSAGES_DAILY');
       } else if (err.code === 'LIMIT_MESSAGES') {
         setLimitType('LIMIT_MESSAGES');
+      } else if (err.code === 'LIMIT_PRO_MESSAGES' || err.code === 'LIMIT_PRO_UNAVAILABLE') {
+        setLimitType('LIMIT_PRO_MESSAGES');
       } else if (err.code === 'LIMIT_IMAGES') {
         setLimitType('LIMIT_IMAGES');
       } else if (err.code === 'LIMIT_FILES') {
@@ -926,13 +814,16 @@ export default function ChatConversationPage() {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       } else if (err.code === 'STREAM_TIMEOUT') {
         showToast('Нет ответа от сервера, попробуйте ещё раз', 'error');
+      } else {
+        // Незнакомый/новый код ошибки — не оставляем пользователя без обратной связи
+        showToast(err.message ?? 'Не удалось отправить сообщение', 'error');
       }
     }
   }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
 
   const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || !messagesReady;
 
-  // isLoading = true when we're waiting for token OR waiting for messages from server
+  // isLoading = true, пока ждём токен ИЛИ ждём сообщения с сервера
   const isLoading = !accessToken || !messagesReady;
 
   const placeholder = chatMode === 'images'

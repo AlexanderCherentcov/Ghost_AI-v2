@@ -1,25 +1,40 @@
 /**
- * ─── GhostLine AI — Plan Configuration ───────────────────────────────────────
+ * ─── GhostLine AI — Конфигурация тарифов ─────────────────────────────────────
  *
- * SINGLE SOURCE OF TRUTH for all plan data.
- * Used by: yokassa.ts (payments), routes/plans.ts (public API), frontend, miniapp.
+ * ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ для всех данных о тарифах.
+ * Используется в: yokassa.ts (оплата), routes/plans.ts (публичный API), frontend, miniapp.
  *
- * Pricing philosophy:
- *   - Fake "original" price = real monthly × 2  (marketing 50% off)
- *   - Yearly real price = monthly × 12 × 0.8    (real 20% off vs real monthly)
- *   - Yearly is marketed as "70% скидка" vs the fake original
+ * Логика ценообразования:
+ *   - Фейковая "оригинальная" цена = реальная месячная × 2 (маркетинговая скидка 50%)
+ *   - Реальная годовая цена = месячная × 12 × 0.8 (реальная скидка 20% от месячной)
+ *   - Год маркетингово подаётся как "скидка 70%" от фейковой оригинальной цены
  */
 
 export const PLAN_KEYS = ['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
 
+// Приветственный бонус Caspers для новых пользователей — используется в
+// routes/auth.ts при регистрации И здесь же, в тексте фичи FREE-плана,
+// чтобы оба места не расходились при изменении суммы бонуса.
+export const FREE_WELCOME_CASPERS = 100;
+
+// ─── Лимиты FREE-тарифа (публично видимые) ───────────────────────────────────
+// Объявлены до PLANS, т.к. используются в тексте фич FREE-плана ниже.
+
+export const FREE_LIMITS = {
+  std_messages_daily: 5,
+  images_weekly: 5,
+  music_weekly: 5,
+  videos_monthly: 3,   // 3 видео в МЕСЯЦ (not week)
+} as const;
+
 export interface PlanInfo {
   key: PlanKey;
   label: string;
-  price: number;        // real monthly price (RUB)
-  price_yearly: number; // real yearly price (RUB) = price * 12 * 0.8
+  price: number;        // реальная месячная цена (RUB)
+  price_yearly: number; // реальная годовая цена (RUB) = price * 12 * 0.8
   caspers_monthly: number;
-  pro_free_daily: number; // -1 = unlimited
+  pro_free_daily: number; // -1 = безлимит
   badge: string | null;
   popular: boolean;
   features: string[];
@@ -36,8 +51,8 @@ export const PLANS: Record<PlanKey, PlanInfo> = {
     badge: null,
     popular: false,
     features: [
-      '100 Caspers при регистрации',
-      'Стандартный чат: 5 сообщений/день',
+      `${FREE_WELCOME_CASPERS} Caspers при регистрации`,
+      `Стандартный чат: ${FREE_LIMITS.std_messages_daily} сообщений/день`,
       'Изображения и видео — за Caspers',
       'Музыка — за Caspers',
     ],
@@ -116,16 +131,7 @@ export const PLANS: Record<PlanKey, PlanInfo> = {
   },
 };
 
-// ─── FREE tier limits (shown publicly) ───────────────────────────────────────
-
-export const FREE_LIMITS = {
-  std_messages_daily: 5,
-  images_weekly: 5,
-  music_weekly: 5,
-  videos_monthly: 3,   // 3 видео в МЕСЯЦ (not week)
-} as const;
-
-// ─── Casper operation costs ───────────────────────────────────────────────────
+// ─── Стоимость операций в Caspers ─────────────────────────────────────────────
 
 export const CASPER_COSTS = {
   chat_pro:        1,
@@ -138,8 +144,8 @@ export const CASPER_COSTS = {
   music_generate:  5,
 } as const;
 
-// ─── Casper top-up tiered pricing ────────────────────────────────────────────
-// 10 tiers × 100 Caspers, price drops 0.1 ₽ per tier
+// ─── Ступенчатая цена докупки Caspers ─────────────────────────────────────────
+// 10 ступеней × 100 Caspers, цена падает на 0.1 ₽ за каждую ступень
 
 export const CASPER_PRICE_TIERS = [
   { max: 100, price: 3.0 },

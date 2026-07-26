@@ -1,7 +1,7 @@
 /**
- * Cloudflare AI provider for standard chat
- * Used for ALL std chat requests on ALL plans (including FREE)
- * Model: @cf/meta/llama-3.1-8b-instruct-fast
+ * Провайдер Cloudflare AI для обычного чата
+ * Используется для ВСЕХ запросов обычного чата на ВСЕХ тарифах (включая FREE)
+ * Модель: @cf/meta/llama-3.1-8b-instruct-fast
  */
 
 import type { ChatMessage } from './openrouter.js';
@@ -21,7 +21,7 @@ function getCfHeaders(): Record<string, string> {
   };
 }
 
-// ─── One-shot JSON call (for dispatcher / lyrics) ────────────────────────────
+// ─── Разовый JSON-вызов (для диспетчера / текста песен) ───────────────────────
 
 export async function callCloudflareJSON(
   messages: ChatMessage[],
@@ -49,7 +49,7 @@ export async function callCloudflareJSON(
   return data?.result?.response ?? data?.response ?? '';
 }
 
-// ─── Streaming text from Cloudflare AI ────────────────────────────────────────
+// ─── Стриминг текста от Cloudflare AI ──────────────────────────────────────────
 
 export async function* streamCloudflare(
   messages: ChatMessage[],
@@ -58,7 +58,7 @@ export async function* streamCloudflare(
   const url = getCfUrl();
   const headers = getCfHeaders();
 
-  // Cloudflare AI expects simple string content (not multimodal arrays)
+  // Cloudflare AI ожидает простую строку в content (не мультимодальные массивы)
   const cfMessages = messages.map((m) => ({
     role: m.role,
     content: typeof m.content === 'string'
@@ -105,7 +105,7 @@ export async function* streamCloudflare(
 
   yield { type: 'used_model', model: CF_MODEL };
 
-  // Parse Server-Sent Events
+  // Разбираем Server-Sent Events
   const decoder = new TextDecoder();
   const reader = response.body.getReader();
   let buffer = '';
@@ -132,7 +132,7 @@ export async function* streamCloudflare(
             yield { type: 'token', data: parsed.response };
           }
         } catch {
-          // Ignore malformed SSE lines
+          // Игнорируем некорректные SSE-строки
         }
       }
     }

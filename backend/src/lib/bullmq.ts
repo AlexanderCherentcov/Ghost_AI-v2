@@ -1,7 +1,7 @@
 import { Queue, QueueOptions } from 'bullmq';
 
-// DB 1 — BullMQ queues (isolated from cache, noeviction protects jobs)
-// ioredis options object does NOT accept a 'url' field — parse it manually.
+// БД 1 — очереди BullMQ (изолированы от кэша, noeviction защищает задачи от вытеснения)
+// Объект опций ioredis НЕ принимает поле 'url' — парсим вручную.
 function parsedConnection(db: number) {
   const raw = process.env.REDIS_URL ?? 'redis://localhost:6379';
   const u = new URL(raw);
@@ -26,7 +26,7 @@ const defaultQueueOptions: QueueOptions = {
   },
 };
 
-// Image/sound/video generation: no retries — each attempt charges real money
+// Генерация изображений/звука/видео: без повторов — каждая попытка списывает настоящие деньги
 const mediaQueueOptions: QueueOptions = {
   connection,
   defaultJobOptions: {

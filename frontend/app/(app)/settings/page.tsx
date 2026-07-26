@@ -132,7 +132,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Response style */}
+        {/* Стиль ответов */}
         <div className="card">
           <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Стиль ответов</h2>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Как GhostLine отвечает на вопросы</p>
@@ -201,7 +201,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Font size */}
+            {/* Размер шрифта */}
             <div>
               <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Размер шрифта</p>
               <div className="flex gap-2">
@@ -252,7 +252,7 @@ export default function SettingsPage() {
           <SupportInlineForm userEmail={user?.email ?? null} />
         </div>
 
-        {/* Danger zone */}
+        {/* Опасная зона */}
         <div className="card border-red-500/20">
           <h2 className="font-medium text-red-400 mb-4">Выход</h2>
           <button

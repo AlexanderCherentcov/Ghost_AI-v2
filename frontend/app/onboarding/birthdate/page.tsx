@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/components/ui/Toast';
 
 function ProgressDots({ current }: { current: number }) {
   return (
@@ -19,6 +20,7 @@ function ProgressDots({ current }: { current: number }) {
 export default function OnboardingBirthdatePage() {
   const router = useRouter();
   const { setUser } = useAuthStore();
+  const { show } = useToast();
   const [dd, setDd] = useState('');
   const [mm, setMm] = useState('');
   const [yyyy, setYyyy] = useState('');
@@ -33,7 +35,10 @@ export default function OnboardingBirthdatePage() {
       const birthDate = `${yyyy}-${mm}-${dd}`;
       const user = await api.auth.updateMe({ birthDate });
       setUser(user);
-    } catch {}
+    } catch (err: any) {
+      // Необязательное поле — не блокируем онбординг, только предупреждаем
+      show(err.message ?? 'Не удалось сохранить дату рождения', 'error');
+    }
     router.push('/onboarding/purpose');
   }
 

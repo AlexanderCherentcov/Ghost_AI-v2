@@ -33,7 +33,7 @@ function HistoryApp() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<{ chats: Chat[] }>('/chats')
@@ -56,24 +56,30 @@ function HistoryApp() {
 
   async function handleRename(chatId: string) {
     if (!editTitle.trim()) return;
-    await apiRequest(`/chats/${chatId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ title: editTitle }),
-    });
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: editTitle } : c)));
-    setEditingId(null);
+    try {
+      await apiRequest(`/chats/${chatId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: editTitle }),
+      });
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: editTitle } : c)));
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Не удалось переименовать чат');
+      setTimeout(() => setActionError(null), 3000);
+    } finally {
+      setEditingId(null);
+    }
   }
 
   async function handleDelete(chatId: string) {
     setDeletingId(chatId);
-    setDeleteError(null);
+    setActionError(null);
     try {
       await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
       setChats((prev) => prev.filter((c) => c.id !== chatId));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Ошибка удаления';
-      setDeleteError(msg);
-      setTimeout(() => setDeleteError(null), 3000);
+      setActionError(msg);
+      setTimeout(() => setActionError(null), 3000);
     } finally {
       setDeletingId(null);
     }
@@ -113,7 +119,7 @@ function HistoryApp() {
                 className="flex items-center rounded-xl px-3 py-2 gap-0"
                 style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
               >
-                {/* Tap zone — only the title area navigates to chat */}
+                {/* Область нажатия — в чат ведёт только заголовок */}
                 <span
                   className="flex-1 text-sm truncate px-1 py-2 cursor-pointer"
                   style={{ color: 'rgba(255,255,255,0.75)' }}
@@ -121,7 +127,7 @@ function HistoryApp() {
                 >
                   {chat.title.length > 34 ? chat.title.slice(0, 34) + '…' : chat.title}
                 </span>
-                {/* Rename button — 44×44 touch target */}
+                {/* Кнопка переименования — область нажатия 44×44 */}
                 <button
                   type="button"
                   onClick={() => {
@@ -136,7 +142,7 @@ function HistoryApp() {
                     <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                {/* Delete button — 44×44 touch target */}
+                {/* Кнопка удаления — область нажатия 44×44 */}
                 <button
                   type="button"
                   onClick={() => handleDelete(chat.id)}
@@ -159,24 +165,24 @@ function HistoryApp() {
 
   return (
     <div className="flex flex-col h-screen pb-[60px]" style={{ background: 'var(--bg-void)' }}>
-      {/* Header */}
+      {/* Шапка */}
       <div
         className="flex items-center gap-3 px-4 pt-5 pb-4"
         style={{ borderBottom: '0.5px solid var(--border)' }}
       >
         <span className="text-base font-medium tracking-tight flex-1">
-          {deleteError ? <span style={{ color: '#f87171', fontSize: 13 }}>{deleteError}</span> : 'История чатов'}
+          {actionError ? <span style={{ color: '#f87171', fontSize: 13 }}>{actionError}</span> : 'История чатов'}
         </span>
         <button
           onClick={handleNew}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm"
-          style={{ background: 'rgba(123,92,240,0.12)', color: '#7B5CF0' }}
+          style={{ background: 'rgba(123,92,240,0.12)', color: 'var(--accent)' }}
         >
           + Новый
         </button>
       </div>
 
-      {/* List */}
+      {/* Список */}
       <div className="flex-1 overflow-y-auto py-3">
         {loading ? (
           <p className="text-center text-sm mt-10" style={{ color: 'rgba(255,255,255,0.3)' }}>
@@ -196,7 +202,7 @@ function HistoryApp() {
                 <button
                   onClick={handleNew}
                   className="mt-2 px-4 py-2 rounded-xl text-sm"
-                  style={{ background: 'rgba(123,92,240,0.12)', color: '#7B5CF0' }}
+                  style={{ background: 'rgba(123,92,240,0.12)', color: 'var(--accent)' }}
                 >
                   Начать первый чат
                 </button>

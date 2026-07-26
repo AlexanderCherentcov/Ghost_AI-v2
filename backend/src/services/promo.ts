@@ -35,8 +35,8 @@ async function alreadyRedeemedBy(promoCodeId: string, userId: string): Promise<b
   return !!existing;
 }
 
-// Atomically reserve one use. The WHERE clause re-checks active/maxUses at the
-// DB level so a lost race on the very last use can't hand it out twice.
+// Атомарно резервируем одно использование. WHERE-условие перепроверяет active/maxUses
+// на уровне БД, так что проигранная гонка за последнее использование не выдаст его дважды.
 async function claimOneUse(promoId: string): Promise<void> {
   const promo = await prisma.promoCode.findUniqueOrThrow({ where: { id: promoId } });
   const claimed = await prisma.promoCode.updateMany({
@@ -58,7 +58,7 @@ function isUniqueViolation(err: unknown): boolean {
   return !!err && typeof err === 'object' && (err as any).code === 'P2002';
 }
 
-// ─── CASPERS-type promo — redeemed immediately, grants Caspers to balance ────
+// ─── Промокод типа CASPERS — активируется сразу, начисляет Caspers на баланс ─
 
 export async function redeemCaspersPromo(
   rawCode: string,
@@ -103,11 +103,11 @@ export async function redeemCaspersPromo(
   return { casperAmount: amount };
 }
 
-// ─── DISCOUNT_PERCENT-type promo ──────────────────────────────────────────────
-// Two-phase: preview (validate + compute discount, no side effects) happens at
-// checkout; finalize (claim use + record redemption) happens once the webhook
-// confirms the payment actually succeeded — so an abandoned checkout never
-// burns a use.
+// ─── Промокод типа DISCOUNT_PERCENT ────────────────────────────────────────────
+// Двухфазный: предпросмотр (валидация + расчёт скидки, без побочных эффектов)
+// происходит при оформлении заказа; финализация (резерв использования + запись
+// активации) — только когда вебхук подтвердит, что оплата реально прошла, так
+// что брошенная оплата никогда не сжигает использование.
 
 export async function previewDiscountPromo(
   rawCode: string,
@@ -134,14 +134,14 @@ export async function finalizeDiscountRedemption(params: {
 }): Promise<void> {
   const { code, userId, paymentId } = params;
   const promo = await prisma.promoCode.findUnique({ where: { code: normalizePromoCode(code) } });
-  if (!promo) return; // code deleted between checkout and payment — payment still stands, nothing to record
+  if (!promo) return; // код удалили между оформлением и оплатой — оплата всё равно засчитана, записывать нечего
 
-  if (await alreadyRedeemedBy(promo.id, userId)) return; // idempotency guard (webhook retries)
+  if (await alreadyRedeemedBy(promo.id, userId)) return; // защита от повторов (ретраи вебхука)
 
   try {
     await claimOneUse(promo.id);
   } catch {
-    return; // exhausted between preview and payment success — rare edge case, don't undo the payment
+    return; // исчерпан между предпросмотром и успешной оплатой — редкий edge case, оплату не отменяем
   }
 
   try {
@@ -161,7 +161,7 @@ export async function finalizeDiscountRedemption(params: {
   }
 }
 
-// ─── Admin ─────────────────────────────────────────────────────────────────
+// ─── Админка ──────────────────────────────────────────────────────────────────
 
 export async function createPromoCode(input: {
   code: string;
@@ -188,8 +188,8 @@ export async function createPromoCode(input: {
   });
 }
 
-// Real DELETE when nobody has redeemed the code yet; otherwise deactivate so
-// existing PromoRedemption audit rows (who used what) stay intact.
+// Настоящий DELETE, если код ещё никто не активировал; иначе деактивируем, чтобы
+// существующие записи PromoRedemption (кто что использовал) остались нетронутыми.
 export async function deletePromoCode(code: string): Promise<{ deleted: boolean; deactivated: boolean }> {
   const promo = await prisma.promoCode.findUnique({ where: { code: normalizePromoCode(code) } });
   if (!promo) throw new PromoError('PROMO_NOT_FOUND', 'Промокод не найден');

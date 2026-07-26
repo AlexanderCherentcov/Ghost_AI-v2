@@ -8,8 +8,8 @@ function client(session: UserSession) {
     baseURL: `${API_URL}/api`,
     headers: { Authorization: `Bearer ${session.accessToken}` },
     timeout: 20_000,
-    // proxy: false — internal backend:4000 Docker hostname isn't reachable
-    // through the external HTTPS_PROXY/HTTP_PROXY set for AI-provider calls.
+    // proxy: false — внутренний Docker-хост backend:4000 недостижим через
+    // внешний HTTPS_PROXY/HTTP_PROXY, выставленный для вызовов AI-провайдеров.
     proxy: false,
   });
 }
@@ -28,7 +28,7 @@ export async function listChats(session: UserSession): Promise<ChatSummary[]> {
 }
 
 export async function createChat(session: UserSession, mode: Mode): Promise<ChatSummary> {
-  // Chat.mode only distinguishes generation chats in the sidebar; text modes both map to 'chat'.
+  // Chat.mode различает только чаты-генерации в списке; оба текстовых режима сводятся к 'chat'.
   const chatMode = mode === 'chat' || mode === 'think' ? 'chat' : mode;
   const { data } = await client(session).post('/chats', { mode: chatMode });
   return data;
@@ -43,7 +43,7 @@ export async function getChatMessages(session: UserSession, chatId: string, limi
   return data.messages as Array<{ role: string; content: string; mode: string; mediaUrl: string | null }>;
 }
 
-// ─── Generation jobs ──────────────────────────────────────────────────────────
+// ─── Задачи генерации ───────────────────────────────────────────────────────
 
 export interface GenJobResult {
   status: 'pending' | 'processing' | 'done' | 'failed';
@@ -64,6 +64,38 @@ export async function startSoundJob(session: UserSession, chatId: string, prompt
 export async function startReelJob(session: UserSession, chatId: string, prompt: string, videoImageUrl?: string): Promise<string> {
   const { data } = await client(session).post('/generate/reel', { prompt, chatId, ...(videoImageUrl ? { videoImageUrl } : {}) });
   return data.jobId;
+}
+
+// ─── Профиль и оплата ───────────────────────────────────────────────────────
+// Тот же GET /me и POST /payments/*, которыми пользуется сайт — бот не дублирует
+// логику тарифов/оплаты, только вызывает существующие эндпоинты от имени пользователя.
+
+export interface MeInfo {
+  plan: string;
+  caspers_balance: number;
+  caspers_monthly: number;
+  std_messages_today: number;
+  pro_messages_today: number;
+  images_this_week: number;
+  music_this_week: number;
+  videos_this_month: number;
+}
+
+export async function getMe(session: UserSession): Promise<MeInfo> {
+  const { data } = await client(session).get('/me');
+  return data;
+}
+
+/** Создаёт платёж за тариф и возвращает прямую ссылку на оплату ЮKassa. */
+export async function createPlanPayment(session: UserSession, plan: string, billing: 'monthly' | 'yearly' = 'monthly'): Promise<string> {
+  const { data } = await client(session).post('/payments/create', { plan, billing });
+  return data.paymentUrl;
+}
+
+/** Создаёт платёж на докупку Caspers и возвращает прямую ссылку на оплату ЮKassa. */
+export async function createCasperPayment(session: UserSession, amount: number): Promise<string> {
+  const { data } = await client(session).post('/payments/caspers/create', { amount });
+  return data.paymentUrl;
 }
 
 export async function pollJob(

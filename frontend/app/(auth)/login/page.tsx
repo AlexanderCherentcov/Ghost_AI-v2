@@ -7,6 +7,7 @@ import { GhostIcon } from '@/components/icons/GhostIcon';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { freeTierTagline } from '@/lib/pricing';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -45,13 +46,21 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState(false);
-  // Pre-checked: returning users already agreed; new users who land here still see the checkbox
+  // Отмечен заранее: вернувшиеся пользователи уже согласились; новые всё равно увидят чекбокс
   const [consented, setConsented] = useState(true);
+  // Бонус/лимит FREE-тарифа — с бэкенда, не захардкожены
+  const [tagline, setTagline] = useState<string | null>(null);
 
-  // ── Telegram Mini App: auto-authenticate with initData ────────────────────
+  useEffect(() => {
+    api.payments.plans()
+      .then((data) => setTagline(freeTierTagline(data.free.welcome_caspers, data.free.limits.std_messages_daily)))
+      .catch(() => {});
+  }, []);
+
+  // ── Telegram Mini App: автоавторизация через initData ──────────────────────
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
-    if (!tg?.initData) return; // Not inside Telegram — show normal login
+    if (!tg?.initData) return; // Не внутри Telegram — показываем обычный вход
 
     tg.ready?.();
     tg.expand?.();
@@ -70,7 +79,7 @@ export default function LoginPage() {
       });
   }, []);
 
-  // ── Telegram WebApp loading state ─────────────────────────────────────────
+  // ── Состояние загрузки Telegram WebApp ──────────────────────────────────────
   if (tgLoading) {
     return (
       <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
@@ -96,7 +105,7 @@ export default function LoginPage() {
     );
   }
 
-  // ── Regular web login ─────────────────────────────────────────────────────
+  // ── Обычный вход через веб ───────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[var(--bg-void)] flex items-center justify-center p-6">
       <motion.div
@@ -114,7 +123,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Agreement checkbox — pre-checked for returning users */}
+          {/* Чекбокс согласия — отмечен заранее для вернувшихся пользователей */}
           <label className="flex items-start gap-3 cursor-pointer group mb-1">
             <div className="mt-0.5 flex-shrink-0">
               <input
@@ -208,9 +217,9 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">
-          🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
-        </p>
+        {tagline && (
+          <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">{tagline}</p>
+        )}
       </motion.div>
     </div>
   );

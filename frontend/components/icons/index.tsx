@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react';
 
 export { GhostIcon } from './GhostIcon';
 
-// ─── Shared base ──────────────────────────────────────────────────────────────
+// ─── Общая база ──────────────────────────────────────────────────────────────
 
 interface IconProps {
   size?: number;
@@ -27,7 +27,7 @@ const base = (size: number, className: string, style?: CSSProperties) => ({
 });
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────
-/** Speech bubble with three typing dots */
+/** Речевой пузырь с тремя точками набора текста */
 export function ChatIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -39,8 +39,8 @@ export function ChatIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Vision / Eye ─────────────────────────────────────────────────────────────
-/** Eye with pupil highlight — used for image generation */
+// ─── Vision / Глаз ────────────────────────────────────────────────────────────
+/** Глаз с бликом на зрачке — для генерации изображений */
 export function VisionIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -51,8 +51,8 @@ export function VisionIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Sound / Speaker ──────────────────────────────────────────────────────────
-/** Speaker cone with two sound waves */
+// ─── Sound / Динамик ──────────────────────────────────────────────────────────
+/** Динамик с двумя звуковыми волнами */
 export function SoundIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -64,7 +64,7 @@ export function SoundIcon({ size = 20, className = '', style }: IconProps) {
 }
 
 // ─── Reel / Play ─────────────────────────────────────────────────────────────
-/** Filled play button inside a circle — for video history */
+/** Залитая кнопка play в круге — для истории видео */
 export function ReelIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -74,8 +74,8 @@ export function ReelIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Think / Lightbulb ───────────────────────────────────────────────────────
-/** Lightbulb with filament glow lines — for pro/think mode */
+// ─── Think / Лампочка ────────────────────────────────────────────────────────
+/** Лампочка со свечением нити накала — для режима pro/think */
 export function ThinkIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -86,8 +86,8 @@ export function ThinkIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Token / Gem ─────────────────────────────────────────────────────────────
-/** Hexagonal gem — for token / Casper usage stats */
+// ─── Token / Кристалл ────────────────────────────────────────────────────────
+/** Шестигранный кристалл — для статистики использования токенов / Caspers */
 export function TokenIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -108,8 +108,8 @@ export function PlusIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Send / Paper plane ───────────────────────────────────────────────────────
-/** Paper airplane — primary send action */
+// ─── Send / Бумажный самолётик ─────────────────────────────────────────────────
+/** Бумажный самолётик — основное действие отправки */
 export function SendIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -119,7 +119,7 @@ export function SendIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Settings / Gear ─────────────────────────────────────────────────────────
+// ─── Settings / Шестерёнка ───────────────────────────────────────────────────
 export function SettingsIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg
@@ -141,7 +141,7 @@ export function SettingsIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── User / Person ───────────────────────────────────────────────────────────
+// ─── User / Человек ──────────────────────────────────────────────────────────
 export function UserIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -151,7 +151,7 @@ export function UserIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Trash ───────────────────────────────────────────────────────────────────
+// ─── Trash / Корзина ─────────────────────────────────────────────────────────
 export function TrashIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -164,7 +164,7 @@ export function TrashIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Edit / Pencil ────────────────────────────────────────────────────────────
+// ─── Edit / Карандаш ─────────────────────────────────────────────────────────
 export function EditIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -174,7 +174,7 @@ export function EditIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Copy ────────────────────────────────────────────────────────────────────
+// ─── Copy / Копировать ───────────────────────────────────────────────────────
 export function CopyIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -184,8 +184,8 @@ export function CopyIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Sparkle / Star ──────────────────────────────────────────────────────────
-/** 4-pointed sparkle star */
+// ─── Sparkle / Звезда ────────────────────────────────────────────────────────
+/** 4-лучевая искрящаяся звезда */
 export function SparkleIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -194,7 +194,7 @@ export function SparkleIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Attach / Paperclip ──────────────────────────────────────────────────────
+// ─── Attach / Скрепка ────────────────────────────────────────────────────────
 export function AttachIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -203,7 +203,7 @@ export function AttachIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Menu ────────────────────────────────────────────────────────────────────
+// ─── Menu / Меню ─────────────────────────────────────────────────────────────
 export function MenuIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -214,7 +214,7 @@ export function MenuIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Chevron down ────────────────────────────────────────────────────────────
+// ─── Chevron вниз ────────────────────────────────────────────────────────────
 export function ChevronDownIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -223,7 +223,7 @@ export function ChevronDownIcon({ size = 20, className = '', style }: IconProps)
   );
 }
 
-// ─── X / Close ───────────────────────────────────────────────────────────────
+// ─── X / Закрыть ─────────────────────────────────────────────────────────────
 export function XIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -233,7 +233,7 @@ export function XIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Check ───────────────────────────────────────────────────────────────────
+// ─── Check / Галочка ─────────────────────────────────────────────────────────
 export function CheckIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -242,8 +242,8 @@ export function CheckIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Image / Photo ───────────────────────────────────────────────────────────
-/** Photo frame with mountain landscape and sun */
+// ─── Image / Фото ────────────────────────────────────────────────────────────
+/** Рамка фото с горным пейзажем и солнцем */
 export function ImageIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -254,8 +254,8 @@ export function ImageIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Music note ──────────────────────────────────────────────────────────────
-/** Two beamed eighth notes */
+// ─── Music note / Нота ───────────────────────────────────────────────────────
+/** Две восьмые ноты со связкой */
 export function MusicIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -266,7 +266,7 @@ export function MusicIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Video camera ────────────────────────────────────────────────────────────
+// ─── Video camera / Видеокамера ──────────────────────────────────────────────
 export function VideoIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -276,7 +276,7 @@ export function VideoIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Arrow down ──────────────────────────────────────────────────────────────
+// ─── Arrow down / Стрелка вниз ────────────────────────────────────────────────
 export function ArrowDownIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -286,8 +286,8 @@ export function ArrowDownIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── History / Clock ─────────────────────────────────────────────────────────
-/** Clock face with back-pointing arrow */
+// ─── History / Часы ──────────────────────────────────────────────────────────
+/** Циферблат со стрелкой, указывающей назад */
 export function HistoryIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -298,7 +298,7 @@ export function HistoryIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
-// ─── Download ────────────────────────────────────────────────────────────────
+// ─── Download / Скачать ──────────────────────────────────────────────────────
 export function DownloadIcon({ size = 20, className = '', style }: IconProps) {
   return (
     <svg {...base(size, className, style)}>
@@ -311,8 +311,8 @@ export function DownloadIcon({ size = 20, className = '', style }: IconProps) {
 
 // ─── Casper Coin ─────────────────────────────────────────────────────────────
 /**
- * Gold coin with a mini ghost inside.
- * Used for Casper currency display throughout the UI.
+ * Золотая монета с мини-призраком внутри.
+ * Используется для отображения валюты Casper по всему интерфейсу.
  */
 export function CasperCoin({ size = 14, className = '' }: { size?: number; className?: string }) {
   return (
@@ -325,20 +325,20 @@ export function CasperCoin({ size = 14, className = '' }: { size?: number; class
       className={className}
       style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
     >
-      {/* Coin base */}
+      {/* Основа монеты */}
       <circle cx="10" cy="10" r="9.5" fill="#F5C518" />
       <circle cx="10" cy="10" r="9.5" fill="none" stroke="#B8960C" strokeWidth="1" />
-      {/* Inner rim */}
+      {/* Внутренний ободок */}
       <circle cx="10" cy="10" r="7.8" fill="none" stroke="#F0D060" strokeWidth="0.5" opacity="0.6" />
-      {/* Highlight */}
+      {/* Блик */}
       <ellipse cx="7.5" cy="7" rx="2.5" ry="1.8" fill="#FFE866" opacity="0.35" />
-      {/* Ghost body */}
+      {/* Тело призрака */}
       <path
         d="M7.5 10.8 C7.5 7.8 8.6 5.8 10 5.8 C11.4 5.8 12.5 7.8 12.5 10.8 L12.5 14.8 Q11.2 13.6 10 14.8 Q8.8 13.6 7.5 14.8 Z"
         fill="white"
         opacity="0.93"
       />
-      {/* Ghost eyes */}
+      {/* Глаза призрака */}
       <circle cx="9" cy="9.8" r="0.9" fill="#8B6508" />
       <circle cx="11" cy="9.8" r="0.9" fill="#8B6508" />
     </svg>

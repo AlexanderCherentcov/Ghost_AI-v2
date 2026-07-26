@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
@@ -8,6 +9,10 @@ import {
   SparkleIcon, TokenIcon, ArrowDownIcon,
 } from '@/components/icons';
 import { SupportWidget } from '@/components/ui/SupportWidget';
+import { api, type PlanInfo } from '@/lib/api';
+import { fakeCyclePrice, freeTierTagline } from '@/lib/pricing';
+import { formatNumber } from '@/lib/utils';
+import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
 
 const FEATURES = [
   {
@@ -47,41 +52,6 @@ const FEATURES = [
   },
 ];
 
-const PLANS = [
-  {
-    name: 'Базовый',
-    price: 790,
-    fakePrice: 1580,   // price × 2 (fake 50% off)
-    caspers: 300,
-    features: ['Стандартный чат: безлимит', '300 Caspers/мес', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers', 'Музыка — 5 Caspers/трек'],
-    badge: null,
-  },
-  {
-    name: 'Про',
-    price: 1690,
-    fakePrice: 3380,
-    caspers: 700,
-    features: ['Стандартный чат: безлимит', '700 Caspers/мес', 'Про чат: 20 запросов/день бесплатно', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
-    badge: 'Популярный',
-  },
-  {
-    name: 'VIP',
-    price: 3990,
-    fakePrice: 7980,
-    caspers: 1800,
-    features: ['Стандартный чат: безлимит', '1 800 Caspers/мес', 'Про чат: 50 запросов/день бесплатно', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
-    badge: null,
-  },
-  {
-    name: 'Ультра',
-    price: 5990,
-    fakePrice: 11980,
-    caspers: 2800,
-    features: ['Стандартный чат: безлимит', '2 800 Caspers/мес', 'Про чат: безлимит', 'Картинки — 10 Caspers/шт', 'Видео — от 25 Caspers'],
-    badge: 'Максимум',
-  },
-];
-
 const THESIS = [
   { Icon: SparkleIcon, title: 'Интеллектуальный роутинг', desc: 'Каждый запрос автоматически направляется к оптимальному AI-движку. Скорость там, где нужно — мощь там, где требуется.' },
   { Icon: TokenIcon,   title: 'Мгновенная скорость',      desc: 'Оптимизированная инфраструктура доставляет ответы быстрее, чем вы ожидаете. Каждый запрос обрабатывается с максимальной эффективностью.' },
@@ -89,6 +59,17 @@ const THESIS = [
 ];
 
 export default function LandingPage() {
+  // Тарифы — только с бэкенда (GET /plans), без локальной копии цифр
+  const [plans, setPlans] = useState<PlanInfo[]>([]);
+  // Бонус/лимит FREE-тарифа для маркетинговой строки — тоже с бэкенда, не захардкожены
+  const [tagline, setTagline] = useState<string | null>(null);
+  useEffect(() => {
+    api.payments.plans().then((data) => {
+      setPlans(data.plans);
+      setTagline(freeTierTagline(data.free.welcome_caspers, data.free.limits.std_messages_daily));
+    }).catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--bg-void)] text-white overflow-x-hidden">
       {/* Navbar */}
@@ -117,7 +98,7 @@ export default function LandingPage() {
       <main>
       {/* Hero */}
       <section className="relative flex flex-col items-center justify-center min-h-screen text-center px-6 overflow-hidden">
-        {/* Ghost background text */}
+        {/* Фоновый текст-призрак */}
         <span className="ghost-bg-text top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           GHOSTLINE
         </span>
@@ -162,17 +143,19 @@ export default function LandingPage() {
             </a>
           </motion.div>
 
-          <motion.p
-            className="mt-6 text-xs text-[rgba(255,255,255,0.2)]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1, duration: 0.4 }}
-          >
-            🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
-          </motion.p>
+          {tagline && (
+            <motion.p
+              className="mt-6 text-xs text-[rgba(255,255,255,0.2)]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1, duration: 0.4 }}
+            >
+              {tagline}
+            </motion.p>
+          )}
         </motion.div>
 
-        {/* Scroll indicator */}
+        {/* Индикатор прокрутки */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[rgba(255,255,255,0.2)]">
           <div className="w-px h-8 bg-gradient-to-b from-transparent to-current" />
           <ArrowDownIcon size={16} className="animate-bounce-slow" />
@@ -271,11 +254,13 @@ export default function LandingPage() {
             <p className="text-[rgba(255,255,255,0.4)]">Начните бесплатно. Прокачайтесь когда нужно.</p>
           </motion.div>
 
-          {/* Free tier note */}
+          {/* Заметка про бесплатный тариф */}
           <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl px-6 py-4 mb-6">
             <div>
               <span className="font-medium text-white">Бесплатный план</span>
-              <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers · Без карты</span>
+              {tagline && (
+                <span className="ml-3 text-sm text-[rgba(255,255,255,0.4)]">{tagline} · Без карты</span>
+              )}
             </div>
             <Link href="/login" className="btn btn-ghost text-sm h-9 px-5 shrink-0">
               Начать бесплатно
@@ -283,9 +268,9 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {PLANS.map(({ name, price, fakePrice, caspers, features, badge }, i) => (
+            {plans.map(({ key, label: name, price, caspers_monthly: caspers, features, badge }, i) => (
               <motion.div
-                key={name}
+                key={key}
                 className={`card relative flex flex-col ${badge === 'Максимум' ? 'border-accent shadow-accent' : badge === 'Популярный' ? 'border-accent/60' : ''}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -300,22 +285,19 @@ export default function LandingPage() {
                 <h3 className="font-medium text-white mb-1">{name}</h3>
                 <div className="mb-1">
                   <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
-                    {fakePrice.toLocaleString('ru-RU')} ₽
+                    {formatNumber(fakeCyclePrice(price, 'monthly'))} ₽
                   </span>
                   <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">-50%</span>
                 </div>
                 <div className="mb-1">
-                  <span className="text-2xl font-medium">{price.toLocaleString('ru-RU')} ₽</span>
+                  <span className="text-2xl font-medium">{formatNumber(price)} ₽</span>
                   <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
                 </div>
-                <p className="text-xs text-accent mb-3">{caspers.toLocaleString('ru-RU')} Caspers/мес</p>
-                <ul className="space-y-1.5 flex-1 mb-5">
-                  {features.map((f) => (
-                    <li key={f} className="text-sm text-[rgba(255,255,255,0.4)] flex items-center gap-2">
-                      <span className="text-accent text-xs">✓</span> {f}
-                    </li>
-                  ))}
-                </ul>
+                <p className="text-xs text-accent mb-3">{formatNumber(caspers)} Caspers/мес</p>
+                <PlanFeatureList
+                  features={features}
+                  checkIcon={<span className="text-accent text-xs">✓</span>}
+                />
                 <Link
                   href="/login"
                   className={`w-full btn text-sm h-10 mt-auto ${badge ? 'btn-primary' : 'btn-ghost'}`}
@@ -342,9 +324,9 @@ export default function LandingPage() {
           <Link href="/login" className="btn btn-primary text-base h-12 px-10 mx-auto">
             Начать бесплатно
           </Link>
-          <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">
-            🎁 100 Caspers · 5 сообщений/день · всё остальное за Caspers
-          </p>
+          {tagline && (
+            <p className="mt-4 text-sm text-[rgba(255,255,255,0.2)]">{tagline}</p>
+          )}
         </motion.div>
       </section>
       </main>

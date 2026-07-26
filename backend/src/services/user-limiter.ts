@@ -1,13 +1,13 @@
 /**
- * Per-user rate limiting & in-flight lock
- * ────────────────────────────────────────
+ * Rate limiting на пользователя и блокировка одновременных запросов
+ * ────────────────────────────────────────────────────────────────
  * Защищает от спама и дублирующих запросов:
  *   • CHAT_RPM   — макс сообщений в минуту в чате (default 10)
  *   • GEN_RPM    — макс запросов генерации в минуту (default 3)
  *   • VIDEO_RPM  — макс запросов видео в минуту (default 1)
  *   • chat lock  — не даёт отправить новый запрос пока предыдущий стримится
  *
- * Hourly abuse detection (отправляет уведомление админу один раз в час):
+ * Обнаружение злоупотреблений по часам (уведомление админу — раз в час):
  *   • CHAT_RPH   — 30 сообщений в час
  *   • IMG_RPH    — 10 генераций картинок в час
  *   • VIDEO_RPH  — 5 генераций видео в час
@@ -22,14 +22,14 @@ import { prisma } from '../lib/prisma.js';
 const CHAT_RPM  = parseInt(process.env.CHAT_RPM  ?? '10');
 const GEN_RPM   = parseInt(process.env.GEN_RPM   ?? '3');
 const VIDEO_RPM = parseInt(process.env.VIDEO_RPM ?? '1');
-const LOCK_TTL  = 120; // seconds
+const LOCK_TTL  = 120; // секунд
 
-// Hourly thresholds for abuse detection
+// Часовые пороги для обнаружения злоупотреблений
 const CHAT_RPH  = parseInt(process.env.CHAT_RPH  ?? '30');
 const IMG_RPH   = parseInt(process.env.IMG_RPH   ?? '10');
 const VIDEO_RPH = parseInt(process.env.VIDEO_RPH ?? '5');
 
-// Current hour bucket (changes every 60 min)
+// Текущий часовой bucket (меняется каждые 60 мин)
 function hourBucket(): number {
   return Math.floor(Date.now() / 3_600_000);
 }
@@ -46,11 +46,11 @@ async function trackHourly(
     if (count === 1) await redis.expire(key, 3600);
 
     if (count === threshold + 1) {
-      // Send abuse alert exactly once per user/type/hour
+      // Отправляем уведомление о злоупотреблении ровно один раз на пользователя/тип/час
       const notifyKey = `notify:abuse:${type}:${userId}:${hour}`;
       const alreadySent = await redis.set(notifyKey, '1', 'EX', 3600, 'NX');
       if (alreadySent === 'OK') {
-        // Fetch user name asynchronously — don't await so we don't slow the request
+        // Запрашиваем имя пользователя асинхронно — без await, чтобы не тормозить запрос
         prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
           .then(user => notifyAbuse({
             userId,
@@ -67,21 +67,21 @@ async function trackHourly(
   }
 }
 
-// ─── Chat rate limit ──────────────────────────────────────────────────────────
+// ─── Rate limit чата ──────────────────────────────────────────────────────────
 
 export async function checkChatRateLimit(userId: string): Promise<boolean> {
   try {
     const key   = `rl:chat:${userId}`;
     const count = await redis.incr(key);
     if (count === 1) await redis.expire(key, 60);
-    trackHourly(userId, 'chat', CHAT_RPH); // fire-and-forget
+    trackHourly(userId, 'chat', CHAT_RPH); // fire-and-forget, без ожидания
     return count <= CHAT_RPM;
   } catch {
     return true;
   }
 }
 
-// ─── Generate rate limit (images) ─────────────────────────────────────────────
+// ─── Rate limit генерации (картинки) ──────────────────────────────────────────
 
 export async function checkGenRateLimit(userId: string): Promise<boolean> {
   try {
@@ -95,7 +95,7 @@ export async function checkGenRateLimit(userId: string): Promise<boolean> {
   }
 }
 
-// ─── Video rate limit ─────────────────────────────────────────────────────────
+// ─── Rate limit видео ──────────────────────────────────────────────────────────
 
 export async function checkVideoRateLimit(userId: string): Promise<boolean> {
   try {
@@ -109,7 +109,7 @@ export async function checkVideoRateLimit(userId: string): Promise<boolean> {
   }
 }
 
-// ─── Chat in-flight lock ──────────────────────────────────────────────────────
+// ─── Блокировка одновременных запросов в чате ─────────────────────────────────
 
 export async function acquireChatLock(userId: string): Promise<boolean> {
   try {

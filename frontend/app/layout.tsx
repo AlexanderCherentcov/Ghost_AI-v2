@@ -2,17 +2,27 @@ import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
 import { Providers } from './providers';
 
-// ─── Canonical domain ──────────────────────────────────────────────────────────
+// ─── Канонический домен ─────────────────────────────────────────────────────
 const BASE_URL = 'https://ghostlineai.ru';
 const TITLE    = 'GhostLine — Ваш AI-дух';
 const TAGLINE  = 'Думает. Создаёт. Исчезает в тишине.';
-const DESC     =
+
+// Метаданные (title/description/JSON-LD) генерируются здесь статически, в
+// отрыве от React-рендера и без доступа к backend/src/config/plans.ts (другой
+// npm-проект) — сеть на этапе сборки дёргать рискованно (сборка фронтенда и
+// бэкенда идут отдельными шагами в CI). Поэтому единственные два числа, что
+// видят пользователи в этом файле, объявлены здесь один раз — при смене
+// приветственного бонуса/дневного лимита в plans.ts поправить и эти константы.
+const FREE_WELCOME_CASPERS = 100;
+const FREE_DAILY_MESSAGES = 5;
+
+const DESC =
   'GhostLine — многорежимный AI-ассистент нового поколения. ' +
   'Умные диалоги, генерация изображений, музыки и видео. ' +
   'Использует самые передовые разработки в области искусственного интеллекта. ' +
-  'Начните бесплатно — 50 000 токенов в подарок.';
+  `Начните бесплатно — ${FREE_WELCOME_CASPERS} Caspers в подарок.`;
 
-// ─── Metadata ──────────────────────────────────────────────────────────────────
+// ─── Метаданные ──────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
@@ -37,13 +47,13 @@ export const metadata: Metadata = {
   publisher: 'GhostLine',
   category: 'technology',
 
-  // ── Canonical ─────────────────────────────────────────────────────────────
+  // ── Канонический URL ─────────────────────────────────────────────────────
   alternates: {
     canonical: BASE_URL,
     languages: { 'ru-RU': BASE_URL },
   },
 
-  // ── Icons (App Router auto-detects app/icon.svg + app/apple-icon.svg) ─────
+  // ── Иконки (App Router сам находит app/icon.svg + app/apple-icon.svg) ────
   icons: {
     icon: [
       { url: '/icon.svg', type: 'image/svg+xml' },
@@ -83,7 +93,7 @@ export const metadata: Metadata = {
     images: [`${BASE_URL}/opengraph-image`],
   },
 
-  // ── Robots ────────────────────────────────────────────────────────────────
+  // ── Роботы ────────────────────────────────────────────────────────────────
   robots: {
     index: true,
     follow: true,
@@ -96,11 +106,11 @@ export const metadata: Metadata = {
     },
   },
 
-  // ── Verification (add keys from Search Console when available) ─────────────
+  // ── Верификация (добавить ключи из Search Console, когда появятся) ────────
   // verification: { google: 'YOUR_KEY' },
 };
 
-// ─── Viewport ─────────────────────────────────────────────────────────────────
+// ─── Viewport ────────────────────────────────────────────────────────────────
 export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: dark)',  color: '#7B5CF0' },
@@ -111,10 +121,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Зум на iOS при фокусе уже решён через fontSize:16px на текстовых полях —
   // блокировать maximumScale не нужно, это ломает pinch-to-zoom слабовидящим (WCAG 1.4.4).
-  viewportFit: 'cover', // expose safe-area-inset-* on iOS notch/home-indicator
+  viewportFit: 'cover', // включает safe-area-inset-* для чёлки/индикатора home на iOS
 };
 
-// ─── JSON-LD Structured Data ──────────────────────────────────────────────────
+// ─── JSON-LD структурированные данные ─────────────────────────────────────────
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -153,7 +163,7 @@ const jsonLd = {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'RUB',
-        description: '100 Caspers · 5 сообщений/день бесплатно',
+        description: `${FREE_WELCOME_CASPERS} Caspers · ${FREE_DAILY_MESSAGES} сообщений/день бесплатно`,
       },
       featureList: [
         'AI-диалоги',
@@ -166,22 +176,22 @@ const jsonLd = {
   ],
 };
 
-// ─── Root Layout ──────────────────────────────────────────────────────────────
+// ─── Корневой layout ─────────────────────────────────────────────────────────
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className="dark" suppressHydrationWarning>
       <head>
-        {/* Theme + font init — runs before paint to prevent flash */}
+        {/* Инициализация темы и шрифта — выполняется до отрисовки, чтобы не было мигания */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme')||'dark';var f=localStorage.getItem('fontSize')||'medium';var cl=document.documentElement.classList;cl.remove('light','dark');cl.add(t);cl.remove('font-small','font-medium','font-large');if(f!=='medium')cl.add('font-'+f);}catch(e){}})();` }} />
-        {/* Preserve OAuth callback hash — store in window global AND sessionStorage.
-            window.__oauthHash survives COOP browsing-context switches that wipe sessionStorage. */}
+        {/* Сохраняем хэш OAuth-колбэка — в глобальную переменную window И в sessionStorage.
+            window.__oauthHash переживает переключения browsing-context при COOP, которые стирают sessionStorage. */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(window.location.pathname.startsWith('/auth/callback')&&window.location.hash){var h=window.location.hash;window.__oauthHash=h;try{sessionStorage.setItem('_oauthHash',h);}catch(e){}}}catch(e){}})();` }} />
-        {/* JSON-LD */}
+        {/* JSON-LD разметка */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        {/* Preconnect to Google Fonts (already in CSS) */}
+        {/* Preconnect к Google Fonts (уже используется в CSS) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>

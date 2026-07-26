@@ -17,7 +17,7 @@ const createCasperSchema = z.object({
 });
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
-  // ── Create subscription payment ───────────────────────────────────────────
+  // ── Создание платежа за подписку ──────────────────────────────────────────
   fastify.post('/payments/create', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -50,7 +50,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Create Casper top-up payment ──────────────────────────────────────────
+  // ── Создание платежа на докупку Caspers ───────────────────────────────────
   fastify.post('/payments/caspers/create', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -75,7 +75,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── YooKassa webhook ──────────────────────────────────────────────────────
+  // ── Вебхук YooKassa ────────────────────────────────────────────────────────
   fastify.post('/payments/webhook', async (request, reply) => {
     try {
       await processWebhook(request.body);
@@ -86,7 +86,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // ── Payment status ────────────────────────────────────────────────────────
+  // ── Статус платежа ─────────────────────────────────────────────────────────
   fastify.get('/payments/status/:yokassaId', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -101,7 +101,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Payment history ───────────────────────────────────────────────────────
+  // ── История платежей ───────────────────────────────────────────────────────
   fastify.get('/payments', {
     preHandler: [fastify.authenticate],
     handler: async (request) => {

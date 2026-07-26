@@ -2,7 +2,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const TOKEN_KEY = 'tg_access_token';
 
 let _accessToken: string | null = null;
-let _initData: string | null = null; // cached for auto re-auth on token expiry
+let _initData: string | null = null; // кэшируется для тихой переавторизации при истечении токена
 
 function loadToken(): string | null {
   if (_accessToken) return _accessToken;
@@ -18,7 +18,7 @@ export function getToken(): string | null {
   return loadToken();
 }
 
-/** Cache Telegram initData so apiRequest can silently re-auth on 401 */
+/** Кэширует Telegram initData, чтобы apiRequest мог тихо переавторизоваться при 401 */
 export function setInitData(data: string) {
   _initData = data;
 }
@@ -87,13 +87,13 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   try {
     return await fetchWithAuth<T>(path, options);
   } catch (err: any) {
-    // JWT expired — silently re-authenticate with cached Telegram initData and retry once
+    // JWT истёк — тихо переавторизуемся по кэшированному Telegram initData и повторяем запрос один раз
     if (err?.status === 401 && _initData) {
       try {
         await initAuth(_initData);
-        return await fetchWithAuth<T>(path, options); // retry with new token
+        return await fetchWithAuth<T>(path, options); // повтор с новым токеном
       } catch {
-        throw err; // re-auth failed — bubble original 401
+        throw err; // переавторизация не удалась — пробрасываем исходную 401
       }
     }
     throw err;

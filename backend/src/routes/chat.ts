@@ -13,10 +13,11 @@ import { OR_MODELS } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import { notifyApiError } from '../services/admin-notify.js';
+import { shouldRefundCaspers, resolveChatErrorMessage } from '../lib/chat-errors.js';
 import { generateChatTitle } from './dispatch.js';
 import type { SocketStream } from '@fastify/websocket';
 
-// ─── Schemas ──────────────────────────────────────────────────────────────────
+// ─── Схемы ─────────────────────────────────────────────────────────────────────
 
 const createChatSchema = z.object({
   title: z.string().max(100).optional(),
@@ -32,20 +33,20 @@ const wsMessageSchema = z.object({
     content: z.string(),
   })).default([]),
   preferredModel: z.enum(['haiku', 'deepseek']).optional(),
-  // Image: base64 data URL (max ~3MB after resize)
+  // Изображение: base64 data URL (макс. ~3МБ после ресайза)
   imageUrl: z.string().max(3145728).optional(),
-  // Document: extracted text content
+  // Документ: извлечённый текст
   fileContent: z.string().max(65536).optional(),
-  // Original file name (shown in chat + used for lang detection)
+  // Исходное имя файла (показывается в чате + используется для определения языка)
   fileName: z.string().max(255).optional(),
-  // Code-fence language (js, python, etc.)
+  // Язык для блока кода (js, python и т.д.)
   fileLang: z.string().max(32).optional(),
 });
 
-// ─── Plugin ───────────────────────────────────────────────────────────────────
+// ─── Плагин ───────────────────────────────────────────────────────────────────
 
 export default async function chatRoutes(fastify: FastifyInstance) {
-  // ── List chats ────────────────────────────────────────────────────────────
+  // ── Список чатов ──────────────────────────────────────────────────────────
   fastify.get('/chats', {
     preHandler: [fastify.authenticate],
     handler: async (request) => {
@@ -66,7 +67,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Create chat ───────────────────────────────────────────────────────────
+  // ── Создание чата ─────────────────────────────────────────────────────────
   fastify.post('/chats', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -81,7 +82,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Get chat messages ─────────────────────────────────────────────────────
+  // ── Получение сообщений чата ──────────────────────────────────────────────
   fastify.get('/chats/:id/messages', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -112,14 +113,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Decrypt message content (graceful — legacy unencrypted messages returned as-is)
+      // Расшифровываем содержимое (мягко — старые незашифрованные сообщения возвращаются как есть)
       const decrypted = messages.map((m) => ({ ...m, content: safeDecrypt(m.content) }));
 
       return { messages: decrypted };
     },
   });
 
-  // ── Auto-generate chat title from image/video/music prompt ──────────────
+  // ── Автогенерация заголовка чата по промту изображения/видео/музыки ──────
   fastify.post('/chats/:id/auto-title', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -132,7 +133,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       const chat = await prisma.chat.findFirst({ where: { id, userId } });
       if (!chat) return reply.code(404).send({ error: 'Chat not found' });
 
-      // Only auto-title if still default and few messages (first generation)
+      // Автогенерация заголовка только если он ещё дефолтный и сообщений мало (первая генерация)
       if (chat.title !== 'Новый чат') return reply.send({ title: chat.title });
       const msgCount = await prisma.message.count({ where: { chatId: id } });
       if (msgCount > 4) return reply.send({ title: chat.title });
@@ -143,7 +144,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Update chat title ─────────────────────────────────────────────────────
+  // ── Обновление заголовка чата ─────────────────────────────────────────────
   fastify.patch('/chats/:id', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -163,7 +164,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Delete chat ───────────────────────────────────────────────────────────
+  // ── Удаление чата ─────────────────────────────────────────────────────────
   fastify.delete('/chats/:id', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -178,7 +179,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── WebSocket: stream AI response ─────────────────────────────────────────
+  // ── WebSocket: стриминг ответа ИИ ─────────────────────────────────────────
   fastify.get('/chat/stream', { websocket: true }, async (connection: SocketStream, request) => {
     const socket = connection.socket;
     const send = (data: object) => {
@@ -198,7 +199,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      // Verify JWT
+      // Проверяем JWT
       let userId: string;
       try {
         const payload = fastify.jwt.verify<{ userId: string }>(parsed.jwt ?? '');
@@ -208,7 +209,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      // ── [H-01] Ban check via Redis ─────────────────────────────────────────
+      // ── [H-01] Проверка бана через Redis ───────────────────────────────────
       {
         const redis = (await import('../lib/redis.js')).redis;
         const isBanned = await redis.exists(`banned:${userId}`);
@@ -219,7 +220,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // ── Per-user rate limit ────────────────────────────────────────────────
+      // ── Rate limit на пользователя ──────────────────────────────────────────
       if (!await checkChatRateLimit(userId)) {
         send({ type: 'error', code: 'RATE_LIMITED', message: 'Слишком много сообщений. Подождите минуту.' });
         return;
@@ -237,7 +238,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       let requestType: RequestType = 'chat_std';
 
       try {
-        // Verify chat ownership + load user profile
+        // Проверяем владение чатом + загружаем профиль пользователя
         const [chat, userProfile] = await Promise.all([
           prisma.chat.findFirst({ where: { id: chatId, userId } }),
           prisma.user.findUnique({ where: { id: userId }, select: { responseStyle: true, plan: true } }),
@@ -249,18 +250,18 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         const responseStyle = userProfile?.responseStyle ?? null;
         const plan = userProfile?.plan ?? 'FREE';
 
-        // File attachments require paid plan
+        // Вложения-файлы требуют платного тарифа
         if (fileContent && plan === 'FREE') {
           send({ type: 'error', code: 'FREE_LOCKED', message: 'Файлы доступны с платного тарифа.' });
           return;
         }
 
-        // Effective prompt for AI
+        // Итоговый промт для ИИ
         const effectivePrompt = prompt
           || (imageUrl ? 'Опиши что изображено на картинке.' : '')
           || (fileContent ? 'Проанализируй содержимое прикреплённого файла.' : '');
 
-        // Build file context block
+        // Собираем блок контекста файла
         let fileBlock = '';
         if (fileContent && fileName) {
           const lang = fileLang ?? 'text';
@@ -269,7 +270,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Route request
+        // Маршрутизируем запрос
         const { provider, complexity, model, fallbackModels, maxTokens } = route(
           effectivePrompt || fileName || 'анализ файла',
           !!fileContent,
@@ -280,17 +281,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           mode,
         );
 
-        // Determine request type
-        // sonar (web search) and think mode count as pro
+        // Определяем тип запроса
+        // sonar (веб-поиск) и режим think считаются про-запросами
         const isProRequest = mode === 'think' || model === OR_MODELS.sonar;
         requestType = isProRequest ? 'chat_pro' : 'chat_std';
 
-        // Reset daily/weekly/monthly counters if period ended
+        // Сбрасываем дневные/недельные/месячные счётчики, если период закончился
         await checkResets(userId);
-        // Check limits and deduct BEFORE calling AI (with refund on error)
+        // Проверяем лимиты и списываем ДО вызова ИИ (с возвратом при ошибке)
         await checkAndDeduct(userId, requestType, 1, !!fileContent);
 
-        // History context for cache key
+        // Контекст истории для ключа кэша
         const userHistoryContext = history
           .filter(m => m.role === 'user')
           .map(m => m.content);
@@ -308,7 +309,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           ? await getVectorCached(mode, effectivePrompt, userHistoryContext, responseStyle)
           : { hit: false as const };
 
-        // Merge cache hits
+        // Объединяем попадания в кэш
         const cacheHit = cached.hit ? cached : vecCached;
         if (cacheHit.hit) {
           const response = cacheHit.response as { content: string };
@@ -334,7 +335,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
           ]);
 
-          // Stream cached response token by token
+          // Стримим кэшированный ответ токен за токеном
           for (const char of response.content) {
             send({ type: 'token', data: char });
           }
@@ -342,13 +343,13 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Build messages array for AI
+        // Собираем массив сообщений для ИИ
         const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle, plan) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;
         if (imageUrl && !fileContent) {
-          // Multimodal: text + image (only for OpenRouter vision models)
+          // Мультимодально: текст + изображение (только для vision-моделей OpenRouter)
           const textPart = effectivePrompt.trim() || 'Опиши что изображено на картинке.';
           userMsg = {
             role: 'user',
@@ -363,17 +364,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const messages: ChatMessage[] = [systemMsg, ...historyMsgs, userMsg];
 
-        // Save user message
+        // Сохраняем сообщение пользователя
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
           data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
-        // Stream from provider
+        // Стримим от провайдера
         let fullResponse = '';
 
-        // Std chat: Cloudflare Llama primary, OpenRouter Llama fallback if CF is down
-        // Pro/think: OpenRouter with model fallback chain
+        // Обычный чат: основной Cloudflare Llama, резерв OpenRouter Llama если CF недоступен
+        // Про/think: OpenRouter с цепочкой резервных моделей
         async function* buildStream() {
           if (provider !== 'cloudflare') {
             yield* streamOpenRouter(messages, model, maxTokens, fallbackModels);
@@ -396,7 +397,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             }
           }
         } catch (streamErr: any) {
-          // API error during streaming: notify admins with details, send generic message to user
+          // Ошибка API во время стриминга: уведомляем админов с деталями, пользователю — общее сообщение
           const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
           notifyApiError({
             userId,
@@ -406,20 +407,20 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             context: `mode=${mode} provider=${provider} model=${model}`,
           }).catch(() => {});
 
-          // Refund caspers if it was a paid operation
+          // Возвращаем Caspers, если операция была платной
           await refundCaspers(userId, requestType).catch(() => {});
 
           send({ type: 'error', code: 'SERVER_ERROR', message: 'Ошибка соединения, попробуйте позже' });
           return;
         }
 
-        // Cache the response (skip if any attachment present)
+        // Кэшируем ответ (пропускаем, если есть вложение)
         if (!hasAttachment && fullResponse) {
           await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
           await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
         }
 
-        // Save assistant message
+        // Сохраняем ответ ассистента
         await prisma.$transaction([
           prisma.message.create({
             data: {
@@ -437,10 +438,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
         ]);
 
-        // Send done immediately — unblocks user input right away
+        // Отправляем done сразу — это сразу разблокирует ввод у пользователя
         send({ type: 'done', tokensCost: 0, cacheHit: false });
 
-        // Auto-generate title in background (non-blocking)
+        // Автогенерация заголовка в фоне (не блокирует)
         const messageCount = await prisma.message.count({ where: { chatId } });
         if (messageCount <= 2 && chat.title === 'Новый чат') {
           const textSource = prompt || null;
@@ -452,28 +453,20 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             .catch(() => fallback)
             .then(async (title) => {
               await prisma.chat.update({ where: { id: chatId }, data: { title } }).catch(() => {});
-              // Push title to still-open WS so sidebar updates without reload
+              // Отправляем заголовок в ещё открытый WS, чтобы сайдбар обновился без перезагрузки
               send({ type: 'title', chatId, title } as any);
             });
         }
       } catch (err: any) {
         fastify.log.error(err, '[WS] Error processing message');
-        // If it's a limit/auth error, don't refund
-        const limitCodes = [
-          'LIMIT_FREE_MESSAGES', 'LIMIT_STD_MESSAGES', 'LIMIT_PRO_MESSAGES',
-          'LIMIT_PRO_UNAVAILABLE', 'LIMIT_FILES', 'LIMIT_IMAGES', 'LIMIT_MUSIC',
-          'LIMIT_VIDEOS', 'FREE_LOCKED', 'PLAN_RESTRICTED', 'INSUFFICIENT_CASPERS',
-          'UNAUTHORIZED',
-        ];
-        if (userId && !limitCodes.includes(err.code)) {
+        // Классификация кода ошибки — см. lib/chat-errors.ts (протестировано отдельно,
+        // расхождение этого списка с tokens.ts уже один раз пряталось от пользователя).
+        if (userId && shouldRefundCaspers(err.code)) {
           await refundCaspers(userId, requestType).catch(() => {});
         }
 
-        // Send generic message to user (never expose provider/model details)
-        const userMessage = limitCodes.includes(err.code)
-          ? (err.message ?? 'Лимит исчерпан')
-          : 'Генерация провалась, попробуйте позже';
-        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: userMessage });
+        // Отправляем пользователю сообщение (никогда не раскрываем детали провайдера/модели)
+        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: resolveChatErrorMessage(err.code, err.message) });
       } finally {
         await releaseChatLock(userId).catch(() => {});
       }

@@ -6,8 +6,8 @@ import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  // Onboarding pages are outside (app) group — refresh token manually
-  // so accessToken is available when user reloads the page mid-onboarding
+  // Страницы онбординга вне группы (app) — обновляем токен вручную,
+  // чтобы accessToken был доступен, если пользователь перезагрузит страницу посреди онбординга
   useEffect(() => {
     const { refreshToken, setAuth } = useAuthStore.getState();
     if (!refreshToken) return;
@@ -22,12 +22,12 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen bg-[var(--bg-void)] flex flex-col">
-      {/* Header */}
+      {/* Шапка */}
       <div className="flex items-center justify-center pt-8 pb-4">
         <GhostIcon size={24} className="text-accent" />
         <span className="ml-2 text-sm font-medium text-white">GhostLine</span>
       </div>
-      {/* Content */}
+      {/* Содержимое */}
       <div className="flex-1 flex items-center justify-center px-6 py-8">
         {children}
       </div>

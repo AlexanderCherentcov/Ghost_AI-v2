@@ -41,16 +41,16 @@ export function routeVideo(
 ): VideoRouterResult {
   const lower = prompt.toLowerCase();
 
-  // Pro model for complex/human scenes
+  // Pro-модель для сложных сцен/сцен с людьми
   if (isPro || PREMIUM_SCENE.some((kw) => lower.includes(kw))) {
     return { model: 'veo3_pro', reason: 'pro/premium scene → Veo3.1 Pro' };
   }
 
-  // Image-to-video → Kling (better motion preservation)
+  // Image-to-video → Kling (лучше сохраняет движение)
   if (hasSourceImage) {
     return { model: 'kling_std', reason: 'image-to-video → Kling STD' };
   }
 
-  // Default → Veo3.1 Standard
+  // По умолчанию → Veo3.1 Standard
   return { model: 'veo3_standard', reason: 'default → Veo3.1 Standard' };
 }

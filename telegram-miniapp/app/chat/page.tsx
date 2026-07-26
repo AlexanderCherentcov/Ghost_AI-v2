@@ -9,6 +9,10 @@ import remarkGfm from 'remark-gfm';
 import { TelegramProvider, useTg } from '@/components/TelegramProvider';
 import { BottomNav } from '@/components/BottomNav';
 import { apiRequest, getToken, uploadImage } from '@/lib/auth';
+import {
+  IMAGE_VERBS, EDIT_VERBS, REF_KEYWORDS,
+  isImageRequest, isImageEditRequest, isPromptComposeRequest, extractImagePrompt,
+} from '@/lib/image-intent';
 
 interface Message {
   id: string;
@@ -29,104 +33,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
   ?? API_URL.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
 
-const IMAGE_VERBS = [
-  // imperative
-  'нарисуй', 'создай', 'сгенерируй', 'сделай', 'покажи',
-  // 1st-person future (mobile dictation / typos)
-  'нарисую', 'сгенерирую',
-  // infinitive
-  'нарисовать', 'создать', 'сгенерировать', 'сделать',
-  // english
-  'draw', 'generate', 'create', 'make',
+// Коды ошибок чата, для которых имеет смысл вести на баланс/тарифы —
+// см. backend/src/routes/chat.ts и backend/src/services/tokens.ts (единый источник кодов).
+const BALANCE_ERROR_CODES = [
+  'LIMIT_MESSAGES_DAILY', 'LIMIT_PRO_MESSAGES', 'LIMIT_PRO_UNAVAILABLE',
+  'LIMIT_IMAGES', 'LIMIT_MUSIC', 'LIMIT_VIDEOS', 'INSUFFICIENT_CASPERS',
+  'FREE_LOCKED', 'PLAN_RESTRICTED',
 ];
-const IMAGE_NOUNS = [
-  'картинку', 'картину', 'картинок', 'изображение', 'изображения', 'рисунок',
-  'рисунки', 'иллюстрацию', 'арт', 'image', 'picture', 'photo', 'illustration',
-];
-const IMAGE_EXACT = ['изображение в стиле', 'generate image', 'хочу картинку'];
-
-// Keywords indicating user is REFERENCING a previous message/prompt
-const REF_KEYWORDS = [
-  'по этому', 'по нему', 'по промту', 'по этой', 'этот промт', 'выше', 'его', 'из чата',
-];
-
-const EDIT_VERBS = [
-  'измени', 'изменить', 'отредактируй', 'отредактировать', 'сделай', 'поменяй', 'поменять',
-  'добавь', 'добавить', 'убери', 'убрать', 'замени', 'заменить', 'преврати', 'превратить',
-  'перекрась', 'раскрась', 'стилизуй', 'edit', 'change', 'modify', 'transform', 'remove', 'add',
-];
-
-const IMAGE_EDIT_REF = ['эту картинку', 'это изображение', 'её', 'ее', 'его', 'эту', 'это фото', 'картинку выше', 'изображение выше'];
-
-function isImageRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (IMAGE_EXACT.some((kw) => lower.includes(kw))) return true;
-  return IMAGE_VERBS.some((v) => lower.includes(v)) && IMAGE_NOUNS.some((n) => lower.includes(n));
-}
-
-function isImageEditRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  return EDIT_VERBS.some((v) => lower.includes(v)) && IMAGE_EDIT_REF.some((kw) => lower.includes(kw));
-}
-
-// Returns true if user wants AI to WRITE a prompt — NOT generate an image directly.
-// e.g. "создай мне промт для изображения битвы", "напиши промт 9:18"
-// Exception: "сгенерируй по этому промту" — user is USING a previously written prompt.
-function isPromptComposeRequest(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (REF_KEYWORDS.some((ref) => lower.includes(ref))) return false;
-  return lower.includes('промт') || lower.includes('prompt') || lower.includes('промпт');
-}
-
-function extractImagePrompt(content: string): string {
-  // 1. Code block ```...``` — highest priority
-  const codeBlock = content.match(/```[^\n]*\n?([\s\S]+?)```/);
-  if ((codeBlock?.[1]?.trim().length ?? 0) > 20) return codeBlock![1].trim().slice(0, 600);
-
-  // 2. Inline code `...` > 20 chars
-  const inline = content.match(/`([^`]{20,})`/);
-  if (inline?.[1]?.trim()) return inline[1].trim().slice(0, 600);
-
-  // 3. Bold **...** > 30 chars that's NOT a section header (doesn't end with : or —)
-  const boldMatches = content.match(/\*\*([^*]{30,})\*\*/g);
-  if (boldMatches?.length) {
-    const candidates = boldMatches
-      .map((m) => m.replace(/\*\*/g, '').trim())
-      .filter((t) => !t.endsWith(':') && !t.endsWith('—') && !t.endsWith('-'))
-      .sort((a, b) => b.length - a.length);
-    if (candidates[0]) return candidates[0].slice(0, 600);
-  }
-
-  // 4. Quoted text "..." or «...» > 30 chars
-  const quoted = content.match(/["""«]([^"""»\n]{30,})["""»]/);
-  if (quoted?.[1]?.trim()) return quoted[1].trim().slice(0, 600);
-
-  // 5. Find a line that looks like an image prompt
-  const IMAGE_KEYWORDS = ['4k', '8k', 'photorealistic', 'detailed', 'style', 'lighting',
-    'portrait', 'landscape', 'digital art', 'cinematic', 'high quality', 'beautiful',
-    'stunning', 'realistic', 'illustration', 'render', 'resolution'];
-  const INTRO_PREFIXES = ['конечно', 'вот ', 'используй', 'этот промт', 'данный', 'можно',
-    'вы можете', 'для генерации', 'для создания', 'ниже', 'предлагаю', 'here ', 'this '];
-  const lines = content
-    .replace(/\*\*/g, '').replace(/\*/g, '').replace(/#{1,6}\s+/g, '').replace(/`/g, '')
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 30 && !l.endsWith(':'));
-  const keywordLine = lines.find((l) => IMAGE_KEYWORDS.some((kw) => l.toLowerCase().includes(kw)));
-  if (keywordLine) return keywordLine.slice(0, 600);
-  const nonIntroLine = lines.find((l) => !INTRO_PREFIXES.some((p) => l.toLowerCase().startsWith(p)));
-  if (nonIntroLine) return nonIntroLine.slice(0, 600);
-  if (lines.length) return lines.sort((a, b) => b.length - a.length)[0].slice(0, 600);
-
-  return content
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '')
-    .replace(/---+/g, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-    .slice(0, 600);
-}
 
 function getFileCategory(file: File): 'image' | 'text' | 'binary' {
   if (file.type.startsWith('image/')) return 'image';
@@ -189,7 +102,7 @@ async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
   const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
   const filename = `ghostline-${type}-${Date.now()}.${ext}`;
 
-  // data: URI (base64 image) — blob download directly
+  // data: URI (base64-изображение) — скачиваем blob напрямую
   if (url.startsWith('data:')) {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -204,27 +117,27 @@ async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
     return;
   }
 
-  // Fetch blob via CORS (works when backend sets Cross-Origin-Resource-Policy: cross-origin)
+  // Скачиваем blob через CORS (работает, если бэкенд отдаёт Cross-Origin-Resource-Policy: cross-origin)
   let blob: Blob | null = null;
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (res.ok) blob = await res.blob();
-  } catch { /* CORS unavailable — fall through to non-blob paths */ }
+  } catch { /* CORS недоступен — переходим к вариантам без blob */ }
 
   if (blob) {
-    // Web Share API with File object — iOS shows "Сохранить видео/фото" → saves to Gallery
-    // Android shows "Сохранить в галерею" via share sheet
+    // Web Share API с объектом File — на iOS показывает "Сохранить видео/фото" → сохраняет в Галерею
+    // На Android показывает "Сохранить в галерею" через шторку шаринга
     const file = new File([blob], filename, { type: mimeType });
     if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: 'GhostLine' });
         return;
       } catch (e: any) {
-        if (e?.name === 'AbortError') return; // user cancelled share sheet
-        // share failed — fall through to anchor download
+        if (e?.name === 'AbortError') return; // пользователь закрыл шторку шаринга
+        // шаринг не удался — переходим к скачиванию через ссылку
       }
     }
-    // Anchor download fallback (saves to Files, not Gallery — but better than nothing)
+    // Фолбэк — скачивание через <a> (сохраняет в Файлы, не в Галерею, но лучше, чем ничего)
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -236,13 +149,13 @@ async function downloadMedia(url: string, type: 'image' | 'video' = 'image') {
     return;
   }
 
-  // No blob (CORS unavailable) — Telegram native download or open link
+  // Blob недоступен (CORS не сработал) — нативное скачивание Telegram или открытие ссылки
   if (tg?.downloadFile) { tg.downloadFile({ url, file_name: filename }); return; }
   if (tg?.openLink) { tg.openLink(url); return; }
   window.open(url, '_blank');
 }
 
-// Keep backward-compatible alias used by the lightbox
+// Алиас для обратной совместимости, используется в лайтбоксе
 const downloadImage = (url: string) => downloadMedia(url, 'image');
 
 export default function TgChatPage() {
@@ -279,7 +192,7 @@ function ChatApp() {
   const [videoSettingsOpen, setVideoSettingsOpen] = useState(false);
   const [videoCameraPreset, setVideoCameraPreset] = useState('static');
   const [videoNegativePrompt, setVideoNegativePrompt] = useState('');
-  const [videoCfgScale, setVideoCfgScale] = useState(50); // 0-100, maps to 0-1
+  const [videoCfgScale, setVideoCfgScale] = useState(50); // 0-100, преобразуется в 0-1
   const videoSettingsRef = useRef<HTMLDivElement>(null);
   const [vpHeight, setVpHeight] = useState('100dvh');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -290,7 +203,7 @@ function ChatApp() {
   const modelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync height with Telegram viewport — updates dynamically when keyboard opens/closes
+  // Синхронизация высоты с Telegram viewport — обновляется динамически при открытии/закрытии клавиатуры
   useEffect(() => {
     const tgApp = (window.Telegram?.WebApp) as any;
     if (!tgApp) return;
@@ -305,19 +218,19 @@ function ChatApp() {
     return () => tgApp.offEvent?.('viewportChanged', updateHeight);
   }, []);
 
-  // Sync chatId → URL so page refresh reopens the same chat
+  // Синхронизация chatId → URL, чтобы обновление страницы открывало тот же чат
   useEffect(() => {
     if (chatId) {
       router.replace(`/chat?id=${chatId}`);
     }
   }, [chatId]);
 
-  // Auto-scroll
+  // Автопрокрутка
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamContent, vpHeight]);
 
-  // Close model dropdown on outside click
+  // Закрытие выпадающего списка модели по клику снаружи
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (modelRef.current && !modelRef.current.contains(e.target as Node)) {
@@ -338,16 +251,16 @@ function ChatApp() {
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
 
-  // Init: load chat by ?id param, or last chat, or create new
+  // Инициализация: загрузить чат по параметру ?id, либо последний чат, либо создать новый
   useEffect(() => {
-    // Helper: load messages for a known chat id and resume any pending generation
+    // Вспомогательная функция: загрузить сообщения известного chatId и возобновить незавершённую генерацию
     function loadChat(id: string) {
       setChatId(id);
       localStorage.setItem('tg_lastChatId', id);
       apiRequest<{ messages: Message[] }>(`/chats/${id}/messages`)
         .then(({ messages: msgs }) => {
           setMessages(msgs);
-          // Resume pending generation job after page refresh
+          // Возобновляем незавершённую задачу генерации после обновления страницы
           const stored = localStorage.getItem(`pending_gen_${id}`);
           if (!stored) return;
           try {
@@ -385,9 +298,9 @@ function ChatApp() {
           }
         })
         .catch((err: any) => {
-          // 401 = JWT expired (auto re-auth in apiRequest also failed) — keep chatId
+          // 401 = JWT истёк (автопереавторизация в apiRequest тоже не удалась) — оставляем chatId
           if (err?.status === 401) return;
-          // Chat no longer exists or other error — start fresh
+          // Чат больше не существует или другая ошибка — начинаем заново
           localStorage.removeItem('tg_lastChatId');
           createNewChat();
         });
@@ -411,7 +324,7 @@ function ChatApp() {
       return;
     }
 
-    // Restore last session chat, or create a new one
+    // Восстанавливаем чат из прошлой сессии, либо создаём новый
     const lastId = localStorage.getItem('tg_lastChatId');
     if (lastId) {
       loadChat(lastId);
@@ -420,7 +333,7 @@ function ChatApp() {
     }
   }, []);
 
-  // WS with auto-reconnect
+  // WebSocket с автопереподключением
   useEffect(() => {
     let destroyed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -456,11 +369,15 @@ function ChatApp() {
         if (chunk.type === 'error') {
           setStreaming(false);
           setStreamContent('');
-          if (chunk.code === 'LIMIT_MESSAGES' || chunk.code === 'LIMIT_IMAGES') {
-            tg?.showAlert('Лимит исчерпан! Пополните баланс.', () => {
-              router.push('/balance');
-            });
-            tg?.HapticFeedback.notificationOccurred('error');
+          tg?.HapticFeedback.notificationOccurred('error');
+          // Сообщение уже готовое и дружелюбное — приходит с бэкенда (backend/src/routes/chat.ts).
+          // Раньше здесь проверялись только 2 кода из ~8 возможных — остальные ошибки
+          // (например LIMIT_MESSAGES_DAILY, самый частый лимит FREE-тарифа) молча пропадали.
+          const message = chunk.message || 'Не удалось отправить сообщение';
+          if (BALANCE_ERROR_CODES.includes(chunk.code)) {
+            tg?.showAlert(message, () => router.push('/balance'));
+          } else {
+            tg?.showAlert(message);
           }
         }
       };
@@ -485,7 +402,7 @@ function ChatApp() {
     };
   }, []);
 
-  // ── Image generation ─────────────────────────────────────────────────────────
+  // ── Генерация изображений ────────────────────────────────────────────────────
   const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string) => {
     if (!prompt.trim()) return;
     setStreaming(true);
@@ -539,7 +456,7 @@ function ChatApp() {
     }
   }, [tg, router, chatId]);
 
-  // ── Video generation ─────────────────────────────────────────────────────────
+  // ── Генерация видео ──────────────────────────────────────────────────────────
   const handleGenerateVideo = useCallback(async (prompt: string, imageUrl?: string) => {
     if (!prompt.trim() && !imageUrl) return;
     setGeneratingVideo(true);
@@ -596,7 +513,7 @@ function ChatApp() {
       if (err.code === 'LIMIT_VIDEOS' || err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {
         tg?.showAlert('Лимит видео исчерпан! Обновите тариф.', () => router.push('/balance'));
       } else if (err.code === 'PLAN_RESTRICTED') {
-        tg?.showAlert('Генерация видео доступна с тарифа STANDARD.', () => router.push('/balance'));
+        tg?.showAlert('Генерация видео доступна на платных тарифах.', () => router.push('/balance'));
       } else {
         tg?.showAlert(err.message ?? 'Ошибка генерации видео');
       }
@@ -606,7 +523,7 @@ function ChatApp() {
     }
   }, [tg, router, chatId, videoDuration, videoAspectRatio, videoEnableAudio, videoCameraPreset, videoNegativePrompt, videoCfgScale]);
 
-  // ── Music generation ─────────────────────────────────────────────────────────
+  // ── Генерация музыки ─────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string) => {
     if (!prompt.trim()) return;
     const generatingMusicRef_guard = generatingMusic;
@@ -668,14 +585,14 @@ function ChatApp() {
     }
   }, [generatingMusic, chatId, musicMode, musicDuration, sunoStyle, sunoInstrumental, tg]);
 
-  // ── File selection ────────────────────────────────────────────────────────────
+  // ── Выбор файла ───────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     setSelectedFile(file);
     e.target.value = '';
   }
 
-  // ── Chat send ─────────────────────────────────────────────────────────────────
+  // ── Отправка сообщения ───────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const prompt = input.trim();
     if ((!prompt && !selectedFile) || streaming || generatingVideo || generatingMusic) return;
@@ -683,7 +600,7 @@ function ChatApp() {
     const fileToSend = selectedFile;
     setSelectedFile(null);
 
-    // ── Mode-based routing ───────────────────────────────────────────────────
+    // ── Маршрутизация по режиму ──────────────────────────────────────────────
     if (chatMode === 'music') {
       return handleGenerateMusic(prompt || 'atmospheric ambient music');
     }
@@ -705,12 +622,12 @@ function ChatApp() {
       return handleGenerateVideo(prompt);
     }
 
-    // ── Image intent routing ─────────────────────────────────────────────────
+    // ── Определение намерения по картинке ────────────────────────────────────
     let isWritingPrompt = false;
     if (!fileToSend && prompt) {
       const lower = prompt.toLowerCase().trim();
 
-      // 1. Verb-only: bare verb OR verb + pronoun/ref (no image noun needed)
+      // 1. Только глагол: голый глагол ИЛИ глагол + местоимение/ссылка (существительное не нужно)
       //    "сгенерируй", "нарисуй его", "создай по этому промту"
       const verbOnly = IMAGE_VERBS.some(v =>
         lower === v ||
@@ -727,13 +644,13 @@ function ChatApp() {
         }
       }
 
-      // 2. User wants AI to WRITE a prompt — contains "промт" but NOT as a reference.
+      // 2. Пользователь хочет, чтобы ИИ НАПИСАЛ промпт — содержит "промт", но не как ссылку.
       //    "создай промт для изображения битвы", "напиши промт изображений 9:18"
-      //    → route to AI, skip image generation entirely
+      //    → направляем в ИИ-чат, генерацию изображения пропускаем полностью
       if (isPromptComposeRequest(prompt)) {
-        isWritingPrompt = true; // fall through to regular AI chat below
+        isWritingPrompt = true; // переходим к обычному ИИ-чату ниже
       } else if (isImageRequest(prompt)) {
-        // 3. Has reference keyword → extract prompt from last assistant message
+        // 3. Есть ключевое слово-ссылка → извлекаем промпт из последнего сообщения ассистента
         const isRef = REF_KEYWORDS.some((kw) => lower.includes(kw));
         if (isRef) {
           const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
@@ -741,10 +658,10 @@ function ChatApp() {
             return handleGenerateImage(extractImagePrompt(lastAssistant.content));
           }
         }
-        // 4. Direct image generation with user's own description
+        // 4. Прямая генерация изображения по собственному описанию пользователя
         return handleGenerateImage(prompt);
       } else if (isImageEditRequest(prompt)) {
-        // 5. Edit last generated image (no file attached, explicit edit command + image ref pronoun)
+        // 5. Редактируем последнее сгенерированное изображение (файл не приложен, явная команда редактирования + местоимение-ссылка на изображение)
         const lastImage = [...messages].reverse().find((m) => m.role === 'assistant' && m.mediaUrl);
         if (lastImage?.mediaUrl) {
           return handleGenerateImage(prompt, lastImage.mediaUrl);
@@ -752,7 +669,7 @@ function ChatApp() {
       }
     }
 
-    // Process attached file
+    // Обработка прикреплённого файла
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
@@ -767,7 +684,7 @@ function ChatApp() {
         try {
           imageUrl = await resizeImageToBase64(fileToSend);
           fileDisplayUrl = imageUrl;
-          // Image editing intent with attached image
+          // Намерение отредактировать приложенное изображение
           if (prompt && EDIT_VERBS.some((v) => prompt.toLowerCase().includes(v))) {
             return handleGenerateImage(prompt, imageUrl);
           }
@@ -797,7 +714,7 @@ function ChatApp() {
       }
     }
 
-    // If chatId not yet set (init still loading) — create chat on the fly
+    // Если chatId ещё не установлен (инициализация ещё грузится) — создаём чат на лету
     let activeChatId = chatId;
     if (!activeChatId) {
       try {
@@ -891,11 +808,11 @@ function ChatApp() {
       className="flex flex-col bg-[#0A0A12] overflow-hidden"
       style={{
         height: vpHeight,
-        // Reserve space for fixed BottomNav (60px) + device safe-area
+        // Резервируем место под фиксированный BottomNav (60px) + safe-area устройства
         paddingBottom: 'calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px))',
       }}
     >
-      {/* Image lightbox */}
+      {/* Лайтбокс изображения */}
       <AnimatePresence>
         {viewerUrl && (
           <motion.div
@@ -924,7 +841,7 @@ function ChatApp() {
               <button
                 onClick={() => downloadImage(viewerUrl)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
-                style={{ background: '#7B5CF0', color: 'white' }}
+                style={{ background: 'var(--accent)', color: 'white' }}
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M7 1v9M4 7l3 3 3-3M2 12h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -946,11 +863,11 @@ function ChatApp() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
+      {/* Шапка */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
         <span className="text-lg">👻</span>
         <span className="font-medium text-sm text-white flex-1">GhostLine</span>
-        {/* New chat button */}
+        {/* Кнопка нового чата */}
         <button
           type="button"
           onClick={() => {
@@ -969,7 +886,7 @@ function ChatApp() {
         </button>
       </div>
 
-      {/* Messages — flex-1, scrollable */}
+      {/* Сообщения — flex-1, прокручиваемая область */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-4">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
@@ -999,7 +916,7 @@ function ChatApp() {
                   {msg.mediaUrl ? (
                     <div>
                       {msg.mediaUrl === '__loading__' ? (
-                        /* Generating placeholder */
+                        /* Заглушка на время генерации */
                         <div
                           className="rounded-xl flex flex-col items-center justify-center gap-3 py-8"
                           style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', minHeight: msg.mode === 'reel' ? 160 : 180 }}
@@ -1040,7 +957,7 @@ function ChatApp() {
                           </div>
                         </div>
                       ) : msg.mode === 'sound' ? (
-                        /* Audio player */
+                        /* Аудиоплеер */
                         <MiniAudioPlayer url={msg.mediaUrl} />
                       ) : (msg.mode === 'reel' || msg.mediaUrl.endsWith('.mp4')) ? (
                         <div>
@@ -1114,7 +1031,7 @@ function ChatApp() {
                 <div
                   key={i}
                   className="w-1.5 h-1.5 rounded-full animate-bounce"
-                  style={{ background: '#7B5CF0', animationDelay: `${i * 0.15}s` }}
+                  style={{ background: 'var(--accent)', animationDelay: `${i * 0.15}s` }}
                 />
               ))}
             </div>
@@ -1124,7 +1041,7 @@ function ChatApp() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input — flex-shrink-0, sits in normal flow above the padded-out space for BottomNav */}
+      {/* Поле ввода — flex-shrink-0, стоит в обычном потоке над отступом под BottomNav */}
       <div
         className="flex-shrink-0"
         style={{
@@ -1132,7 +1049,7 @@ function ChatApp() {
           background: '#0A0A12',
         }}
       >
-        {/* Hidden file input */}
+        {/* Скрытое поле выбора файла */}
         <input
           ref={fileInputRef}
           type="file"
@@ -1141,7 +1058,7 @@ function ChatApp() {
           onChange={handleFileChange}
         />
 
-        {/* Attached file chip */}
+        {/* Чип прикреплённого файла */}
         {selectedFile && (
           <div
             className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl text-xs"
@@ -1162,7 +1079,7 @@ function ChatApp() {
           </div>
         )}
 
-        {/* Mode tabs — scrollable */}
+        {/* Вкладки режимов — с прокруткой */}
         <div className="overflow-x-auto scrollbar-none mb-2">
           <div className="flex items-center gap-1 w-max">
             {CHAT_MODES.map(({ key, label }) => (
@@ -1183,7 +1100,7 @@ function ChatApp() {
           </div>
         </div>
 
-        {/* Music options */}
+        {/* Настройки музыки */}
         {chatMode === 'music' && (
           <div className="mb-2">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1213,7 +1130,7 @@ function ChatApp() {
                 </>
               )}
             </div>
-            {/* Suno-specific options */}
+            {/* Настройки, специфичные для Suno */}
             {musicMode === 'suno' && (
               <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                 <input
@@ -1245,10 +1162,10 @@ function ChatApp() {
           </div>
         )}
 
-        {/* Video options */}
+        {/* Настройки видео */}
         {chatMode === 'video' && (
           <div className="mb-2">
-            {/* Basic options row */}
+            {/* Строка базовых настроек */}
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
               {([5, 10] as const).map((d) => (
                 <button key={d} type="button" onClick={() => setVideoDuration(d)}
@@ -1284,7 +1201,7 @@ function ChatApp() {
                 <span style={{ color: 'rgba(255,200,80,0.7)', fontSize: 10 }}>10с = 2 генерации</span>
               )}
 
-              {/* Advanced settings button */}
+              {/* Кнопка расширенных настроек */}
               <div className="relative ml-auto" ref={videoSettingsRef}>
                 <button
                   type="button"
@@ -1302,14 +1219,14 @@ function ChatApp() {
                     <circle cx="6" cy="11" r="1.6" fill="#0A0A12" stroke="currentColor" strokeWidth="1.2"/>
                   </svg>
                   {(videoCameraPreset !== 'static' || videoNegativePrompt.trim() || videoCfgScale !== 50) && (
-                    <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full" style={{ background: '#7B5CF0' }} />
+                    <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   )}
                 </button>
 
                 <AnimatePresence>
                   {videoSettingsOpen && (
                     <>
-                      {/* Backdrop */}
+                      {/* Подложка */}
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -1319,7 +1236,7 @@ function ChatApp() {
                         style={{ background: 'rgba(0,0,0,0.55)' }}
                         onClick={() => setVideoSettingsOpen(false)}
                       />
-                      {/* Bottom sheet */}
+                      {/* Выезжающая панель снизу */}
                       <motion.div
                         initial={{ y: '100%' }}
                         animate={{ y: 0 }}
@@ -1332,11 +1249,11 @@ function ChatApp() {
                           paddingBottom: 'env(safe-area-inset-bottom)',
                         }}
                       >
-                        {/* Handle */}
+                        {/* Ручка перетаскивания */}
                         <div className="flex justify-center pt-3 pb-1">
                           <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
                         </div>
-                        {/* Header */}
+                        {/* Шапка */}
                         <div className="flex items-center justify-between px-4 py-2.5 border-b border-[rgba(255,255,255,0.06)]">
                           <span className="text-[13px] font-medium text-white">Настройки видео</span>
                           <button type="button" onClick={() => setVideoSettingsOpen(false)}
@@ -1348,7 +1265,7 @@ function ChatApp() {
                           </button>
                         </div>
 
-                        {/* Camera presets */}
+                        {/* Пресеты движения камеры */}
                         <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
                           <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2.5">
                             Движение камеры
@@ -1376,7 +1293,7 @@ function ChatApp() {
                           </div>
                         </div>
 
-                        {/* Negative prompt */}
+                        {/* Негативный промпт */}
                         <div className="px-4 py-3 border-b border-[rgba(255,255,255,0.06)]">
                           <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest mb-2">
                             Исключить из видео
@@ -1391,7 +1308,7 @@ function ChatApp() {
                           />
                         </div>
 
-                        {/* cfg_scale */}
+                        {/* cfg_scale (точность следования промпту) */}
                         <div className="px-4 py-3">
                           <div className="flex justify-between items-center mb-2">
                             <p className="text-[10px] font-semibold text-[rgba(255,255,255,0.35)] uppercase tracking-widest">
@@ -1403,7 +1320,7 @@ function ChatApp() {
                             value={videoCfgScale}
                             onChange={(e) => setVideoCfgScale(parseInt(e.target.value))}
                             className="w-full cursor-pointer"
-                            style={{ accentColor: '#7B5CF0', height: '4px' }}
+                            style={{ accentColor: 'var(--accent)', height: '4px' }}
                           />
                           <div className="flex justify-between mt-1">
                             <span className="text-[9px] text-[rgba(255,255,255,0.2)]">Свободно</span>
@@ -1429,7 +1346,7 @@ function ChatApp() {
             boxShadow: (input.trim() || selectedFile) ? '0 0 0 3px rgba(123,92,240,0.12)' : 'none',
           }}
         >
-          {/* Textarea */}
+          {/* Текстовое поле */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -1443,10 +1360,10 @@ function ChatApp() {
             className="w-full bg-transparent resize-none outline-none text-[rgba(255,255,255,0.88)] placeholder:text-[rgba(255,255,255,0.2)] leading-[1.75] max-h-[160px]"
           />
 
-          {/* Bottom toolbar */}
+          {/* Нижняя панель инструментов */}
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-2">
-              {/* Attach file button */}
+              {/* Кнопка прикрепления файла */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -1460,7 +1377,7 @@ function ChatApp() {
                 </svg>
               </button>
 
-              {/* Model selector — only in chat mode */}
+              {/* Выбор модели — только в режиме чата */}
               {chatMode === 'chat' && (<div className="relative" ref={modelRef}>
                 <button
                   type="button"
@@ -1490,7 +1407,7 @@ function ChatApp() {
                           onClick={() => { setModel(key); setModelOpen(false); }}
                           className="w-full text-left px-4 py-2.5 text-[12px] transition-all flex items-center justify-between"
                           style={{
-                            color: model === key ? '#7B5CF0' : 'rgba(255,255,255,0.65)',
+                            color: model === key ? 'var(--accent)' : 'rgba(255,255,255,0.65)',
                             background: model === key ? 'rgba(123,92,240,0.1)' : 'transparent',
                           }}
                         >
@@ -1509,14 +1426,14 @@ function ChatApp() {
               </div>)}
             </div>
 
-            {/* Send button */}
+            {/* Кнопка отправки */}
             <button
               type="button"
               onClick={handleSend}
               disabled={(!input.trim() && !selectedFile) || streaming || generatingVideo || generatingMusic}
               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40"
               style={{
-                background: (input.trim() || selectedFile) && !streaming && !generatingVideo ? '#7B5CF0' : 'rgba(255,255,255,0.08)',
+                background: (input.trim() || selectedFile) && !streaming && !generatingVideo ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -1526,7 +1443,7 @@ function ChatApp() {
           </div>
         </div>
 
-        {/* Disclaimer */}
+        {/* Дисклеймер */}
         <p className="text-center text-[10px] mt-2 mb-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
           GhostLine может ошибаться. Проверяйте важную информацию.
         </p>
@@ -1537,7 +1454,7 @@ function ChatApp() {
   );
 }
 
-// ─── Mini Audio Player ────────────────────────────────────────────────────────
+// ─── Мини-аудиоплеер ──────────────────────────────────────────────────────────
 
 function MiniAudioPlayer({ url }: { url: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -1580,11 +1497,11 @@ function MiniAudioPlayer({ url }: { url: string }) {
         onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
       />
       <div className="flex items-center gap-3">
-        {/* Play/Pause */}
+        {/* Пуск/Пауза */}
         <button
           onClick={togglePlay}
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: '#7B5CF0' }}
+          style={{ background: 'var(--accent)' }}
         >
           {playing ? (
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -1597,20 +1514,20 @@ function MiniAudioPlayer({ url }: { url: string }) {
             </svg>
           )}
         </button>
-        {/* Progress */}
+        {/* Прогресс */}
         <div className="flex-1 min-w-0">
           <input
             type="range" min={0} max={100} step={0.1} value={progress}
             onChange={handleSeek}
             className="w-full h-1 rounded-full appearance-none cursor-pointer"
-            style={{ background: `linear-gradient(to right, #7B5CF0 ${progress}%, rgba(255,255,255,0.15) ${progress}%)` }}
+            style={{ background: `linear-gradient(to right, var(--accent) ${progress}%, rgba(255,255,255,0.15) ${progress}%)` }}
           />
           <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
             <span>{fmt((progress / 100) * duration)}</span>
             <span>{fmt(duration)}</span>
           </div>
         </div>
-        {/* Download */}
+        {/* Скачать */}
         <button
           onClick={() => downloadMedia(url, 'image').catch(() => window.open(url, '_blank'))}
           className="w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 opacity-50 active:opacity-100"

@@ -1,7 +1,7 @@
-// ─── Suno API provider ────────────────────────────────────────────────────────
-// Docs:  https://docs.sunoapi.org/
-// Auth:  Authorization: Bearer <key>
-// Each generation returns 2 songs; we use the first one.
+// ─── Провайдер Suno API ─────────────────────────────────────────────────────────
+// Документация: https://docs.sunoapi.org/
+// Авторизация:  Authorization: Bearer <key>
+// Каждая генерация возвращает 2 песни; используем первую.
 
 const SUNO_BASE = 'https://api.sunoapi.org';
 
@@ -17,31 +17,31 @@ function headers() {
 }
 
 export interface SunoOptions {
-  /** Music style / genre (e.g. "Jazz", "Electronic"). Used in custom mode. */
+  /** Стиль / жанр музыки (например, "Jazz", "Electronic"). Используется в custom mode. */
   style?: string;
-  /** Song title. Used in custom mode. */
+  /** Название песни. Используется в custom mode. */
   title?: string;
-  /** Generate without vocals (instrumental only). */
+  /** Генерировать без вокала (только инструментал). */
   instrumental?: boolean;
   /**
-   * Model version.
-   * V4 (default) — up to 4 min.
-   * V4_5 / V4_5PLUS / V4_5ALL / V5 / V5_5 — up to 8 min.
+   * Версия модели.
+   * V4 (по умолчанию) — до 4 мин.
+   * V4_5 / V4_5PLUS / V4_5ALL / V5 / V5_5 — до 8 мин.
    */
   model?: 'V4' | 'V4_5' | 'V4_5PLUS' | 'V4_5ALL' | 'V5' | 'V5_5';
   /**
-   * Song lyrics. When provided, they are sent as the prompt body in custom mode
-   * (Suno uses `prompt` as lyrics in custom mode).
-   * The `prompt` arg passed to generateMusicSuno becomes the style description.
+   * Текст песни. Если передан, отправляется как тело `prompt` в custom mode
+   * (Suno использует `prompt` как текст песни в custom mode).
+   * Аргумент `prompt`, переданный в generateMusicSuno, становится описанием стиля.
    */
   lyrics?: string;
 }
 
 /**
- * Generate music via Suno API.
- * @param prompt  Description (≤500 chars) or lyrics (≤5000 chars in custom mode)
- * @param options Optional style / title / instrumental / model
- * @returns       URL of the first generated MP3
+ * Генерирует музыку через Suno API.
+ * @param prompt  Описание (≤500 симв.) или текст песни (≤5000 симв. в custom mode)
+ * @param options Опционально: style / title / instrumental / model
+ * @returns       URL первого сгенерированного MP3
  */
 export async function generateMusicSuno(
   prompt: string,
@@ -55,15 +55,15 @@ export async function generateMusicSuno(
     lyrics,
   } = options;
 
-  // Custom mode is needed for style/title/lyrics. When lyrics are provided,
-  // Suno expects them as the `prompt` body and the music description as `style`.
+  // Custom mode нужен для style/title/lyrics. Если передан текст песни,
+  // Suno ожидает его в теле `prompt`, а описание музыки — в `style`.
   const customMode = !!(style?.trim() || title?.trim() || lyrics?.trim());
-  // In custom mode: use lyrics as prompt body if available; otherwise use description.
+  // В custom mode: используем текст песни как тело prompt, если он есть; иначе — описание.
   const promptBody = lyrics?.trim()
     ? lyrics.trim().slice(0, 5000)
     : prompt.slice(0, customMode ? 5000 : 500);
 
-  // When lyrics are provided, use the original prompt as style (if no style given).
+  // Если передан текст песни, используем исходный prompt как style (если style не задан).
   const effectiveStyle = (lyrics?.trim() && !style?.trim())
     ? prompt.slice(0, 200)
     : style?.trim();
@@ -80,7 +80,7 @@ export async function generateMusicSuno(
     ...(customMode && title?.trim() ? { title: title.trim() } : {}),
   };
 
-  // ── Create generation task ────────────────────────────────────────────────
+  // ── Создаём задачу генерации ──────────────────────────────────────────────
   const createRes = await fetch(`${SUNO_BASE}/api/v1/generate`, {
     method: 'POST',
     headers: headers(),
@@ -89,7 +89,7 @@ export async function generateMusicSuno(
 
   if (!createRes.ok) {
     const errText = await createRes.text().catch(() => createRes.statusText);
-    // Try to parse JSON error body
+    // Пробуем распарсить тело ошибки как JSON
     let parsedErr: any = null;
     try { parsedErr = JSON.parse(errText); } catch {}
     const errMsg: string = parsedErr?.msg ?? errText;
@@ -119,8 +119,8 @@ export async function generateMusicSuno(
 
   console.info(`[Suno] Task created: ${taskId} (model=${model}, customMode=${customMode}, instrumental=${instrumental})`);
 
-  // ── Poll for completion ──────────────────────────────────────────────────
-  // Suno generates in ~20–60 s; poll every 5 s, give up after 10 min.
+  // ── Опрашиваем до завершения ──────────────────────────────────────────────
+  // Suno генерирует за ~20–60 с; опрашиваем каждые 5 с, сдаёмся через 10 мин.
   const maxAttempts = 120;
   const intervalMs = 5_000;
 
@@ -140,7 +140,7 @@ export async function generateMusicSuno(
     const status: string = (pollData.data?.status ?? '').toUpperCase();
 
     if (status === 'SUCCESS') {
-      // Log keys and non-param fields to understand actual structure
+      // Логируем ключи и не-param поля, чтобы понять реальную структуру ответа
       const d = pollData.data ?? {};
       const keys = Object.keys(d);
       console.info(`[Suno] SUCCESS keys: ${JSON.stringify(keys)}`);
@@ -148,13 +148,13 @@ export async function generateMusicSuno(
       for (const k of keys) { if (k !== 'param') filtered[k] = d[k]; }
       console.info(`[Suno] SUCCESS data (no param): ${JSON.stringify(filtered).slice(0, 2000)}`);
 
-      // Actual sunoapi.org structure: data.response.sunoData[].audioUrl
+      // Реальная структура sunoapi.org: data.response.sunoData[].audioUrl
       const songs: any[] = d?.response?.sunoData ?? d?.response?.data ?? d?.response?.clips ?? [];
 
       const audioUrl: string | undefined =
-        songs[0]?.sourceAudioUrl ??   // direct Suno CDN URL (preferred)
-        songs[0]?.audioUrl ??         // proxy URL
-        songs[0]?.audio_url ??        // legacy snake_case
+        songs[0]?.sourceAudioUrl ??   // прямой URL с CDN Suno (предпочтительно)
+        songs[0]?.audioUrl ??         // прокси-URL
+        songs[0]?.audio_url ??        // устаревший snake_case
         d?.audio_url;
 
       if (!audioUrl) {
@@ -168,7 +168,7 @@ export async function generateMusicSuno(
       throw new Error(`Suno task failed: ${JSON.stringify(pollData.data).slice(0, 300)}`);
     }
 
-    // PENDING / GENERATING — continue polling
+    // PENDING / GENERATING — продолжаем опрос
   }
 
   throw new Error('Suno task timed out after 10 minutes');

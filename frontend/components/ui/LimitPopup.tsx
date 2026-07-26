@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export type LimitType =
   | 'LIMIT_MESSAGES_DAILY'
   | 'LIMIT_MESSAGES'
+  | 'LIMIT_PRO_MESSAGES'
   | 'LIMIT_FILES'
   | 'LIMIT_IMAGES'
   | 'LIMIT_VIDEOS'
@@ -36,6 +37,13 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
     btn1: 'Перейти на следующий тариф',
     btn2: 'Закрыть',
   },
+  LIMIT_PRO_MESSAGES: {
+    icon: '🧠',
+    title: 'Недостаточно Caspers',
+    desc: 'Бесплатная квота Про чата на сегодня закончилась, а на балансе не хватает Caspers.',
+    btn1: 'Пополнить / перейти на тариф',
+    btn2: 'Закрыть',
+  },
   LIMIT_FILES: {
     icon: '📎',
     title: 'Лимит файлов исчерпан',
@@ -60,7 +68,7 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
   LIMIT_VIDEOS_UNAVAILABLE: {
     icon: '🎬',
     title: 'Видео недоступно',
-    desc: 'Генерация видео доступна начиная со тарифа Стандарт.',
+    desc: 'Генерация видео доступна на платных тарифах.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },
@@ -74,7 +82,7 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
   LIMIT_MUSIC_UNAVAILABLE: {
     icon: '🎵',
     title: 'Музыка недоступна',
-    desc: 'Генерация музыки доступна начиная с тарифа Пробный.',
+    desc: 'Генерация музыки доступна на платных тарифах.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },

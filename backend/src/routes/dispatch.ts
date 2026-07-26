@@ -5,7 +5,7 @@ import { callOpenRouterJSON, OR_MODELS } from '../services/providers/openrouter.
 
 const bodySchema = z.object({
   prompt: z.string().min(1).max(2000),
-  // Last 1-3 messages for context
+  // Последние 1-3 сообщения для контекста
   context: z.array(z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string().max(400),
@@ -25,10 +25,10 @@ export interface DispatchResult {
   };
 }
 
-// ─── Level 1: instant regex (free, 0ms) ──────────────────────────────────────
+// ─── Уровень 1: мгновенный regex (бесплатно, 0мс) ─────────────────────────────
 //
-// Only patterns so obvious they have 0% false positives.
-// Covers ~80% of all creative requests without any API call.
+// Только паттерны настолько очевидные, что дают 0% ложных срабатываний.
+// Покрывает ~80% всех творческих запросов без единого вызова API.
 
 const VIDEO_RE = /\b(мультик|мультфильм|мультипликац|видеоролик|ролик|анимац|сними|снять\s+видео|сделай\s+видео|создай\s+видео|сгенерируй\s+видео|make\s+a?\s*video|create\s+a?\s*video|animate|cartoon)\b/iu;
 const MUSIC_RE = /\b(напиши\s+(песн|музык|трек)|сделай\s+(песн|трек|музык|бит)|создай\s+(трек|песн|музык)|сочини\s+(песн|трек|музык)|гимн|саундтрек|make\s+a?\s*(song|track|music|beat)|compose\s+a?\s*(song|melody))\b/iu;
@@ -42,7 +42,7 @@ function regexPreFilter(prompt: string): DispatchResult | null {
   return null;
 }
 
-// ─── Level 2: Llama with context (free on Cloudflare) ────────────────────────
+// ─── Уровень 2: Llama с контекстом (бесплатно на Cloudflare) ──────────────────
 
 const SYSTEM_PROMPT = `You are an intent classifier for GhostLine AI. Given a user message (and optional recent context), return ONLY a JSON object — no explanation, no markdown.
 
@@ -71,19 +71,19 @@ Examples:
 "какой курс доллара?" → {"category":"search","autoFill":{}}
 "как дела?" → {"category":"chat","autoFill":{}}`;
 
-// ─── Route ────────────────────────────────────────────────────────────────────
+// ─── Роут ─────────────────────────────────────────────────────────────────────
 
 const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/dispatch', async (request, reply) => {
     const { prompt, context } = bodySchema.parse(request.body);
 
-    // Level 1: instant regex — no API call
+    // Уровень 1: мгновенный regex — без вызова API
     const fast = regexPreFilter(prompt);
     if (fast) return reply.send(fast);
 
-    // Level 2: Llama with conversation context
+    // Уровень 2: Llama с контекстом диалога
     try {
-      // Build a single user message that includes context + current prompt
+      // Собираем одно сообщение пользователя, включающее контекст + текущий промт
       let userContent = prompt;
       if (context && context.length > 0) {
         const contextText = context
@@ -112,15 +112,15 @@ const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send({ category, autoFill: parsed.autoFill ?? {} });
       }
     } catch {
-      // Never break the UI
+      // Никогда не ломаем UI
     }
 
     return reply.send({ category: 'chat', autoFill: {} });
   });
 };
 
-// ─── Chat title generation ────────────────────────────────────────────────────
-// Called from chat.ts on first user message to produce a smart 3-6 word title.
+// ─── Генерация заголовка чата ─────────────────────────────────────────────────
+// Вызывается из chat.ts на первом сообщении пользователя, чтобы получить умный заголовок из 3-6 слов.
 
 const TITLE_SYSTEM = `You are a chat title generator. Given the user's first message, return a SHORT title (3–6 words max) that captures the main topic.
 Rules:
@@ -139,7 +139,7 @@ Examples:
 "сделай грустный джаз про осень" → Грустный джаз про осень`;
 
 export async function generateChatTitle(prompt: string): Promise<string> {
-  // Fallback: trim prompt to 50 chars
+  // Фолбэк: обрезаем промт до 50 символов
   const fallback = prompt.slice(0, 50) + (prompt.length > 50 ? '...' : '');
   try {
     const msgs = [

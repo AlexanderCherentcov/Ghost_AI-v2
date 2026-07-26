@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
-// Admin email is configured via env variable
-// Set NEXT_PUBLIC_ADMIN_EMAIL=your@email.com in .env.local
+// Email администратора задаётся через переменную окружения
+// NEXT_PUBLIC_ADMIN_EMAIL=your@email.com в .env.local
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? '';
 
 export default function TelegramMiniAppPage() {
@@ -14,10 +14,10 @@ export default function TelegramMiniAppPage() {
 
   useEffect(() => { setIsMounted(true); }, []);
 
-  // Not mounted yet (SSR) — show nothing
+  // Ещё не смонтировано (SSR) — ничего не показываем
   if (!isMounted) return null;
 
-  // Not logged in
+  // Не авторизован
   if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center px-6"
@@ -31,7 +31,7 @@ export default function TelegramMiniAppPage() {
     );
   }
 
-  // Access check — only admin
+  // Проверка доступа — только администратор
   const isAdmin = ADMIN_EMAIL ? user.email === ADMIN_EMAIL : false;
   if (!isAdmin) {
     return (
@@ -46,7 +46,7 @@ export default function TelegramMiniAppPage() {
     );
   }
 
-  // Admin view — placeholder
+  // Вид для администратора — заглушка
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-6"
       style={{ background: 'var(--bg-void)', color: 'var(--text-primary)' }}>

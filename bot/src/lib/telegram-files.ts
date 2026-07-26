@@ -7,9 +7,10 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const TELEGRAM_FILE_API = `https://api.telegram.org/file/bot${BOT_TOKEN}`;
 const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 
-// Telegram's own API is not geo-blocked (the bot already long-polls it directly),
-// so these go through the default HTTPS_PROXY like other external calls — unlike
-// the internal backend:4000 calls in api-client.ts/session.ts, which need proxy:false.
+// Собственный API Telegram не блокируется по гео (бот и так опрашивает его напрямую
+// через long polling), поэтому эти запросы идут через обычный HTTPS_PROXY, как и другие
+// внешние вызовы — в отличие от внутренних вызовов backend:4000 в api-client.ts/session.ts,
+// которым нужен proxy:false.
 
 async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; filename: string }> {
   const { data } = await axios.get(`${TELEGRAM_API}/getFile`, { params: { file_id: fileId } });
@@ -18,7 +19,7 @@ async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; f
   return { buffer: Buffer.from(res.data), filename: filePath.split('/').pop() ?? 'file' };
 }
 
-/** Downloads a Telegram photo and uploads it to GhostLine storage, returning a public URL. */
+/** Скачивает фото из Telegram и загружает его в хранилище GhostLine, возвращая публичный URL. */
 export async function uploadTelegramImage(session: UserSession, fileId: string): Promise<string> {
   const { buffer, filename } = await downloadTelegramFile(fileId);
   const form = new FormData();
@@ -38,7 +39,7 @@ export interface ExtractedDocument {
   lang: string;
 }
 
-/** Downloads a Telegram document and extracts its text content via the backend. */
+/** Скачивает документ из Telegram и извлекает его текстовое содержимое через бэкенд. */
 export async function extractTelegramDocument(session: UserSession, fileId: string): Promise<ExtractedDocument> {
   const { buffer, filename } = await downloadTelegramFile(fileId);
   const form = new FormData();

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { redis } from '../lib/redis.js';
 
-// ─── TTLs ─────────────────────────────────────────────────────────────────────
+// ─── Времена жизни (TTL) ────────────────────────────────────────────────────
 const TTL_TEXT  = 60 * 60 * 24;      // 24 часа — текстовые ответы
 const TTL_MEDIA = 60 * 60 * 24 * 7;  // 7 дней — URL сгенерированных картинок
 
@@ -11,7 +11,7 @@ const VER = process.env.CACHE_VERSION ?? 'v1';
 // Запросы короче порога — никогда не кэшируем ("да", "нет", "ты уверен?")
 const SHORT_THRESHOLD = parseInt(process.env.CACHE_SHORT_THRESHOLD ?? '20', 10);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Вспомогательные функции ──────────────────────────────────────────────────
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -21,7 +21,7 @@ function sha256(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
-// ─── Short-prompt detection ───────────────────────────────────────────────────
+// ─── Определение коротких промптов ────────────────────────────────────────────
 
 /**
  * Короткие разговорные сообщения (< 20 символов) обходят кэш полностью
@@ -129,7 +129,7 @@ export async function setMediaCached(
   }
 }
 
-// ─── Legacy compat ────────────────────────────────────────────────────────────
+// ─── Обратная совместимость ────────────────────────────────────────────────────
 // Обратная совместимость — перенаправляем на текстовый кэш без контекста
 export const getCached = (mode: string, complexity: string, prompt: string) =>
   getTextCached(mode, complexity, prompt, []);

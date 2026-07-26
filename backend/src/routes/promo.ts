@@ -13,7 +13,7 @@ const previewSchema = z.object({
 });
 
 export default async function promoRoutes(fastify: FastifyInstance) {
-  // ── Redeem a CASPERS-type promo code immediately ──────────────────────────
+  // ── Немедленная активация промокода типа CASPERS ──────────────────────────
   fastify.post('/promo/redeem', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
@@ -31,7 +31,7 @@ export default async function promoRoutes(fastify: FastifyInstance) {
     },
   });
 
-  // ── Preview a DISCOUNT_PERCENT promo before checkout (no side effects) ───
+  // ── Предпросмотр промокода DISCOUNT_PERCENT перед оплатой (без побочных эффектов) ───
   fastify.post('/promo/preview', {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {

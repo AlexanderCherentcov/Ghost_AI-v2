@@ -13,13 +13,13 @@ interface AuthState {
   setUser: (user: User) => void;
   clearAuth: () => void;
   setLoading: (loading: boolean) => void;
-  /** Silently re-fetch /auth/me and update user (e.g. after Caspers deduction) */
+  /** Тихо перезапросить /auth/me и обновить пользователя (например, после списания Caspers) */
   refreshUser: () => Promise<void>;
 }
 
-// createJSONStorage wraps localStorage in try/catch — safe on SSR (returns null).
-// skipHydration: true means Zustand won't auto-hydrate on the server;
-// providers.tsx calls persist.rehydrate() on the client after mount.
+// createJSONStorage оборачивает localStorage в try/catch — безопасно на SSR (вернёт null).
+// skipHydration: true означает, что Zustand не гидрируется автоматически на сервере;
+// providers.tsx вызывает persist.rehydrate() на клиенте после монтирования.
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'ghostline-auth',
       storage: createJSONStorage(() => localStorage),
-      skipHydration: true, // hydration triggered manually in providers.tsx on client
+      skipHydration: true, // гидратация запускается вручную в providers.tsx на клиенте
       partialize: (state) => ({
         user: state.user,
         refreshToken: state.refreshToken,

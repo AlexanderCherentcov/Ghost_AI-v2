@@ -8,7 +8,7 @@ const headers = () => ({
   'X-Runway-Version': '2024-09-13',
 });
 
-// ─── Video generation (Gen-3 Alpha) ──────────────────────────────────────────
+// ─── Генерация видео (Gen-3 Alpha) ───────────────────────────────────────────
 
 export async function generateVideo(
   prompt: string,
@@ -29,7 +29,7 @@ export async function generateVideo(
   return pollRunwayTask(taskId);
 }
 
-// ─── Poll helper ─────────────────────────────────────────────────────────────
+// ─── Вспомогательная функция опроса ───────────────────────────────────────────
 
 async function pollRunwayTask(
   taskId: string,

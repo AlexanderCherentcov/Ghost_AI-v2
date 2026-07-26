@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 
 const PURPOSES = [
@@ -32,6 +33,7 @@ function ProgressDots({ current }: { current: number }) {
 export default function OnboardingPurposePage() {
   const router = useRouter();
   const { setUser } = useAuthStore();
+  const { show } = useToast();
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -44,7 +46,9 @@ export default function OnboardingPurposePage() {
     try {
       const user = await api.auth.updateMe({ purposes: selected });
       setUser(user);
-    } catch {}
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось сохранить выбор', 'error');
+    }
     router.push('/onboarding/style');
   }
 

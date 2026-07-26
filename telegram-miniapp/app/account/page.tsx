@@ -23,27 +23,38 @@ function applyFontSize(f: FontSize) {
 
 const SUPPORT_GROUP_URL = process.env.NEXT_PUBLIC_SUPPORT_GROUP_URL ?? 'https://t.me/GhostLineSupport_bot';
 
+// Поля должны 1:1 совпадать с тем, что реально отдаёт GET /me (backend/src/routes/auth.ts) —
+// раньше тут были придуманные images_today/*_daily_limit, которых бэкенд не возвращает,
+// из-за чего лимиты на экране всегда падали на захардкоженные дефолты.
 interface UserInfo {
   id: string;
   name: string | null;
   plan: string;
-  std_messages_today:       number;
-  images_today:             number;
-  std_messages_daily_limit: number;
-  images_daily_limit:       number;
+  std_messages_today: number;
+  images_this_week:   number;
 }
 
+interface FreeLimits {
+  std_messages_daily: number;
+  images_weekly: number;
+  music_weekly: number;
+  videos_monthly: number;
+}
+
+// Ключи планов должны совпадать с PLAN_KEYS из backend/src/config/plans.ts —
+// STANDARD был переименован в PRO в апреле 2026 (миграция 20260429_caspers_system) и здесь мёртвый.
 const PLAN_LABELS: Record<string, string> = {
-  FREE:     'Бесплатный',
-  BASIC:    'Базовый',
-  STANDARD: 'Стандарт',
-  PRO:      'Про',
-  ULTRA:    'Ультра',
+  FREE:  'Бесплатный',
+  BASIC: 'Базовый',
+  PRO:   'Про',
+  VIP:   'VIP',
+  ULTRA: 'Ультра',
 };
 
 function AccountApp() {
   const tg = useTg();
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [freeLimits, setFreeLimits] = useState<FreeLimits | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>('dark');
   const [fontSize, setFontSize] = useState<FontSize>('medium');
@@ -58,6 +69,10 @@ function AccountApp() {
       .then((u) => setUser(u))
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Реальные лимиты FREE-тарифа — только с бэкенда (GET /plans), без локальных дефолтов
+    apiRequest<{ free: { limits: FreeLimits } }>('/plans')
+      .then((d) => setFreeLimits(d.free.limits))
+      .catch(() => {});
   }, []);
 
   function openSupport() {
@@ -65,13 +80,14 @@ function AccountApp() {
     tg?.openLink(SUPPORT_GROUP_URL);
   }
 
-  // Paid plans show ∞ regardless of hidden backend cap
-  const msgLimit = user?.plan !== 'FREE' ? '∞' : (user?.std_messages_daily_limit ?? 10);
-  const imgLimit = user?.images_daily_limit ?? 3;
+  // На платных тарифах стандартный чат безлимитный, а недельная квота картинок FREE-тарифа не действует
+  const isFree = user?.plan === 'FREE';
+  const msgLimit = isFree ? (freeLimits?.std_messages_daily ?? '—') : '∞';
+  const imgLimit = isFree ? (freeLimits?.images_weekly ?? '—') : '∞';
 
   return (
     <div className="flex flex-col h-screen pb-[60px]" style={{ background: 'var(--bg-void)' }}>
-      {/* Header */}
+      {/* Шапка */}
       <div
         className="flex items-center px-4 pt-5 pb-4"
         style={{ borderBottom: '0.5px solid var(--border)' }}
@@ -86,7 +102,7 @@ function AccountApp() {
           </p>
         ) : user ? (
           <div className="space-y-3">
-            {/* Avatar + name */}
+            {/* Аватар + имя */}
             <div
               className="flex items-center gap-4 p-4 rounded-2xl"
               style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
@@ -103,31 +119,31 @@ function AccountApp() {
                 </p>
                 <span
                   className="inline-block text-xs px-2 py-0.5 rounded-full mt-1"
-                  style={{ background: 'rgba(123,92,240,0.15)', color: '#7B5CF0' }}
+                  style={{ background: 'rgba(123,92,240,0.15)', color: 'var(--accent)' }}
                 >
                   {PLAN_LABELS[user.plan] ?? user.plan}
                 </span>
               </div>
             </div>
 
-            {/* Usage today */}
+            {/* Использование */}
             <div
               className="p-4 rounded-2xl"
               style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
             >
               <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                Сегодня
+                Использование
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div
                   className="p-3 rounded-xl text-center"
                   style={{ background: 'rgba(123,92,240,0.08)' }}
                 >
-                  <p className="text-xl font-medium" style={{ color: '#7B5CF0' }}>
+                  <p className="text-xl font-medium" style={{ color: 'var(--accent)' }}>
                     {user.std_messages_today}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    из {msgLimit} сообщений
+                    из {msgLimit} сообщений сегодня
                   </p>
                 </div>
                 <div
@@ -135,16 +151,16 @@ function AccountApp() {
                   style={{ background: 'rgba(92,240,200,0.08)' }}
                 >
                   <p className="text-xl font-medium" style={{ color: '#5CF0C8' }}>
-                    {user.images_today}
+                    {user.images_this_week}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    из {imgLimit} картинок
+                    из {imgLimit} картинок за неделю
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Upgrade CTA for free plan */}
+            {/* Призыв перейти на платный тариф для FREE-плана */}
             {user.plan === 'FREE' && (
               <div
                 className="p-4 rounded-2xl"
@@ -154,19 +170,21 @@ function AccountApp() {
                   Бесплатный план
                 </p>
                 <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                  10 сообщений/день · 3 картинки/день
+                  {freeLimits
+                    ? `${freeLimits.std_messages_daily} сообщений/день · ${freeLimits.images_weekly} картинок/нед`
+                    : ' '}
                 </p>
                 <a
                   href="/balance"
                   className="block py-2.5 rounded-xl text-sm text-center font-medium"
-                  style={{ background: '#7B5CF0', color: 'white' }}
+                  style={{ background: 'var(--accent)', color: 'white' }}
                 >
                   Улучшить тариф
                 </a>
               </div>
             )}
 
-            {/* Appearance */}
+            {/* Внешний вид */}
             <div
               className="p-4 rounded-2xl space-y-4"
               style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
@@ -174,7 +192,7 @@ function AccountApp() {
               <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>
                 Внешний вид
               </p>
-              {/* Theme */}
+              {/* Тема */}
               <div>
                 <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Тема</p>
                 <div className="flex gap-2">
@@ -194,7 +212,7 @@ function AccountApp() {
                   ))}
                 </div>
               </div>
-              {/* Font size */}
+              {/* Размер шрифта */}
               <div>
                 <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Размер шрифта</p>
                 <div className="flex gap-2">
@@ -221,7 +239,7 @@ function AccountApp() {
               </div>
             </div>
 
-            {/* Support */}
+            {/* Поддержка */}
             <div
               className="p-4 rounded-2xl"
               style={{ background: '#0E0E1A', border: '1px solid rgba(255,255,255,0.07)' }}
@@ -232,7 +250,7 @@ function AccountApp() {
               <button
                 onClick={openSupport}
                 className="w-full py-2.5 rounded-xl text-sm font-medium"
-                style={{ background: 'rgba(123,92,240,0.15)', color: '#7B5CF0' }}
+                style={{ background: 'rgba(123,92,240,0.15)', color: 'var(--accent)' }}
               >
                 💬 Написать в поддержку
               </button>

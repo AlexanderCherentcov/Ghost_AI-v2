@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -9,6 +9,7 @@ import { PlusIcon, EditIcon, TrashIcon, TokenIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { api, type Chat } from '@/lib/api';
+import { useToast } from '@/components/ui/Toast';
 import { truncate, cn } from '@/lib/utils';
 
 function groupChats(chats: Chat[]) {
@@ -27,16 +28,23 @@ function groupChats(chats: Chat[]) {
 
 export default function HistoryPage() {
   const router = useRouter();
+  const { show } = useToast();
   const { user } = useAuthStore();
   const { chats, updateChat, removeChat } = useChatStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const renamingRef = useRef(false); // M-15: предотвращаем двойной вызов handleRename
 
+  // Дневной лимит FREE-тарифа — с бэкенда (GET /plans), не захардкожен
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+  useEffect(() => {
+    api.payments.plans().then((data) => setDailyLimit(data.free.limits.std_messages_daily)).catch(() => {});
+  }, []);
+
   const plan = user?.plan ?? 'FREE';
   const stdToday = user?.std_messages_today ?? 0;
-  const showMsgBar = plan === 'FREE';
-  const tokenPercent = showMsgBar ? Math.min((stdToday / 5) * 100, 100) : 0;
+  const showMsgBar = plan === 'FREE' && dailyLimit !== null;
+  const tokenPercent = showMsgBar ? Math.min((stdToday / dailyLimit!) * 100, 100) : 0;
   const grouped = groupChats(chats);
 
   function handleNewChat() {
@@ -47,7 +55,7 @@ export default function HistoryPage() {
     e.preventDefault();
     e.stopPropagation();
     const snapshot = chats.find((c) => c.id === chatId);
-    removeChat(chatId); // optimistic
+    removeChat(chatId); // оптимистичное удаление
     try {
       await api.chats.delete(chatId);
     } catch {
@@ -69,8 +77,10 @@ export default function HistoryPage() {
     try {
       await api.chats.update(chatId, { title: editTitle });
       updateChat(chatId, { title: editTitle });
-      setEditingId(null);
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось переименовать чат', 'error');
     } finally {
+      setEditingId(null);
       renamingRef.current = false;
     }
   }
@@ -110,7 +120,7 @@ export default function HistoryPage() {
                   </span>
                 </Link>
                 <div className="flex items-center gap-0.5 pr-2 flex-shrink-0">
-                  {/* Rename — 44×44 touch target */}
+                  {/* Переименовать — область касания 44×44 */}
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -125,7 +135,7 @@ export default function HistoryPage() {
                   >
                     <EditIcon size={18} />
                   </button>
-                  {/* Delete — 44×44 touch target */}
+                  {/* Удалить — область касания 44×44 */}
                   <button
                     onClick={(e) => handleDelete(chat.id, e)}
                     onTouchStart={(e) => { e.stopPropagation(); }}
@@ -146,7 +156,7 @@ export default function HistoryPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Header */}
+      {/* Шапка */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
         <GhostIcon size={22} className="text-accent" />
         <span className="text-base font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Чаты</span>
@@ -160,12 +170,12 @@ export default function HistoryPage() {
         </button>
       </div>
 
-      {/* Token bar */}
+      {/* Полоса токенов */}
       <div className="px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <TokenIcon size={12} className="text-accent" />
-            <span>{showMsgBar ? `${stdToday}/5 сегодня` : (user?.caspers_balance != null ? `${user.caspers_balance} Caspers` : 'Безлимитный')}</span>
+            <span>{showMsgBar ? `${stdToday}/${dailyLimit} сегодня` : (user?.caspers_balance != null ? `${user.caspers_balance} Caspers` : 'Безлимитный')}</span>
           </div>
           <Link href="/billing" className="text-[11px] text-accent">Тарифы</Link>
         </div>
@@ -179,7 +189,7 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Chat list */}
+      {/* Список чатов */}
       <div className="flex-1 overflow-y-auto py-3">
         <Section label="Сегодня"    items={grouped.today} />
         <Section label="Вчера"      items={grouped.yesterday} />

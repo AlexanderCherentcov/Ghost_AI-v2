@@ -1,4 +1,4 @@
-// ─── System prompts for each mode ─────────────────────────────────────────────
+// ─── Системные промты для каждого режима ──────────────────────────────────────
 
 const BASE_IDENTITY = `Ты — GhostLine, продвинутый ИИ-ассистент и творческая платформа.
 Твой характер: умный, дружелюбный, немного загадочный — как призрак, который всегда рядом.
@@ -66,7 +66,7 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
 };
 
 export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string): string {
-  // Inject current date so the AI never answers with a stale year
+  // Подставляем текущую дату, чтобы ИИ не отвечал с устаревшим годом
   const now = new Date();
   const currentDate = now.toLocaleDateString('ru-RU', {
     weekday: 'long',

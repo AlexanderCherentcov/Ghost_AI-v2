@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL, // e.g. https://api.groq.com/openai/v1
+  baseURL: process.env.OPENAI_BASE_URL, // например https://api.groq.com/openai/v1
 });
 
 export interface StreamChunk {
@@ -11,9 +11,9 @@ export interface StreamChunk {
   error?: string;
 }
 
-// ─── Chat streaming ───────────────────────────────────────────────────────────
+// ─── Стриминг чата ──────────────────────────────────────────────────────────────
 
-// Default models — override via env for Groq compatibility
+// Модели по умолчанию — переопределяются через env для совместимости с Groq
 const MODEL_FAST = process.env.OPENAI_MODEL_FAST ?? 'gpt-4o-mini';
 const MODEL_SMART = process.env.OPENAI_MODEL_SMART ?? 'gpt-4o';
 
@@ -38,7 +38,7 @@ export async function* streamOpenAI(
   yield { type: 'done' };
 }
 
-// ─── Image generation (DALL-E 3) ─────────────────────────────────────────────
+// ─── Генерация изображений (DALL-E 3) ────────────────────────────────────────
 
 export async function generateImage(
   prompt: string,

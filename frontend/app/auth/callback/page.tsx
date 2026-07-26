@@ -10,10 +10,10 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const { setAuth, clearAuth } = useAuthStore();
 
-  // Read tokens synchronously on first render — before Next.js App Router calls
-  // history.replaceState (which strips the hash) and before any effects run.
-  // Priority: window.__oauthHash (set by inline script, survives COOP context
-  // switches) → sessionStorage → window.location.hash (fallback).
+  // Читаем токены синхронно при первом рендере — до того, как Next.js App Router вызовет
+  // history.replaceState (которая срезает хэш), и до запуска любых эффектов.
+  // Приоритет: window.__oauthHash (выставлен инлайн-скриптом, переживает переключения
+  // COOP-контекста) → sessionStorage → window.location.hash (запасной вариант).
   const [tokenData] = useState(() => {
     if (typeof window === 'undefined') return { access: '', refresh: '', redirect: '/chat' };
     const w = window as any;

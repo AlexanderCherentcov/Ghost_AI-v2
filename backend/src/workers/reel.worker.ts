@@ -71,8 +71,8 @@ export function startReelWorker() {
       const genMode = imageUrl ? 'img2video' : 'txt2video';
       const isFree = userPlan === 'FREE';
 
-      // Resolve effective engine:
-      // - FREE plan always → Kling (regardless of selection)
+      // Определяем итоговый движок:
+      // - FREE-тариф всегда → Kling (независимо от выбора)
       // - reality → Kling
       // - motion/standard → Veo3.1 Fast
       // - cinema/pro → Veo3.1 Pro
@@ -93,7 +93,7 @@ export function startReelWorker() {
           negativePrompt: negativePrompt || undefined,
         });
       } else {
-        // Paid → Veo3.1 (Fast for motion/standard, Pro for cinema/pro)
+        // Платный тариф → Veo3.1 (Fast для motion/standard, Pro для cinema/pro)
         console.info(`[ReelWorker] Veo3.1 ${veoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
         externalUrl = await generateVideoVeo3(prompt, {
           model: veoModel,

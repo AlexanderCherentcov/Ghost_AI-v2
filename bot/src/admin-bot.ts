@@ -24,35 +24,21 @@
  */
 
 import { Bot, InlineKeyboard } from 'grammy';
-import axios from 'axios';
+import { PLAN_KEYS } from './lib/plan-keys.js';
+import { apiErrorMessage } from './lib/error-message.js';
+import { api } from './lib/admin-api.js';
+import { ALL_SERVICES, RESTARTABLE_SERVICES, LOGGABLE_SERVICES, containerLogs, containerRestart, allContainerStatuses, containerStats } from './lib/docker.js';
+import { esc, fmtUser, fmtUserList, fmtStats, quickStats, fmtHealth, fmtPromoShort, fmtPromoDetail } from './lib/admin-format.js';
+import { mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb } from './lib/admin-keyboards.js';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const BOT_TOKEN = process.env.ADMIN_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('ADMIN_BOT_TOKEN is required');
 
-const API_URL         = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
-const BOT_SECRET      = process.env.BOT_SECRET ?? '';
-const COMPOSE_PROJECT = process.env.COMPOSE_PROJECT ?? 'infra';
-
 const ADMIN_IDS = new Set(
   (process.env.ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean),
 );
-
-// ─── HTTP clients ─────────────────────────────────────────────────────────────
-
-const api = axios.create({
-  baseURL: `${API_URL}/api/admin`,
-  headers: { 'x-bot-secret': BOT_SECRET },
-  timeout: 15_000,
-  proxy: false, // bypass HTTP_PROXY — internal Docker hostname not routable via proxy
-});
-
-const docker = axios.create({
-  socketPath: '/var/run/docker.sock',
-  baseURL: 'http://localhost',
-  timeout: 30_000,
-});
 
 // ─── Bot ──────────────────────────────────────────────────────────────────────
 
@@ -67,323 +53,6 @@ bot.use(async (ctx, next) => {
   }
   await next();
 });
-
-// ─── Docker helpers ───────────────────────────────────────────────────────────
-
-function cname(svc: string): string {
-  return `${COMPOSE_PROJECT}-${svc}-1`;
-}
-
-/** Parse Docker multiplexed log stream (8-byte header per chunk). */
-function parseDockerLogs(buf: Buffer): string {
-  const lines: string[] = [];
-  let i = 0;
-  while (i + 8 <= buf.length) {
-    const size = buf.readUInt32BE(i + 4);
-    if (size === 0) { i += 8; continue; }
-    const end = i + 8 + size;
-    if (end > buf.length) break;
-    lines.push(buf.slice(i + 8, end).toString('utf8').trimEnd());
-    i = end;
-  }
-  return lines.join('\n');
-}
-
-async function containerLogs(svc: string, tail = 60): Promise<string> {
-  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres', 'certbot'];
-  if (!allowedSvcs.includes(svc)) throw new Error(`Unknown service: ${svc}`);
-  const res = await docker.get(
-    `/containers/${cname(svc)}/logs?tail=${tail}&stdout=1&stderr=1&timestamps=1`,
-    { responseType: 'arraybuffer' },
-  );
-  return parseDockerLogs(Buffer.from(res.data as ArrayBuffer));
-}
-
-async function containerRestart(svc: string): Promise<void> {
-  await docker.post(`/containers/${cname(svc)}/restart`);
-}
-
-async function allContainerStatuses(): Promise<Record<string, string>> {
-  const res  = await docker.get<any[]>('/containers/json?all=1');
-  const svcs = ['postgres', 'redis', 'backend', 'bot', 'admin-bot', 'nginx', 'certbot'];
-  const out: Record<string, string> = {};
-  for (const svc of svcs) {
-    const needle = `/${cname(svc)}`;
-    const c      = res.data.find((x: any) => (x.Names as string[])?.includes(needle));
-    out[svc]     = c?.State ?? 'missing';
-  }
-  return out;
-}
-
-async function containerStats(svc: string): Promise<{ cpu: string; memMb: string; memPct: string } | null> {
-  try {
-    const res = await docker.get<any>(`/containers/${cname(svc)}/stats?stream=false`);
-    const s   = res.data;
-    const cpuDelta    = s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
-    const systemDelta = s.cpu_stats.system_cpu_usage     - s.precpu_stats.system_cpu_usage;
-    const cpus        = s.cpu_stats.online_cpus ?? 1;
-    const cpu         = systemDelta > 0 ? ((cpuDelta / systemDelta) * cpus * 100).toFixed(1) : '0.0';
-    const memMb  = ((s.memory_stats.usage ?? 0) / 1024 / 1024).toFixed(0);
-    const memPct = s.memory_stats.limit > 0
-      ? (((s.memory_stats.usage ?? 0) / s.memory_stats.limit) * 100).toFixed(1)
-      : '?';
-    return { cpu, memMb, memPct };
-  } catch {
-    return null;
-  }
-}
-
-// ─── Format helpers ───────────────────────────────────────────────────────────
-
-const PLAN_ICON: Record<string, string> = {
-  FREE: '🆓', BASIC: '⭐', PRO: '🚀', VIP: '💎', ULTRA: '🔥',
-};
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function lim(used: number, max: number): string {
-  return `${used}/${max === -1 ? '∞' : max}`;
-}
-
-function fmtUser(u: any): string {
-  const plan    = `${PLAN_ICON[u.plan] ?? '?'} <b>${u.plan}</b>`;
-  const expires = u.planExpiresAt
-    ? `\n⏰ Подписка до: ${new Date(u.planExpiresAt).toLocaleDateString('ru')}`
-    : '';
-  const tg      = u.telegramId ? `\n📱 TG ID: <code>${u.telegramId}</code>` : '';
-  const email   = u.email ? `\n📧 ${u.email}` : '';
-  const banned  = u.isBanned ? '\n🚫 <b>ЗАБАНЕН</b>' : '';
-  const billing = u.billing ? ` (${u.billing})` : '';
-
-  return (
-    `👤 <b>${esc(u.name ?? 'Без имени')}</b>${banned}\n` +
-    `🆔 <code>${u.id}</code>${tg}${email}\n` +
-    `📅 Зарегистрирован: ${new Date(u.createdAt).toLocaleDateString('ru')}\n` +
-    `📦 План: ${plan}${billing}${expires}\n\n` +
-    `👻 <b>Caspers:</b> ${u.caspers_balance ?? 0} (месячных: ${u.caspers_monthly ?? 0})\n\n` +
-    `📊 <b>Активность сегодня:</b>\n` +
-    `💬 Чат (стд): ${u.std_messages_today ?? 0}\n` +
-    `🧠 Чат (про): ${u.pro_messages_today ?? 0}\n` +
-    `🖼 Картинки (нед): ${u.images_this_week ?? 0}\n` +
-    `🎵 Музыка (нед): ${u.music_this_week ?? 0}\n` +
-    `🎬 Видео (мес): ${u.videos_this_month ?? 0}`
-  );
-}
-
-function fmtUserList(data: any, page: number): string {
-  const users: any[]   = data.users ?? [];
-  const total: number  = data.total ?? 0;
-  const limit          = data.limit ?? 8;
-  const totalPages     = Math.max(1, Math.ceil(total / limit));
-  let text = `👥 <b>Пользователи</b> (стр. ${page}/${totalPages}, всего: ${total})\n\n`;
-  users.forEach((u: any, i: number) => {
-    const n      = (page - 1) * limit + i + 1;
-    const banned = u.isBanned ? ' 🚫' : '';
-    const tg     = u.telegramId ? ` · TG:${u.telegramId}` : '';
-    text += `${n}. <b>${esc(u.name ?? 'Без имени')}</b>${banned} — ${PLAN_ICON[u.plan] ?? ''} ${u.plan}${tg}\n`;
-  });
-  return text;
-}
-
-function fmtStats(s: any): string {
-  const planLines = Object.entries(s.planCounts ?? {})
-    .map(([k, v]) => `  ${PLAN_ICON[k] ?? '?'} ${k}: <b>${v}</b>`)
-    .join('\n');
-  return (
-    `📊 <b>Статистика GhostLine</b>\n\n` +
-    `👥 Всего пользователей: <b>${s.totalUsers}</b>\n` +
-    `🆕 Новых сегодня: <b>${s.newToday}</b>\n` +
-    `💬 Сообщений сегодня: <b>${s.messagesToday}</b>\n` +
-    `🖼 Генераций сегодня: <b>${s.genToday}</b>\n\n` +
-    `💰 <b>Платежи сегодня:</b>\n` +
-    `  Успешных: <b>${s.paymentsToday}</b>\n` +
-    `  Выручка сегодня: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
-    `  Выручка всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
-    `📦 <b>Распределение планов:</b>\n${planLines}\n\n` +
-    `🕐 ${new Date().toLocaleTimeString('ru')}`
-  );
-}
-
-async function quickStats(): Promise<string> {
-  try {
-    const { data: s } = await api.get('/stats');
-    const planLines = Object.entries(s.planCounts ?? {})
-      .filter(([, v]) => (v as number) > 0)
-      .map(([k, v]) => `${PLAN_ICON[k] ?? '?'}${k}: ${v}`)
-      .join(' · ');
-    return (
-      `👻 <b>GhostLine Admin Panel</b>\n\n` +
-      `👥 Пользователей: <b>${s.totalUsers}</b>` +
-      (s.newToday > 0 ? ` <i>(+${s.newToday} сегодня)</i>` : '') + '\n' +
-      `💰 Сегодня: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
-      `💵 Всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
-      `<i>${planLines}</i>`
-    );
-  } catch {
-    return '👻 <b>GhostLine Admin Panel</b>';
-  }
-}
-
-function fmtHealth(statuses: Record<string, string>): string {
-  const icon = (s: string) => s === 'running' ? '🟢' : s === 'missing' ? '⚫' : '🔴';
-  const lines = Object.entries(statuses)
-    .map(([svc, s]) => `${icon(s)} <b>${svc}</b>: ${s}`);
-  return `🏥 <b>Состояние сервисов</b>\n\n${lines.join('\n')}`;
-}
-
-// ─── Promo format helpers ───────────────────────────────────────────────────
-
-function fmtPromoShort(p: any): string {
-  const reward = p.rewardType === 'CASPERS'
-    ? `👻 ${p.casperAmount} Caspers`
-    : `🎟 −${p.discountPercent}%`;
-  const uses = `${p.usesCount}/${p.maxUses ?? '∞'}`;
-  const status = !p.active ? '🚫' : (p.expiresAt && new Date(p.expiresAt) < new Date()) ? '⏰' : '🟢';
-  return `${status} <code>${esc(p.code)}</code> — ${reward} · исп: ${uses}`;
-}
-
-function fmtPromoDetail(p: any, redemptions: any[]): string {
-  const reward = p.rewardType === 'CASPERS'
-    ? `👻 <b>${p.casperAmount} Caspers</b> за активацию`
-    : `🎟 <b>Скидка ${p.discountPercent}%</b> на ${p.applicablePlans.length ? p.applicablePlans.join(', ') : 'все тарифы'}`;
-  const status = !p.active ? '🚫 Деактивирован' : (p.expiresAt && new Date(p.expiresAt) < new Date()) ? '⏰ Истёк' : '🟢 Активен';
-  const expires = p.expiresAt ? `\n⏰ До: ${new Date(p.expiresAt).toLocaleDateString('ru')}` : '';
-  const creator = p.createdBy ? `\n👤 Создал: <code>${esc(p.createdBy)}</code>` : '';
-
-  let text =
-    `🎫 <b>${esc(p.code)}</b>\n\n` +
-    `${reward}\n` +
-    `${status}\n` +
-    `📊 Использований: <b>${p.usesCount}${p.maxUses ? `/${p.maxUses}` : ' (без лимита)'}</b>${expires}${creator}\n\n`;
-
-  if (redemptions.length === 0) {
-    text += '<i>Пока никто не использовал.</i>';
-  } else {
-    text += `👥 <b>Кто использовал (${redemptions.length}):</b>\n`;
-    text += redemptions.slice(0, 20).map((r: any) => {
-      const u = r.user;
-      const name = esc(u?.name ?? 'Без имени');
-      const tg = u?.telegramId ? ` · TG:${u.telegramId}` : '';
-      const date = new Date(r.createdAt).toLocaleDateString('ru');
-      return `• ${name}${tg} — ${date}`;
-    }).join('\n');
-    if (redemptions.length > 20) text += `\n<i>...и ещё ${redemptions.length - 20}</i>`;
-  }
-  return text;
-}
-
-// ─── Keyboards ────────────────────────────────────────────────────────────────
-
-function mainKb(): InlineKeyboard {
-  return new InlineKeyboard()
-    .text('👥 Пользователи', 'ul:1')
-    .text('📊 Статистика', 'stats')
-    .row()
-    .text('🎟 Промокоды', 'pl:1')
-    .text('🏥 Здоровье', 'health')
-    .row()
-    .text('🔧 Сервер', 'server_menu');
-}
-
-function promoListKb(data: any, page: number): InlineKeyboard {
-  const promos: any[] = data.promos ?? [];
-  const total       = data.total ?? 0;
-  const limit       = data.limit ?? 10;
-  const totalPages  = Math.max(1, Math.ceil(total / limit));
-  const kb          = new InlineKeyboard();
-
-  promos.forEach((p: any) => {
-    kb.text(`${p.active ? '🟢' : '🚫'} ${p.code}`, `p:${p.code}`).row();
-  });
-
-  const nav: Array<[string, string]> = [];
-  if (page > 1)          nav.push(['⬅', `pl:${page - 1}`]);
-  nav.push([`${page}/${totalPages}`, `pl:${page}`]);
-  if (page < totalPages) nav.push(['➡', `pl:${page + 1}`]);
-  nav.forEach(([label, cb]) => kb.text(label, cb));
-  kb.row();
-
-  return kb.text('🏠 Меню', 'menu');
-}
-
-function promoDetailKb(code: string): InlineKeyboard {
-  return new InlineKeyboard()
-    .text('🗑 Удалить', `dp:${code}`)
-    .text('⬅ Список', 'pl:1');
-}
-
-function userKb(userId: string): InlineKeyboard {
-  return new InlineKeyboard()
-    .text('📦 Изменить план', `plan_menu:${userId}`)
-    .text('🔄 Сбросить лимиты', `rl:${userId}`)
-    .row()
-    .text('➕ Caspers', `caspers_add:${userId}`)
-    .text('➖ Caspers', `caspers_sub:${userId}`)
-    .row()
-    .text('🚫 Бан', `ban:${userId}`)
-    .text('✅ Разбан', `unban:${userId}`)
-    .row()
-    .text('⬅ Список', 'ul:1')
-    .text('🏠 Меню', 'menu');
-}
-
-function planKb(userId: string): InlineKeyboard {
-  const plans = ['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'] as const;
-  const kb    = new InlineKeyboard();
-  plans.forEach((p, i) => {
-    kb.text(`${PLAN_ICON[p]} ${p}`, `sp:${userId}:${p}`);
-    if (i % 2 === 1) kb.row();
-  });
-  return kb.row().text('⬅ Назад', `u:${userId}`);
-}
-
-function userListKb(data: any, page: number): InlineKeyboard {
-  const users: any[] = data.users ?? [];
-  const total        = data.total ?? 0;
-  const limit        = data.limit ?? 8;
-  const totalPages   = Math.max(1, Math.ceil(total / limit));
-  const kb           = new InlineKeyboard();
-
-  // 2-column grid
-  users.forEach((u: any, i: number) => {
-    const banned = u.isBanned ? '🚫 ' : '';
-    const label  = banned + (u.name ?? 'Без имени').slice(0, 13);
-    kb.text(label, `u:${u.id}`);
-    if (i % 2 === 1) kb.row();
-  });
-  if (users.length % 2 !== 0) kb.row();
-
-  // Navigation + search hint
-  const nav: Array<[string, string]> = [];
-  if (page > 1)          nav.push(['⬅', `ul:${page - 1}`]);
-  nav.push([`${page}/${totalPages}`, `ul:${page}`]);
-  if (page < totalPages) nav.push(['➡', `ul:${page + 1}`]);
-  kb.text(nav[0][0], nav[0][1]);
-  if (nav[1]) kb.text(nav[1][0], nav[1][1]);
-  if (nav[2]) kb.text(nav[2][0], nav[2][1]);
-  kb.row();
-
-  return kb
-    .text('🔍 Найти (/find)', 'search_hint')
-    .text('🏠 Меню', 'menu');
-}
-
-function serverKb(): InlineKeyboard {
-  return new InlineKeyboard()
-    .text('🏥 Здоровье', 'health')
-    .text('📊 Ресурсы', 'sys')
-    .row()
-    .text('🔄 backend', 'restart:backend')
-    .text('🔄 bot', 'restart:bot')
-    .text('🔄 nginx', 'restart:nginx')
-    .row()
-    .text('📋 Логи backend', 'logs:backend:60')
-    .text('📋 Логи bot', 'logs:bot:60')
-    .row()
-    .text('⬅ Меню', 'menu');
-}
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
@@ -419,7 +88,7 @@ bot.command('users', async (ctx) => {
       reply_markup: userListKb(data, page),
     });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -474,13 +143,13 @@ bot.command('find', async (ctx) => {
       reply_markup: kb,
     });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
 bot.command('setplan', async (ctx) => {
   const [userId, plan] = (ctx.match ?? '').trim().split(/\s+/);
-  const valid = ['FREE', 'BASIC', 'STANDARD', 'PRO', 'ULTRA'];
+  const valid: string[] = [...PLAN_KEYS];
   if (!userId || !plan || !valid.includes(plan.toUpperCase())) {
     await ctx.reply(`❌ /setplan <userId> <план>\nПланы: ${valid.join(', ')}`);
     return;
@@ -489,7 +158,7 @@ bot.command('setplan', async (ctx) => {
     await api.post('/setplan', { userId, plan: plan.toUpperCase() });
     await ctx.reply(`✅ <code>${userId}</code> → план <b>${plan.toUpperCase()}</b>`, { parse_mode: 'HTML' });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -500,7 +169,7 @@ bot.command('resetlimits', async (ctx) => {
     await api.post('/resetlimits', { userId });
     await ctx.reply(`✅ Лимиты сброшены для <code>${userId}</code>`, { parse_mode: 'HTML' });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -511,7 +180,7 @@ bot.command('ban', async (ctx) => {
     await api.post('/ban', { userId });
     await ctx.reply(`🚫 Пользователь <code>${userId}</code> заблокирован`, { parse_mode: 'HTML' });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -529,7 +198,7 @@ bot.command('addcaspers', async (ctx) => {
     await ctx.reply(`✅ Caspers ${sign}${Math.abs(amount)} для <code>${userId}</code>`, { parse_mode: 'HTML' });
     await replyUserCard(ctx, userId);
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -579,7 +248,7 @@ bot.command('newpromo', async (ctx) => {
       parse_mode: 'HTML', reply_markup: promoDetailKb(data.promo.code),
     });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -592,7 +261,7 @@ bot.command('promos', async (ctx) => {
       : '🎟 Промокодов пока нет. Создай через /newpromo';
     await ctx.reply(text, { parse_mode: 'HTML', reply_markup: promoListKb(data, page) });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -621,7 +290,7 @@ bot.command('delpromo', async (ctx) => {
       { parse_mode: 'HTML' },
     );
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -632,7 +301,7 @@ bot.command('stats', async (ctx) => {
       reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
     });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -643,28 +312,36 @@ bot.command('health', async (ctx) => {
       reply_markup: new InlineKeyboard().text('🔄 Обновить', 'health').text('🏠 Меню', 'menu'),
     });
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
 bot.command('restart', async (ctx) => {
   const svc     = (ctx.match ?? '').trim();
-  const allowed = ['backend', 'bot', 'nginx', 'redis', 'admin-bot', 'certbot'];
+  const allowed = RESTARTABLE_SERVICES;
   if (!allowed.includes(svc)) {
     await ctx.reply(`❌ /restart <сервис>\nДоступные: ${allowed.join(', ')}`);
     return;
   }
   const msg = await ctx.reply(`🔄 Перезапускаю <b>${svc}</b>...`, { parse_mode: 'HTML' });
-  await containerRestart(svc);
-  await ctx.api.editMessageText(
-    ctx.chat!.id, msg.message_id,
-    `✅ <b>${svc}</b> перезапущен в ${new Date().toLocaleTimeString('ru')}`,
-    { parse_mode: 'HTML' },
-  );
+  try {
+    await containerRestart(svc);
+    await ctx.api.editMessageText(
+      ctx.chat!.id, msg.message_id,
+      `✅ <b>${svc}</b> перезапущен в ${new Date().toLocaleTimeString('ru')}`,
+      { parse_mode: 'HTML' },
+    );
+  } catch (err: any) {
+    await ctx.api.editMessageText(
+      ctx.chat!.id, msg.message_id,
+      `❌ Не удалось перезапустить <b>${svc}</b>: ${esc(apiErrorMessage(err))}`,
+      { parse_mode: 'HTML' },
+    );
+  }
 });
 
 bot.command('logs', async (ctx) => {
-  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
+  const allowedSvcs = LOGGABLE_SERVICES;
   const parts = (ctx.match ?? 'backend 60').trim().split(/\s+/);
   const svc   = parts[0] || 'backend';
   if (!allowedSvcs.includes(svc)) {
@@ -683,13 +360,13 @@ bot.command('logs', async (ctx) => {
         .text('⬅ Сервер', 'server_menu'),
     });
   } catch (e: any) {
-    await ctx.reply(`❌ Ошибка: ${e.message}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(e)}`);
   }
 });
 
 bot.command('sys', async (ctx) => {
   await ctx.reply('📊 Запрашиваю ресурсы...', { parse_mode: 'HTML' });
-  const svcs  = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
+  const svcs  = LOGGABLE_SERVICES;
   const lines = await Promise.all(
     svcs.map(async svc => {
       const s = await containerStats(svc);
@@ -717,7 +394,7 @@ bot.callbackQuery('menu', async (ctx) => {
       parse_mode: 'HTML', reply_markup: mainKb(),
     });
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     console.error('[AdminBot] menu callback error:', msg);
     await ctx.reply(`❌ Ошибка меню: ${String(msg).slice(0, 300)}`);
   }
@@ -732,7 +409,7 @@ bot.callbackQuery('stats', async (ctx) => {
       reply_markup: new InlineKeyboard().text('🔄 Обновить', 'stats').text('🏠 Меню', 'menu'),
     });
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     console.error('[AdminBot] stats callback error:', msg);
     await ctx.reply(`❌ Ошибка статистики: ${String(msg).slice(0, 300)}`);
   }
@@ -758,7 +435,7 @@ bot.callbackQuery('health', async (ctx) => {
 
 bot.callbackQuery('sys', async (ctx) => {
   await ctx.answerCallbackQuery('Считаю...');
-  const svcs  = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
+  const svcs  = LOGGABLE_SERVICES;
   const lines = await Promise.all(
     svcs.map(async svc => {
       const s = await containerStats(svc);
@@ -786,7 +463,7 @@ bot.callbackQuery(/^ul:(\d+)$/, async (ctx) => {
       reply_markup: userListKb(data, page),
     });
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     console.error('[AdminBot] ul callback error:', msg);
     await ctx.reply(`❌ Ошибка загрузки пользователей: ${String(msg).slice(0, 300)}`);
   }
@@ -802,7 +479,7 @@ bot.callbackQuery(/^pl:(\d+)$/, async (ctx) => {
       : '🎟 Промокодов пока нет. Создай через /newpromo';
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: promoListKb(data, page) });
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
   }
 });
@@ -816,7 +493,7 @@ bot.callbackQuery(/^p:(.+)$/, async (ctx) => {
       parse_mode: 'HTML', reply_markup: promoDetailKb(data.promo.code),
     });
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
   }
 });
@@ -847,7 +524,7 @@ bot.callbackQuery(/^dp_yes:(.+)$/, async (ctx) => {
       { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅ Список', 'pl:1') },
     );
   } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${(err?.response?.data?.error ?? err?.message ?? '').slice(0, 200)}`);
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
 });
 
@@ -868,7 +545,7 @@ bot.callbackQuery(/^u:(.+)$/, async (ctx) => {
   try {
     await replyUserCard(ctx, ctx.match[1], true);
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     console.error('[AdminBot] user card error:', msg);
     await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
   }
@@ -889,7 +566,7 @@ bot.callbackQuery(/^sp:(.+):([A-Z]+)$/, async (ctx) => {
     await api.post('/setplan', { userId, plan });
     await replyUserCard(ctx, userId, true);
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     await ctx.reply(`❌ Ошибка установки плана: ${String(msg).slice(0, 300)}`);
   }
 });
@@ -901,7 +578,7 @@ bot.callbackQuery(/^rl:(.+)$/, async (ctx) => {
     await api.post('/resetlimits', { userId });
     await replyUserCard(ctx, userId, true);
   } catch (err: any) {
-    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    const msg = apiErrorMessage(err);
     await ctx.reply(`❌ Ошибка сброса: ${String(msg).slice(0, 300)}`);
   }
 });
@@ -942,7 +619,7 @@ bot.callbackQuery(/^unban:(.+)$/, async (ctx) => {
   }
 });
 
-// caspers_add:<userId> — prompt to add caspers
+// caspers_add:<userId> — запрос на добавление caspers
 bot.callbackQuery(/^caspers_add:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.match[1];
@@ -952,27 +629,7 @@ bot.callbackQuery(/^caspers_add:(.+)$/, async (ctx) => {
   );
 });
 
-// caspers_sub:<userId> — prompt to subtract caspers
-bot.callbackQuery(/^caspers_sub:(.+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
-  const userId = ctx.match[1];
-  await ctx.reply(
-    `➖ <b>Списать Caspers</b>\n\nПользователь: <code>${userId}</code>\n\nВведи команду (отрицательное значение):\n/addcaspers ${userId} -<кол-во>`,
-    { parse_mode: 'HTML' },
-  );
-});
-
-// caspers_add:<userId> — prompt to add caspers
-bot.callbackQuery(/^caspers_add:(.+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
-  const userId = ctx.match[1];
-  await ctx.reply(
-    `➕ <b>Добавить Caspers</b>\n\nПользователь: <code>${userId}</code>\n\nВведи команду:\n/addcaspers ${userId} <кол-во>`,
-    { parse_mode: 'HTML' },
-  );
-});
-
-// caspers_sub:<userId> — prompt to subtract caspers
+// caspers_sub:<userId> — запрос на списание caspers
 bot.callbackQuery(/^caspers_sub:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.match[1];
@@ -983,22 +640,29 @@ bot.callbackQuery(/^caspers_sub:(.+)$/, async (ctx) => {
 });
 
 bot.callbackQuery(/^restart:(.+)$/, async (ctx) => {
-  const allowed = ['backend', 'bot', 'nginx', 'redis', 'admin-bot', 'certbot'];
+  const allowed = RESTARTABLE_SERVICES;
   const svc = ctx.match[1];
   if (!allowed.includes(svc)) {
     await ctx.answerCallbackQuery('⛔ Недопустимый сервис');
     return;
   }
   await ctx.answerCallbackQuery(`Перезапускаю ${svc}...`);
-  await containerRestart(svc);
-  await ctx.editMessageText(
-    `✅ <b>${svc}</b> перезапущен в ${new Date().toLocaleTimeString('ru')}`,
-    { parse_mode: 'HTML', reply_markup: serverKb() },
-  );
+  try {
+    await containerRestart(svc);
+    await ctx.editMessageText(
+      `✅ <b>${svc}</b> перезапущен в ${new Date().toLocaleTimeString('ru')}`,
+      { parse_mode: 'HTML', reply_markup: serverKb() },
+    );
+  } catch (err: any) {
+    await ctx.editMessageText(
+      `❌ Не удалось перезапустить <b>${svc}</b>: ${esc(apiErrorMessage(err))}`,
+      { parse_mode: 'HTML', reply_markup: serverKb() },
+    );
+  }
 });
 
 bot.callbackQuery(/^logs:([^:]+):(\d+)$/, async (ctx) => {
-  const allowedSvcs = ['backend', 'bot', 'admin-bot', 'nginx', 'redis', 'postgres'];
+  const allowedSvcs = LOGGABLE_SERVICES;
   const svc = ctx.match[1];
   if (!allowedSvcs.includes(svc)) {
     await ctx.answerCallbackQuery('⛔ Недопустимый сервис');
@@ -1016,19 +680,19 @@ bot.callbackQuery(/^logs:([^:]+):(\d+)$/, async (ctx) => {
         .text('⬅ Сервер', 'server_menu'),
     });
   } catch (e: any) {
-    await ctx.reply(`❌ ${e.message}`);
+    await ctx.reply(`❌ ${apiErrorMessage(e)}`);
   }
 });
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 
 bot.catch(async (err) => {
-  // Ignore expired / already-answered callback query errors — harmless race condition
+  // Игнорируем ошибки просроченных / уже отвеченных callback query — безобидная гонка
   if (err.message.includes('query is too old') || err.message.includes('query ID is invalid')) return;
   console.error('[AdminBot] Error:', err.message);
   try {
     await err.ctx.reply(`❌ Ошибка: ${err.message.slice(0, 200)}`);
-  } catch { /* ignore */ }
+  } catch { /* игнорируем */ }
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

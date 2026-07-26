@@ -3,10 +3,13 @@ import axios from 'axios';
 const API_URL = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const BOT_SECRET = process.env.BOT_SECRET ?? '';
 
-// proxy: false — HTTPS_PROXY/HTTP_PROXY in .env route external AI-provider
-// traffic through a non-RU exit; the internal backend:4000 Docker hostname
-// isn't reachable through it and every call here would otherwise 500.
+// proxy: false — HTTPS_PROXY/HTTP_PROXY в .env направляют трафик к внешним
+// AI-провайдерам через не-RU выход; внутренний Docker-хост backend:4000
+// через него недостижим, без этой опции каждый запрос здесь падал бы с 500.
 const http = axios.create({ proxy: false });
+
+// JWT живёт 15 минут (см. backend), обновляем за минуту до истечения — с запасом.
+const SESSION_TOKEN_TTL_MS = 14 * 60 * 1000;
 
 export type Mode = 'chat' | 'think' | 'vision' | 'sound' | 'reel';
 
@@ -18,10 +21,10 @@ export interface ChatMsg {
 export interface UserSession {
   accessToken: string;
   refreshToken: string;
-  tokenExpiresAt: number; // ms epoch, refresh a minute before this
+  tokenExpiresAt: number; // ms epoch, обновляем токен за минуту до этого момента
   activeChatId: string | null;
   mode: Mode;
-  /** Recent history for the active chat, kept in sync so /chat/stream has context. */
+  /** Недавняя история активного чата, синхронизирована, чтобы у /chat/stream был контекст. */
   history: ChatMsg[];
 }
 
@@ -45,7 +48,7 @@ async function mintTokens(from: TgFrom): Promise<{ accessToken: string; refreshT
   return { accessToken: res.data.accessToken, refreshToken: res.data.refreshToken };
 }
 
-/** Returns a session with a valid (non-expired) access token, minting/refreshing as needed. */
+/** Возвращает сессию с действующим (не истёкшим) access-токеном, при необходимости выпуская/обновляя его. */
 export async function ensureSession(from: TgFrom): Promise<UserSession> {
   let session = sessions.get(from.id);
 
@@ -54,7 +57,7 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
     session = {
       accessToken,
       refreshToken,
-      tokenExpiresAt: Date.now() + 14 * 60 * 1000,
+      tokenExpiresAt: Date.now() + SESSION_TOKEN_TTL_MS,
       activeChatId: null,
       mode: 'chat',
       history: [],
@@ -68,13 +71,13 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       const res = await http.post(`${API_URL}/api/auth/refresh`, { refreshToken: session.refreshToken });
       session.accessToken = res.data.accessToken;
       session.refreshToken = res.data.refreshToken;
-      session.tokenExpiresAt = Date.now() + 14 * 60 * 1000;
+      session.tokenExpiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
     } catch {
-      // Refresh token expired/invalid — mint a fresh pair
+      // Refresh-токен истёк/невалиден — выпускаем новую пару
       const { accessToken, refreshToken } = await mintTokens(from);
       session.accessToken = accessToken;
       session.refreshToken = refreshToken;
-      session.tokenExpiresAt = Date.now() + 14 * 60 * 1000;
+      session.tokenExpiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
     }
   }
 

@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { api } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/components/ui/Toast';
 import { InputBar, type ChatMode } from '@/components/chat/InputBar';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { GhostIcon } from '@/components/icons/GhostIcon';
@@ -61,6 +62,7 @@ async function resizeImageToBase64(file: File): Promise<string> {
 
 export default function ChatPage() {
   const router = useRouter();
+  const { show } = useToast();
   const { addChat, preferredModel, setPreferredModel } = useChatStore();
   const { user } = useAuthStore();
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
@@ -68,7 +70,7 @@ export default function ChatPage() {
   const name = user?.name?.split(' ')[0] ?? 'Ghost';
   const firstName = name.charAt(0).toUpperCase() + name.slice(1);
 
-  // Clear active chat state so sidebar doesn't highlight a stale chat
+  // Сбрасываем активный чат, чтобы сайдбар не подсвечивал устаревший чат
   useEffect(() => {
     sessionStorage.removeItem('newChat');
     useChatStore.getState().setActiveChat(null);
@@ -76,17 +78,23 @@ export default function ChatPage() {
   }, []);
 
   async function handleSend(prompt: string, file?: File, _videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) {
-    const chat = await api.chats.create({ mode: 'chat' });
+    let chat: Awaited<ReturnType<typeof api.chats.create>>;
+    try {
+      chat = await api.chats.create({ mode: 'chat' });
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось создать чат, попробуйте ещё раз', 'error');
+      return;
+    }
     addChat(chat);
 
-    // Video mode — store prompt and navigate
+    // Режим видео — сохраняем промпт и переходим
     if (chatMode === 'video') {
       sessionStorage.setItem('initialVideoPrompt', prompt);
       router.push(`/chat/${chat.id}`);
       return;
     }
 
-    // Music mode — store prompt and navigate
+    // Режим музыки — сохраняем промпт и переходим
     if (chatMode === 'music') {
       sessionStorage.setItem('initialMusicPrompt', prompt);
       if (musicMode) sessionStorage.setItem('initialMusicMode', musicMode);
@@ -99,14 +107,14 @@ export default function ChatPage() {
       return;
     }
 
-    // Images mode — always generate image
+    // Режим изображений — всегда генерируем картинку
     if (chatMode === 'images' && !file) {
       sessionStorage.setItem('initialImagePrompt', prompt || 'beautiful landscape');
       router.push(`/chat/${chat.id}`);
       return;
     }
 
-    // Chat mode — direct image generation request (no history yet in new chat)
+    // Режим чата — прямой запрос на генерацию картинки (истории в новом чате ещё нет)
     if (!file && !isPromptComposeRequest(prompt) && isImageRequest(prompt)) {
       sessionStorage.setItem('initialImagePrompt', prompt);
       router.push(`/chat/${chat.id}`);

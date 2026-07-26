@@ -23,6 +23,11 @@ enum Billing {
   YEARLY
 }
 
+enum PromoRewardType {
+  CASPERS
+  DISCOUNT_PERCENT
+}
+
 enum PaymentStatus {
   PENDING
   SUCCEEDED
@@ -77,6 +82,7 @@ model User {
   payments          Payment[]
   imageRequests     UserImageRequest[]
   casperTransactions CasperTransaction[]
+  promoRedemptions   PromoRedemption[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,6 +150,45 @@ model CasperTransaction {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+// ─── Promo codes ────────────────────────────────────────────────────────────
+
+model PromoCode {
+  id              String            @id @default(cuid())
+  code            String            @unique // normalized uppercase
+  rewardType      PromoRewardType
+  casperAmount    Int?              // for CASPERS
+  discountPercent Int?              // for DISCOUNT_PERCENT, 1-100
+  applicablePlans Plan[]            @default([]) // empty = applies to all paid plans
+  maxUses         Int?              // null = unlimited
+  usesCount       Int               @default(0)
+  active          Boolean           @default(true)
+  expiresAt       DateTime?
+  createdBy       String?           // admin Telegram ID, for audit
+  createdAt       DateTime          @default(now())
+  redemptions     PromoRedemption[]
+
+  @@index([code])
+}
+
+model PromoRedemption {
+  id              String          @id @default(cuid())
+  promoCodeId     String
+  promoCode       PromoCode       @relation(fields: [promoCodeId], references: [id], onDelete: Restrict)
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeSnapshot    String          // denormalized — survives even if PromoCode is later deleted
+  rewardType      PromoRewardType
+  casperAmount    Int?
+  discountPercent Int?
+  paymentId       String?         // set for DISCOUNT_PERCENT redemptions tied to a subscription payment
+
+  createdAt DateTime @default(now())
+
+  @@unique([promoCodeId, userId]) // one redemption per user per code — anti-reuse
+  @@index([userId])
+  @@index([paymentId])
 }
 
 model GenerateJob {

@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { grantCaspers } from './tokens.js';
 import { notifyPayment } from './admin-notify.js';
 import { PLANS, calculateCasperPrice } from '../config/plans.js';
+import { previewDiscountPromo, finalizeDiscountRedemption } from './promo.js';
 
 export type { PlanKey } from '../config/plans.js';
 export { PLANS, calculateCasperPrice };
@@ -32,10 +33,21 @@ export async function createPayment(
   planKey: keyof typeof PLANS,
   returnUrl: string,
   billing: 'monthly' | 'yearly' = 'monthly',
+  promoCode?: string,
 ) {
   const info = PLANS[planKey];
   if (!info || info.price === 0) throw new Error('Invalid plan');
-  const totalPrice = billing === 'yearly' ? info.price_yearly : info.price;
+  const basePrice = billing === 'yearly' ? info.price_yearly : info.price;
+
+  let totalPrice = basePrice;
+  let appliedPromo: string | undefined;
+  let discountPercent = 0;
+  if (promoCode) {
+    const preview = await previewDiscountPromo(promoCode, userId, planKey);
+    discountPercent = preview.discountPercent;
+    appliedPromo = preview.code;
+    totalPrice = Math.round(basePrice * (1 - discountPercent / 100) * 100) / 100;
+  }
 
   const idempotencyKey = crypto.randomUUID();
 
@@ -47,8 +59,11 @@ export async function createPayment(
         amount: { value: totalPrice.toFixed(2), currency: 'RUB' },
         confirmation: { type: 'redirect', return_url: returnUrl },
         capture: true,
-        description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''} — GhostLine`,
-        metadata: { userId, plan: planKey, billing, paymentType: 'subscription' },
+        description: `Подписка ${info.label}${billing === 'yearly' ? ' (год)' : ''}${appliedPromo ? ` — промо ${appliedPromo}` : ''} — GhostLine`,
+        metadata: {
+          userId, plan: planKey, billing, paymentType: 'subscription',
+          ...(appliedPromo ? { promoCode: appliedPromo } : {}),
+        },
       },
       { headers: yokassaHeaders(idempotencyKey), timeout: 15_000 }
     );
@@ -74,6 +89,7 @@ export async function createPayment(
   return {
     paymentId:  data.id as string,
     paymentUrl: data.confirmation.confirmation_url as string,
+    discountPercent,
   };
 }
 
@@ -218,6 +234,11 @@ export async function processWebhook(body: unknown): Promise<void> {
         planInfo.caspers_monthly,
         `plan_grant_${payment.plan.toLowerCase()}`,
       );
+
+      const promoCode = event.object.metadata?.promoCode;
+      if (promoCode) {
+        await finalizeDiscountRedemption({ code: promoCode, userId: payment.userId, paymentId: payment.id }).catch(() => {});
+      }
 
       notifyPayment({
         userId:   payment.userId,

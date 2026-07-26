@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { notifyNewUser } from '../services/admin-notify.js';
 import { PLANS } from '../services/yokassa.js';
+import { redeemCaspersPromo, PromoError } from '../services/promo.js';
 
 // ─── Trial setup ──────────────────────────────────────────────────────────────
 
@@ -317,6 +318,27 @@ export default async function authRoutes(fastify: FastifyInstance) {
       plan: user?.plan ?? 'FREE',
       name: user?.name ?? null,
     };
+  });
+
+  // ── Bot: redeem a CASPERS promo code by Telegram ID ───────────────────────
+  fastify.post('/bot/promo/redeem', async (request, reply) => {
+    const secret = (request.headers['x-bot-secret'] ?? '') as string;
+    if (secret !== (process.env.BOT_SECRET ?? '')) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const { tgId, code } = request.body as { tgId?: string; code?: string };
+    if (!tgId || !code) return reply.code(400).send({ error: 'tgId и code обязательны' });
+
+    const user = await prisma.user.findFirst({ where: { telegramId: tgId } });
+    if (!user) return reply.code(404).send({ error: 'Сначала войдите через /start' });
+
+    try {
+      const result = await redeemCaspersPromo(code, user.id);
+      return { ok: true, casperAmount: result.casperAmount };
+    } catch (err: any) {
+      if (err instanceof PromoError) return reply.code(400).send({ error: err.message, code: err.code });
+      throw err;
+    }
   });
 
   // ── Telegram OAuth verify (called from frontend after oauth.telegram.org) ─

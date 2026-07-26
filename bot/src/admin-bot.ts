@@ -13,6 +13,11 @@
  *   /addlimits <userId> [chat=N] [pro=N] [img=N] [video=N] [files=N]
  *   /resetlimits <userId>
  *   /ban   <userId>
+ *   /newpromo <CODE> type=caspers amount=N [maxuses=N] [expires=YYYY-MM-DD]
+ *   /newpromo <CODE> type=discount percent=N [plans=BASIC,PRO] [maxuses=N] [expires=YYYY-MM-DD]
+ *   /promos [page]  — список промокодов
+ *   /promo <code>   — детали + кто использовал
+ *   /delpromo <code>
  *   /stats          — сводная статистика
  *   /health         — состояние сервисов
  *   /restart <svc>  — перезапуск контейнера
@@ -230,6 +235,47 @@ function fmtHealth(statuses: Record<string, string>): string {
   return `🏥 <b>Состояние сервисов</b>\n\n${lines.join('\n')}`;
 }
 
+// ─── Promo format helpers ───────────────────────────────────────────────────
+
+function fmtPromoShort(p: any): string {
+  const reward = p.rewardType === 'CASPERS'
+    ? `👻 ${p.casperAmount} Caspers`
+    : `🎟 −${p.discountPercent}%`;
+  const uses = `${p.usesCount}/${p.maxUses ?? '∞'}`;
+  const status = !p.active ? '🚫' : (p.expiresAt && new Date(p.expiresAt) < new Date()) ? '⏰' : '🟢';
+  return `${status} <code>${esc(p.code)}</code> — ${reward} · исп: ${uses}`;
+}
+
+function fmtPromoDetail(p: any, redemptions: any[]): string {
+  const reward = p.rewardType === 'CASPERS'
+    ? `👻 <b>${p.casperAmount} Caspers</b> за активацию`
+    : `🎟 <b>Скидка ${p.discountPercent}%</b> на ${p.applicablePlans.length ? p.applicablePlans.join(', ') : 'все тарифы'}`;
+  const status = !p.active ? '🚫 Деактивирован' : (p.expiresAt && new Date(p.expiresAt) < new Date()) ? '⏰ Истёк' : '🟢 Активен';
+  const expires = p.expiresAt ? `\n⏰ До: ${new Date(p.expiresAt).toLocaleDateString('ru')}` : '';
+  const creator = p.createdBy ? `\n👤 Создал: <code>${esc(p.createdBy)}</code>` : '';
+
+  let text =
+    `🎫 <b>${esc(p.code)}</b>\n\n` +
+    `${reward}\n` +
+    `${status}\n` +
+    `📊 Использований: <b>${p.usesCount}${p.maxUses ? `/${p.maxUses}` : ' (без лимита)'}</b>${expires}${creator}\n\n`;
+
+  if (redemptions.length === 0) {
+    text += '<i>Пока никто не использовал.</i>';
+  } else {
+    text += `👥 <b>Кто использовал (${redemptions.length}):</b>\n`;
+    text += redemptions.slice(0, 20).map((r: any) => {
+      const u = r.user;
+      const name = esc(u?.name ?? 'Без имени');
+      const tg = u?.telegramId ? ` · TG:${u.telegramId}` : '';
+      const date = new Date(r.createdAt).toLocaleDateString('ru');
+      return `• ${name}${tg} — ${date}`;
+    }).join('\n');
+    if (redemptions.length > 20) text += `\n<i>...и ещё ${redemptions.length - 20}</i>`;
+  }
+  return text;
+}
+
 // ─── Keyboards ────────────────────────────────────────────────────────────────
 
 function mainKb(): InlineKeyboard {
@@ -237,8 +283,37 @@ function mainKb(): InlineKeyboard {
     .text('👥 Пользователи', 'ul:1')
     .text('📊 Статистика', 'stats')
     .row()
-    .text('🔧 Сервер', 'server_menu')
-    .text('🏥 Здоровье', 'health');
+    .text('🎟 Промокоды', 'pl:1')
+    .text('🏥 Здоровье', 'health')
+    .row()
+    .text('🔧 Сервер', 'server_menu');
+}
+
+function promoListKb(data: any, page: number): InlineKeyboard {
+  const promos: any[] = data.promos ?? [];
+  const total       = data.total ?? 0;
+  const limit       = data.limit ?? 10;
+  const totalPages  = Math.max(1, Math.ceil(total / limit));
+  const kb          = new InlineKeyboard();
+
+  promos.forEach((p: any) => {
+    kb.text(`${p.active ? '🟢' : '🚫'} ${p.code}`, `p:${p.code}`).row();
+  });
+
+  const nav: Array<[string, string]> = [];
+  if (page > 1)          nav.push(['⬅', `pl:${page - 1}`]);
+  nav.push([`${page}/${totalPages}`, `pl:${page}`]);
+  if (page < totalPages) nav.push(['➡', `pl:${page + 1}`]);
+  nav.forEach(([label, cb]) => kb.text(label, cb));
+  kb.row();
+
+  return kb.text('🏠 Меню', 'menu');
+}
+
+function promoDetailKb(code: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('🗑 Удалить', `dp:${code}`)
+    .text('⬅ Список', 'pl:1');
 }
 
 function userKb(userId: string): InlineKeyboard {
@@ -500,6 +575,98 @@ bot.command('addcaspers', async (ctx) => {
   }
 });
 
+bot.command('newpromo', async (ctx) => {
+  const parts = (ctx.match ?? '').trim().split(/\s+/);
+  const code  = parts[0];
+  if (!code) {
+    await ctx.reply(
+      '❌ <b>Создание промокода</b>\n\n' +
+      '<code>/newpromo CODE type=caspers amount=500 maxuses=100 expires=2026-12-31</code>\n' +
+      '<code>/newpromo CODE type=discount percent=20 plans=BASIC,PRO maxuses=50</code>\n\n' +
+      '<i>maxuses и expires необязательны (по умолчанию — без лимита). plans необязателен (по умолчанию — все тарифы).</i>',
+      { parse_mode: 'HTML' },
+    );
+    return;
+  }
+
+  const kv: Record<string, string> = {};
+  for (const p of parts.slice(1)) {
+    const [k, v] = p.split('=');
+    if (k && v !== undefined) kv[k] = v;
+  }
+
+  const body: Record<string, any> = { code, createdBy: String(ctx.from?.id ?? '') };
+  if (kv.type === 'caspers') {
+    body.rewardType = 'CASPERS';
+    body.casperAmount = parseInt(kv.amount ?? '');
+    if (!body.casperAmount || body.casperAmount < 1) {
+      await ctx.reply('❌ Укажи amount=N (кол-во Caspers)'); return;
+    }
+  } else if (kv.type === 'discount') {
+    body.rewardType = 'DISCOUNT_PERCENT';
+    body.discountPercent = parseInt(kv.percent ?? '');
+    if (!body.discountPercent || body.discountPercent < 1 || body.discountPercent > 100) {
+      await ctx.reply('❌ Укажи percent=N (1-100)'); return;
+    }
+    if (kv.plans) body.applicablePlans = kv.plans.split(',').map(s => s.trim().toUpperCase());
+  } else {
+    await ctx.reply('❌ Укажи type=caspers или type=discount'); return;
+  }
+  if (kv.maxuses) body.maxUses = parseInt(kv.maxuses);
+  if (kv.expires) body.expiresAt = new Date(kv.expires + 'T23:59:59Z').toISOString();
+
+  try {
+    const { data } = await api.post('/promo/create', body);
+    await ctx.reply(fmtPromoDetail(data.promo, []), {
+      parse_mode: 'HTML', reply_markup: promoDetailKb(data.promo.code),
+    });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
+  }
+});
+
+bot.command('promos', async (ctx) => {
+  try {
+    const page = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
+    const { data } = await api.get(`/promo/list?page=${page}&limit=10`);
+    const text = data.promos.length
+      ? `🎟 <b>Промокоды</b> (стр. ${page}, всего: ${data.total})\n\n` + data.promos.map(fmtPromoShort).join('\n')
+      : '🎟 Промокодов пока нет. Создай через /newpromo';
+    await ctx.reply(text, { parse_mode: 'HTML', reply_markup: promoListKb(data, page) });
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
+  }
+});
+
+bot.command('promo', async (ctx) => {
+  const code = (ctx.match ?? '').trim();
+  if (!code) { await ctx.reply('❌ /promo <код>'); return; }
+  try {
+    const { data } = await api.get(`/promo/${encodeURIComponent(code)}`);
+    await ctx.reply(fmtPromoDetail(data.promo, data.redemptions), {
+      parse_mode: 'HTML', reply_markup: promoDetailKb(data.promo.code),
+    });
+  } catch {
+    await ctx.reply('❌ Промокод не найден.');
+  }
+});
+
+bot.command('delpromo', async (ctx) => {
+  const code = (ctx.match ?? '').trim();
+  if (!code) { await ctx.reply('❌ /delpromo <код>'); return; }
+  try {
+    const { data } = await api.delete(`/promo/${encodeURIComponent(code)}`);
+    await ctx.reply(
+      data.deleted
+        ? `✅ Промокод <code>${esc(code)}</code> удалён (не использовался)`
+        : `✅ Промокод <code>${esc(code)}</code> деактивирован (уже использовался — история сохранена)`,
+      { parse_mode: 'HTML' },
+    );
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${err.response?.data?.error ?? err.message}`);
+  }
+});
+
 bot.command('stats', async (ctx) => {
   try {
     const { data } = await api.get('/stats');
@@ -664,6 +831,65 @@ bot.callbackQuery(/^ul:(\d+)$/, async (ctx) => {
     const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
     console.error('[AdminBot] ul callback error:', msg);
     await ctx.reply(`❌ Ошибка загрузки пользователей: ${String(msg).slice(0, 300)}`);
+  }
+});
+
+bot.callbackQuery(/^pl:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const page = parseInt(ctx.match[1]);
+  try {
+    const { data } = await api.get(`/promo/list?page=${page}&limit=10`);
+    const text = data.promos.length
+      ? `🎟 <b>Промокоды</b> (стр. ${page}, всего: ${data.total})\n\n` + data.promos.map(fmtPromoShort).join('\n')
+      : '🎟 Промокодов пока нет. Создай через /newpromo';
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: promoListKb(data, page) });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
+  }
+});
+
+bot.callbackQuery(/^p:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const code = ctx.match[1];
+  try {
+    const { data } = await api.get(`/promo/${encodeURIComponent(code)}`);
+    await ctx.editMessageText(fmtPromoDetail(data.promo, data.redemptions), {
+      parse_mode: 'HTML', reply_markup: promoDetailKb(data.promo.code),
+    });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error ?? err?.message ?? 'неизвестная ошибка';
+    await ctx.reply(`❌ Ошибка: ${String(msg).slice(0, 300)}`);
+  }
+});
+
+bot.callbackQuery(/^dp:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const code = ctx.match[1];
+  await ctx.editMessageText(
+    `⚠️ <b>Удалить промокод?</b>\n\n<code>${esc(code)}</code>\n\nЕсли его уже использовали — вместо удаления он будет деактивирован (история сохранится).`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard()
+        .text('✅ Да', `dp_yes:${code}`)
+        .text('❌ Отмена', `p:${code}`),
+    },
+  );
+});
+
+bot.callbackQuery(/^dp_yes:(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery('Удаляю...');
+  const code = ctx.match[1];
+  try {
+    const { data } = await api.delete(`/promo/${encodeURIComponent(code)}`);
+    await ctx.editMessageText(
+      data.deleted
+        ? `✅ Промокод <code>${esc(code)}</code> удалён (не использовался)`
+        : `✅ Промокод <code>${esc(code)}</code> деактивирован (уже использовался — история сохранена)`,
+      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅ Список', 'pl:1') },
+    );
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${(err?.response?.data?.error ?? err?.message ?? '').slice(0, 200)}`);
   }
 });
 

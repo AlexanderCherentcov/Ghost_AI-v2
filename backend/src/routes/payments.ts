@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createPayment, createCasperPayment, processWebhook, PLANS } from '../services/yokassa.js';
+import { PromoError } from '../services/promo.js';
 import { prisma } from '../lib/prisma.js';
 
 const createPaymentSchema = z.object({
   plan: z.string(),
   returnUrl: z.string().url().optional(),
   billing: z.enum(['monthly', 'yearly']).default('monthly'),
+  promoCode: z.string().min(1).max(40).optional(),
 });
 
 const createCasperSchema = z.object({
@@ -20,7 +22,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { plan, returnUrl, billing } = createPaymentSchema.parse(request.body);
+      const { plan, returnUrl, billing, promoCode } = createPaymentSchema.parse(request.body);
 
       const validPlans = Object.keys(PLANS).filter((k) => PLANS[k as keyof typeof PLANS].price > 0);
       if (!validPlans.includes(plan)) {
@@ -36,9 +38,12 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
       const effectiveReturnUrl = returnUrl ?? `${frontendUrl}/billing/success`;
 
       try {
-        const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing);
+        const result = await createPayment(userId, plan as any, effectiveReturnUrl, billing, promoCode);
         return result;
       } catch (err: any) {
+        if (err instanceof PromoError) {
+          return reply.code(400).send({ error: err.message, code: err.code });
+        }
         fastify.log.error(err, 'createPayment failed');
         return reply.code(502).send({ error: err.message ?? 'Платёжный сервис недоступен' });
       }

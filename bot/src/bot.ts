@@ -124,7 +124,8 @@ bot.command('help', async (ctx) => {
     `👻 *GhostLine AI — Помощь*\n\n` +
     `*Команды:*\n` +
     `/start — Главное меню\n` +
-    `/help — Это сообщение\n\n` +
+    `/help — Это сообщение\n` +
+    `/promo <код> — активировать промокод на Caspers\n\n` +
     `*Режимы работы:*\n` +
     `• Chat — текстовый диалог\n` +
     `• Vision — генерация изображений\n` +
@@ -137,6 +138,31 @@ bot.command('help', async (ctx) => {
       reply_markup: new InlineKeyboard().webApp('🤖 Открыть приложение', MINIAPP_URL),
     }
   );
+});
+
+// ─── /promo ────────────────────────────────────────────────────────────────────
+// Активация промокода на Caspers. Скидочные промокоды на тарифы вводятся на сайте
+// при оформлении подписки (billing page).
+
+bot.command('promo', async (ctx) => {
+  const code = (ctx.match ?? '').trim();
+  if (!ctx.from) return;
+  if (!code) {
+    await ctx.reply('🎟 Использование: /promo <код>');
+    return;
+  }
+
+  try {
+    const res = await axios.post(
+      `${API_URL}/api/bot/promo/redeem`,
+      { tgId: String(ctx.from.id), code },
+      { headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' } },
+    );
+    await ctx.reply(`✅ Промокод активирован! +${res.data.casperAmount} Caspers 👻`);
+  } catch (err: any) {
+    const msg = err.response?.data?.error ?? 'Не удалось активировать промокод';
+    await ctx.reply(`❌ ${msg}`);
+  }
 });
 
 // ─── Admin: /setplan ───────────────────────────────────────────────────────────

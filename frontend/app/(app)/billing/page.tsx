@@ -114,19 +114,79 @@ function pricePerCasper(amount: number): number {
 }
 
 export default function BillingPage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const { show } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [casperSlider, setCasperSlider] = useState(100);
 
+  // ── Discount promo (applies at plan checkout) ─────────────────────────────
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplying, setPromoApplying] = useState(false);
+  const [promoDiscounts, setPromoDiscounts] = useState<Record<string, number>>({});
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+
+  // ── Caspers-grant promo (redeemed immediately) ────────────────────────────
+  const [casperPromoCode, setCasperPromoCode] = useState('');
+  const [casperPromoLoading, setCasperPromoLoading] = useState(false);
+
   const plan = user?.plan ?? 'FREE';
   const isPaid = plan !== 'FREE';
+
+  async function handleApplyPromo() {
+    const code = promoCode.trim();
+    if (!code) return;
+    setPromoApplying(true);
+    setPromoDiscounts({});
+    try {
+      const results = await Promise.allSettled(
+        PLANS.map((p) => api.promo.preview(code, p.key).then((r) => [p.key, r.discountPercent] as const))
+      );
+      const discounts: Record<string, number> = {};
+      let firstError: string | null = null;
+      for (const r of results) {
+        if (r.status === 'fulfilled') discounts[r.value[0]] = r.value[1];
+        else if (!firstError) firstError = r.reason?.message ?? 'Не удалось применить промокод';
+      }
+      if (Object.keys(discounts).length === 0) {
+        show(firstError ?? 'Промокод не подходит ни для одного тарифа', 'error');
+        setAppliedPromoCode(null);
+        return;
+      }
+      setPromoDiscounts(discounts);
+      setAppliedPromoCode(code);
+      show('Промокод применён', 'success');
+    } finally {
+      setPromoApplying(false);
+    }
+  }
+
+  async function handleRedeemCasperPromo() {
+    const code = casperPromoCode.trim();
+    if (!code) return;
+    setCasperPromoLoading(true);
+    try {
+      const { casperAmount } = await api.promo.redeem(code);
+      const me = await api.auth.me();
+      setUser(me);
+      setCasperPromoCode('');
+      show(`+${casperAmount} Caspers начислено!`, 'success');
+    } catch (err: any) {
+      show(err.message ?? 'Не удалось активировать промокод', 'error');
+    } finally {
+      setCasperPromoLoading(false);
+    }
+  }
 
   async function handleBuy(planKey: string) {
     setLoading(planKey);
     try {
-      const { paymentUrl } = await api.payments.create({ plan: planKey, billing: billingCycle });
+      const hasDiscount = appliedPromoCode && promoDiscounts[planKey] !== undefined;
+      const { paymentUrl } = await api.payments.create({
+        plan: planKey,
+        billing: billingCycle,
+        ...(hasDiscount ? { promoCode: appliedPromoCode! } : {}),
+      });
       window.location.href = paymentUrl;
     } catch (err: any) {
       show(err.message, 'error');
@@ -190,6 +250,26 @@ export default function BillingPage() {
                 </div>
               )}
             </div>
+
+            {/* Casper-grant promo code — redeems immediately */}
+            <div className="mt-4 pt-4 border-t border-[var(--border)] flex items-center gap-2">
+              <input
+                type="text"
+                value={casperPromoCode}
+                onChange={(e) => setCasperPromoCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleRedeemCasperPromo()}
+                placeholder="Промокод на Caspers"
+                className="input-ghost h-9 text-sm flex-1"
+                style={{ height: '36px' }}
+              />
+              <button
+                onClick={handleRedeemCasperPromo}
+                disabled={!casperPromoCode.trim() || casperPromoLoading}
+                className="btn btn-ghost h-9 px-4 text-sm disabled:opacity-40"
+              >
+                {casperPromoLoading ? 'Активирую...' : 'Активировать'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -222,11 +302,35 @@ export default function BillingPage() {
 
         {/* Plan cards — 4 columns */}
         <div className="space-y-4">
-          <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Подписки</h2>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h2 className="text-sm font-medium text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Подписки</h2>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                placeholder="Промокод на скидку"
+                className="input-ghost h-9 text-sm w-48"
+                style={{ height: '36px' }}
+              />
+              <button
+                onClick={handleApplyPromo}
+                disabled={!promoCode.trim() || promoApplying}
+                className="btn btn-ghost h-9 px-4 text-sm disabled:opacity-40"
+              >
+                {promoApplying ? 'Проверяю...' : 'Применить'}
+              </button>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {PLANS.map(({ key, name, price, price_yearly, caspers, badge, features }) => {
-              const realPrice = billingCycle === 'yearly' ? price_yearly : price;
+              const basePrice = billingCycle === 'yearly' ? price_yearly : price;
+              const discountPercent = promoDiscounts[key];
+              const realPrice = discountPercent
+                ? Math.round(basePrice * (1 - discountPercent / 100))
+                : basePrice;
               // Fake crossed-out: actual × 2 (monthly), or fake_monthly × 12 (yearly)
               const fakeMonthly = price * 2;
               const fakePrice = billingCycle === 'yearly' ? fakeMonthly * 12 : fakeMonthly;
@@ -276,6 +380,11 @@ export default function BillingPage() {
                       {billingCycle === 'yearly' ? '/год' : '/мес'}
                     </span>
                   </div>
+                  {discountPercent && (
+                    <p className="text-[11px] text-green-400 mb-1">
+                      🎟 Промокод: −{discountPercent}%
+                    </p>
+                  )}
 
                   <p className="text-[11px] text-accent mb-3">
                     {caspers.toLocaleString('ru-RU')} Caspers/мес

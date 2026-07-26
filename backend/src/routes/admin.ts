@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
 import { grantCaspers } from '../services/tokens.js';
+import { createPromoCode, deletePromoCode, normalizePromoCode, PromoError } from '../services/promo.js';
 
 if (!process.env.BOT_SECRET) {
   throw new Error('BOT_SECRET is required — server refuses to start without it');
@@ -37,6 +38,17 @@ const addCaspersSchema = z.object({
 const banSchema = z.object({
   userId: z.string().min(1),
   unban:  z.boolean().optional(),
+});
+
+const createPromoSchema = z.object({
+  code:            z.string().min(3).max(40),
+  rewardType:      z.enum(['CASPERS', 'DISCOUNT_PERCENT']),
+  casperAmount:    z.number().int().min(1).optional(),
+  discountPercent: z.number().int().min(1).max(100).optional(),
+  applicablePlans: z.array(z.enum(['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'])).optional(),
+  maxUses:         z.number().int().min(1).optional(),
+  expiresAt:       z.string().datetime().optional(),
+  createdBy:       z.string().optional(),
 });
 
 // ─── User field selector ───────────────────────────────────────────────────────
@@ -297,6 +309,83 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       revenueTotal:  revenueTotal._sum.amount ?? 0,
       planCounts: planCountsMap,
     };
+  });
+
+  // ── POST /api/admin/promo/create ───────────────────────────────────────────
+  fastify.post('/admin/promo/create', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const input = createPromoSchema.parse(request.body);
+    if (input.rewardType === 'CASPERS' && !input.casperAmount) {
+      return reply.code(400).send({ error: 'casperAmount обязателен для типа CASPERS' });
+    }
+    if (input.rewardType === 'DISCOUNT_PERCENT' && !input.discountPercent) {
+      return reply.code(400).send({ error: 'discountPercent обязателен для типа DISCOUNT_PERCENT' });
+    }
+
+    try {
+      const promo = await createPromoCode({
+        ...input,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      });
+      return reply.send({ ok: true, promo });
+    } catch (err: any) {
+      if (err.code === 'P2002') return reply.code(409).send({ error: 'Такой промокод уже существует' });
+      throw err;
+    }
+  });
+
+  // ── GET /api/admin/promo/list ──────────────────────────────────────────────
+  fastify.get('/admin/promo/list', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const q = request.query as { page?: string; limit?: string };
+    const page  = Math.max(1, parseInt(q.page ?? '1'));
+    const limit = Math.min(50, Math.max(1, parseInt(q.limit ?? '10')));
+
+    const [promos, total] = await prisma.$transaction([
+      prisma.promoCode.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.promoCode.count(),
+    ]);
+
+    return { promos, total, page, limit };
+  });
+
+  // ── GET /api/admin/promo/:code — details + who redeemed it ─────────────────
+  fastify.get('/admin/promo/:code', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const { code } = request.params as { code: string };
+    const promo = await prisma.promoCode.findUnique({ where: { code: normalizePromoCode(code) } });
+    if (!promo) return reply.code(404).send({ error: 'Промокод не найден' });
+
+    const redemptions = await prisma.promoRedemption.findMany({
+      where: { promoCodeId: promo.id },
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { id: true, name: true, email: true, telegramId: true } } },
+    });
+
+    return { promo, redemptions };
+  });
+
+  // ── DELETE /api/admin/promo/:code ──────────────────────────────────────────
+  // Hard-deletes if never used; otherwise deactivates so redemption history
+  // (who used what) stays intact for admin visibility.
+  fastify.delete('/admin/promo/:code', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const { code } = request.params as { code: string };
+    try {
+      const result = await deletePromoCode(code);
+      return reply.send({ ok: true, ...result });
+    } catch (err: any) {
+      if (err instanceof PromoError) return reply.code(404).send({ error: err.message });
+      throw err;
+    }
   });
 };
 

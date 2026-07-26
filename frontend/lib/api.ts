@@ -101,8 +101,8 @@ export const api = {
 
   payments: {
     plans: () => request<PlansResponse>('/plans'),
-    create: (data: { plan: string; billing?: 'monthly' | 'yearly' }) =>
-      request<{ paymentId: string; paymentUrl: string }>('/payments/create', {
+    create: (data: { plan: string; billing?: 'monthly' | 'yearly'; promoCode?: string }) =>
+      request<{ paymentId: string; paymentUrl: string; discountPercent: number }>('/payments/create', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -116,6 +116,21 @@ export const api = {
       request<{ status: string; plan: string | null }>(
         `/payments/status/${yokassaId}`
       ),
+  },
+
+  promo: {
+    /** Redeem a CASPERS-type promo code — grants Caspers immediately. */
+    redeem: (code: string) =>
+      request<{ ok: true; casperAmount: number }>('/promo/redeem', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      }),
+    /** Preview a DISCOUNT_PERCENT promo for a plan before checkout — no side effects. */
+    preview: (code: string, plan: string) =>
+      request<{ ok: true; discountPercent: number; code: string }>('/promo/preview', {
+        method: 'POST',
+        body: JSON.stringify({ code, plan }),
+      }),
   },
 
   upload: {

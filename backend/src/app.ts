@@ -20,6 +20,7 @@ import chatRoutes from './routes/chat.js';
 import uploadRoutes from './routes/upload.js';
 import paymentRoutes from './routes/payments.js';
 import generateRoutes from './routes/generate.js';
+import promoRoutes from './routes/promo.js';
 import supportRoutes from './routes/support.js';
 import adminRoutes from './routes/admin.js';
 import plansRoutes from './routes/plans.js';
@@ -135,6 +136,7 @@ export async function buildApp() {
   await fastify.register(uploadRoutes, { prefix: '/api' });
   await fastify.register(paymentRoutes, { prefix: '/api' });
   await fastify.register(generateRoutes, { prefix: '/api' });
+  await fastify.register(promoRoutes, { prefix: '/api' });
   await fastify.register(supportRoutes, { prefix: '/api' });
   await fastify.register(adminRoutes,   { prefix: '/api' });
   await fastify.register(plansRoutes,    { prefix: '/api' });

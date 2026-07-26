@@ -98,10 +98,12 @@ export default function LandingPage() {
             <GhostIcon size={24} className="text-accent" />
             <span className="font-medium text-sm tracking-tight">GhostLine</span>
           </div>
-          <div className="hidden md:flex items-center gap-6 text-sm text-[rgba(255,255,255,0.45)]">
-            <a href="#features" className="hover:text-white transition-colors">Возможности</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Тарифы</a>
-            <a href="#about" className="hover:text-white transition-colors">О нас</a>
+          <div className="hidden md:flex items-center gap-6 text-sm">
+            {/* Цвет задан явно на <a>, а не унаследован от родителя — иначе его перебивает
+                глобальное правило `a { color: var(--accent) }` из globals.css, и контраст падает ниже 4.5:1 */}
+            <a href="#features" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Возможности</a>
+            <a href="#pricing" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Тарифы</a>
+            <a href="#about" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">О нас</a>
           </div>
           <Link
             href="/login"
@@ -112,6 +114,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
+      <main>
       {/* Hero */}
       <section className="relative flex flex-col items-center justify-center min-h-screen text-center px-6 overflow-hidden">
         {/* Ghost background text */}
@@ -344,6 +347,7 @@ export default function LandingPage() {
           </p>
         </motion.div>
       </section>
+      </main>
 
       <SupportWidget />
 
@@ -362,10 +366,10 @@ export default function LandingPage() {
               xxghostlinex@gmail.com
             </a>
           </div>
-          <div className="flex items-center gap-6 text-sm text-[rgba(255,255,255,0.3)]">
-            <Link href="/privacy" className="hover:text-white transition-colors">Политика конфиденциальности</Link>
-            <Link href="/terms" className="hover:text-white transition-colors">Условия использования</Link>
-            <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="hover:text-white transition-colors">
+          <div className="flex items-center gap-6 text-sm">
+            <Link href="/privacy" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Политика конфиденциальности</Link>
+            <Link href="/terms" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Условия использования</Link>
+            <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">
               Telegram
             </a>
           </div>

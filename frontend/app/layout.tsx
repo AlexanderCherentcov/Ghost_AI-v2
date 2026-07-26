@@ -109,7 +109,8 @@ export const viewport: Viewport = {
   colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1, // prevent iOS zoom on input focus
+  // Зум на iOS при фокусе уже решён через fontSize:16px на текстовых полях —
+  // блокировать maximumScale не нужно, это ломает pinch-to-zoom слабовидящим (WCAG 1.4.4).
   viewportFit: 'cover', // expose safe-area-inset-* on iOS notch/home-indicator
 };
 

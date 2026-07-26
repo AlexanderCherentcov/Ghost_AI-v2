@@ -51,8 +51,8 @@ export interface GenJobResult {
   error: string | null;
 }
 
-export async function startVisionJob(session: UserSession, chatId: string, prompt: string): Promise<string> {
-  const { data } = await client(session).post('/generate/vision', { prompt, chatId });
+export async function startVisionJob(session: UserSession, chatId: string, prompt: string, sourceImageUrl?: string): Promise<string> {
+  const { data } = await client(session).post('/generate/vision', { prompt, chatId, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
   return data.jobId;
 }
 
@@ -61,8 +61,8 @@ export async function startSoundJob(session: UserSession, chatId: string, prompt
   return data.jobId;
 }
 
-export async function startReelJob(session: UserSession, chatId: string, prompt: string): Promise<string> {
-  const { data } = await client(session).post('/generate/reel', { prompt, chatId });
+export async function startReelJob(session: UserSession, chatId: string, prompt: string, videoImageUrl?: string): Promise<string> {
+  const { data } = await client(session).post('/generate/reel', { prompt, chatId, ...(videoImageUrl ? { videoImageUrl } : {}) });
   return data.jobId;
 }
 

@@ -6,6 +6,7 @@ import {
   startVisionJob, startSoundJob, startReelJob, pollJob,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
+import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-files.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
@@ -428,7 +429,14 @@ bot.callbackQuery(/^delchat_yes:(.+)$/, async (ctx) => {
 
 // ─── Text chat streaming ────────────────────────────────────────────────────
 
-async function handleTextChat(ctx: any, session: UserSession, prompt: string): Promise<void> {
+interface TextAttachment {
+  imageUrl?: string;
+  fileContent?: string;
+  fileName?: string;
+  fileLang?: string;
+}
+
+async function handleTextChat(ctx: any, session: UserSession, prompt: string, attachment?: TextAttachment): Promise<void> {
   const placeholder = await ctx.reply('✍️ Печатаю...');
   let lastEdit = 0;
   const EDIT_INTERVAL_MS = 1200;
@@ -436,7 +444,7 @@ async function handleTextChat(ctx: any, session: UserSession, prompt: string): P
   try {
     const result = await streamChat(
       session,
-      { chatId: session.activeChatId!, mode: session.mode as 'chat' | 'think', prompt, history: session.history },
+      { chatId: session.activeChatId!, mode: session.mode as 'chat' | 'think', prompt, history: session.history, ...attachment },
       (partial) => {
         const now = Date.now();
         if (now - lastEdit < EDIT_INTERVAL_MS) return;
@@ -468,13 +476,14 @@ const GEN_ICON: Record<string, string> = { vision: '🎨', sound: '🎵', reel: 
 const GEN_LABEL: Record<string, string> = { vision: 'картинку', sound: 'музыку', reel: 'видео' };
 const GEN_TIMEOUT_MS: Record<string, number> = { vision: 3 * 60_000, sound: 3 * 60_000, reel: 6 * 60_000 };
 
-async function handleGeneration(ctx: any, session: UserSession, prompt: string): Promise<void> {
+async function handleGeneration(ctx: any, session: UserSession, prompt: string, sourceImageUrl?: string): Promise<void> {
   const mode = session.mode as 'vision' | 'sound' | 'reel';
   const placeholder = await ctx.reply(`${GEN_ICON[mode]} Генерирую ${GEN_LABEL[mode]}... обычно 30с–3мин`);
 
   try {
-    const start = mode === 'vision' ? startVisionJob : mode === 'sound' ? startSoundJob : startReelJob;
-    const jobId = await start(session, session.activeChatId!, prompt);
+    const jobId = mode === 'vision' ? await startVisionJob(session, session.activeChatId!, prompt, sourceImageUrl)
+      : mode === 'sound' ? await startSoundJob(session, session.activeChatId!, prompt)
+      : await startReelJob(session, session.activeChatId!, prompt, sourceImageUrl);
     const result = await pollJob(session, jobId, { timeoutMs: GEN_TIMEOUT_MS[mode] });
 
     if (result.status !== 'done' || !result.mediaUrl) {
@@ -550,12 +559,32 @@ bot.command('resetlimits', async (ctx) => {
   }
 });
 
+// ─── Shared: get a session with an active chat, creating one if needed ────────
+
+async function sessionWithActiveChat(ctx: any): Promise<UserSession | null> {
+  if (!ctx.from) return null;
+  let session: UserSession;
+  try {
+    session = await ensureSession(ctx.from);
+  } catch {
+    await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
+    return null;
+  }
+  if (!session.activeChatId) {
+    try {
+      const chat = await createChat(session, session.mode);
+      session.activeChatId = chat.id;
+    } catch {
+      await ctx.reply('❌ Не удалось создать чат. Попробуй позже.');
+      return null;
+    }
+  }
+  return session;
+}
+
 // ─── Plain text: route through the active mode ─────────────────────────────
-// Files/photos/voice still point to the miniapp — attachments aren't wired
-// into the bot's AI engine yet.
 
 bot.on('message:text', async (ctx) => {
-  if (!ctx.from) return;
   const text = ctx.message.text.trim();
   if (!text) return;
 
@@ -565,23 +594,8 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  let session: UserSession;
-  try {
-    session = await ensureSession(ctx.from);
-  } catch {
-    await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
-    return;
-  }
-
-  if (!session.activeChatId) {
-    try {
-      const chat = await createChat(session, session.mode);
-      session.activeChatId = chat.id;
-    } catch {
-      await ctx.reply('❌ Не удалось создать чат. Попробуй позже.');
-      return;
-    }
-  }
+  const session = await sessionWithActiveChat(ctx);
+  if (!session) return;
 
   if (session.mode === 'chat' || session.mode === 'think') {
     await handleTextChat(ctx, session, text);
@@ -590,11 +604,75 @@ bot.on('message:text', async (ctx) => {
   }
 });
 
-bot.on(['message:document', 'message:photo', 'message:video', 'message:audio', 'message:voice'], async (ctx) => {
+// ─── Photo: multimodal question (chat/think), edit source (vision/reel) ────
+
+bot.on('message:photo', async (ctx) => {
+  const session = await sessionWithActiveChat(ctx);
+  if (!session) return;
+
+  if (session.mode === 'sound') {
+    await ctx.reply('🎵 В режиме музыки фото не используется. Просто опиши, какой трек нужен.');
+    return;
+  }
+
+  const notice = await ctx.reply('📎 Загружаю фото...');
+  let imageUrl: string;
+  try {
+    const largest = ctx.message.photo[ctx.message.photo.length - 1];
+    imageUrl = await uploadTelegramImage(session, largest.file_id);
+  } catch {
+    await editOrSend(ctx, notice.message_id, '❌ Не удалось загрузить фото. Попробуй ещё раз.');
+    return;
+  }
+  await ctx.api.deleteMessage(ctx.chat.id, notice.message_id).catch(() => {});
+
+  const caption = (ctx.message.caption ?? '').trim();
+
+  if (session.mode === 'chat' || session.mode === 'think') {
+    await handleTextChat(ctx, session, caption || 'Опиши что изображено на фото.', { imageUrl });
+  } else {
+    // vision → edit this image; reel → animate it (image-to-video)
+    await handleGeneration(ctx, session, caption || (session.mode === 'reel' ? 'оживи это изображение' : 'обработай это изображение'), imageUrl);
+  }
+});
+
+// ─── Document: extract text and use as chat context (chat/think only) ──────
+
+bot.on('message:document', async (ctx) => {
+  const session = await sessionWithActiveChat(ctx);
+  if (!session) return;
+
+  if (session.mode !== 'chat' && session.mode !== 'think') {
+    await ctx.reply('📎 Файлы работают только в режиме Чат или Think. Переключись через /mode.');
+    return;
+  }
+
+  const notice = await ctx.reply('📎 Читаю файл...');
+  let doc: { text: string; fileName: string; lang: string };
+  try {
+    doc = await extractTelegramDocument(session, ctx.message.document.file_id);
+  } catch (err: any) {
+    const msg = err.response?.data?.error ?? 'Не удалось прочитать файл';
+    await editOrSend(ctx, notice.message_id, `❌ ${msg}`);
+    return;
+  }
+  await ctx.api.deleteMessage(ctx.chat.id, notice.message_id).catch(() => {});
+
+  const caption = (ctx.message.caption ?? '').trim();
+  await handleTextChat(ctx, session, caption || 'Проанализируй содержимое прикреплённого файла.', {
+    fileContent: doc.text,
+    fileName: doc.fileName,
+    fileLang: doc.lang,
+  });
+});
+
+// Video files, voice messages and audio files aren't wired into the bot's
+// AI engine (no transcription/video-understanding here) — miniapp/website only.
+bot.on(['message:video', 'message:audio', 'message:voice'], async (ctx) => {
   const keyboard = new InlineKeyboard().webApp('🤖 Открыть GhostLine', MINIAPP_URL);
 
   await ctx.reply(
-    `👻 Файлы и голосовые пока доступны в приложении:`,
+    `👻 Видео, аудио и голосовые пока доступны в приложении:`,
     { reply_markup: keyboard }
   );
 });

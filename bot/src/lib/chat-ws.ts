@@ -25,7 +25,16 @@ export class ChatStreamError extends Error {
  */
 export function streamChat(
   session: UserSession,
-  params: { chatId: string; mode: Extract<Mode, 'chat' | 'think'>; prompt: string; history: ChatMsg[] },
+  params: {
+    chatId: string;
+    mode: Extract<Mode, 'chat' | 'think'>;
+    prompt: string;
+    history: ChatMsg[];
+    imageUrl?: string;
+    fileContent?: string;
+    fileName?: string;
+    fileLang?: string;
+  },
   onToken: (fullTextSoFar: string) => void,
   timeoutMs = 90_000,
 ): Promise<StreamResult> {
@@ -56,6 +65,8 @@ export function streamChat(
         mode: params.mode,
         prompt: params.prompt,
         history: params.history,
+        ...(params.imageUrl ? { imageUrl: params.imageUrl } : {}),
+        ...(params.fileContent ? { fileContent: params.fileContent, fileName: params.fileName, fileLang: params.fileLang } : {}),
       }));
     });
 

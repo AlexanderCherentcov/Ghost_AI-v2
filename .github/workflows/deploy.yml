@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'bot/**'
       - 'infra/**'
       - '.github/workflows/deploy.yml'
 
@@ -28,9 +29,11 @@ jobs:
           echo "$CHANGED"
           BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
           FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
+          BOT=$(echo "$CHANGED" | grep -q '^bot/' && echo true || echo false)
           echo "backend=$BACKEND" >> $GITHUB_OUTPUT
           echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
-          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND"
+          echo "bot=$BOT" >> $GITHUB_OUTPUT
+          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND, bot: $BOT"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -38,7 +41,7 @@ jobs:
           host: 178.253.55.232
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND
+          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND,DEPLOY_BOT
           command_timeout: 15m
           script: |
             set -e
@@ -65,8 +68,16 @@ jobs:
               echo "→ Frontend deployed"
             fi
 
+            if [ "$DEPLOY_BOT" = "true" ]; then
+              echo "→ Rebuilding bot + admin-bot..."
+              docker compose build --no-cache bot admin-bot
+              docker compose up -d --no-deps bot admin-bot
+              echo "→ Bot deployed"
+            fi
+
             docker image prune -f
             echo "✅ Deploy done: $(date)"
         env:
           DEPLOY_BACKEND: ${{ steps.changes.outputs.backend }}
           DEPLOY_FRONTEND: ${{ steps.changes.outputs.frontend }}
+          DEPLOY_BOT: ${{ steps.changes.outputs.bot }}

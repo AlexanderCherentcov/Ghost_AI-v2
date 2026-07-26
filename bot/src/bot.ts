@@ -94,12 +94,12 @@ const KB_MODE_MAP: Partial<Record<string, Mode>> = Object.fromEntries(
   (Object.keys(MODE_LABELS) as Mode[]).map((m) => [MODE_LABELS[m], m])
 );
 
-async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string | null }> {
+async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string | null; caspers: number }> {
   try {
     const res = await api.get('/bot/user-info', { params: { tgId: String(tgId) } });
-    return { plan: res.data.plan ?? 'FREE', dbName: res.data.name ?? null };
+    return { plan: res.data.plan ?? 'FREE', dbName: res.data.name ?? null, caspers: res.data.caspers_balance ?? 0 };
   } catch {
-    return { plan: 'FREE', dbName: null };
+    return { plan: 'FREE', dbName: null, caspers: 0 };
   }
 }
 
@@ -178,10 +178,10 @@ bot.command('start', async (ctx) => {
     }
   }
 
-  // ── Получаем тариф пользователя с бэкенда ─────────────────────────────────
-  const { plan, dbName } = ctx.from
+  // ── Получаем тариф и баланс пользователя с бэкенда ────────────────────────
+  const { plan, dbName, caspers } = ctx.from
     ? await getUserPlan(ctx.from.id)
-    : { plan: 'FREE', dbName: null };
+    : { plan: 'FREE', dbName: null, caspers: 0 };
 
   const displayName = dbName ?? tgName;
   const planLabel   = PLAN_LABELS[plan] ?? plan;
@@ -197,7 +197,8 @@ bot.command('start', async (ctx) => {
     `✨ *Твой личный ИИ\\-ассистент*\n\n` +
     `Привет, *${displayName}*\\!\n` +
     `Я готов к работе\\. Задавай вопросы, создавай изображения или генерируй видео в едином потоке\\.\n\n` +
-    `📦 Тариф: *${planLabel}*`,
+    `📦 Тариф: *${planLabel}*\n` +
+    `👻 Caspers: *${caspers}*`,
     {
       parse_mode: 'MarkdownV2',
       reply_markup: keyboard,
@@ -219,7 +220,7 @@ async function sendHelp(ctx: Context): Promise<void> {
     `/newchat — новый чат (выбор режима)\n` +
     `/chats — список чатов, переключение, удаление\n` +
     `/mode — сменить режим текущего диалога\n` +
-    `/balance — баланс Caspers и лимиты\n` +
+    `/balance — баланс Caspers, лимиты и цены на все операции\n` +
     `/plans — тарифы, оплата сразу через ЮKassa\n` +
     `/caspers <количество> — докупить Caspers\n` +
     `/promo <код> — активировать промокод на Caspers\n\n` +
@@ -229,6 +230,7 @@ async function sendHelp(ctx: Context): Promise<void> {
     `🎨 Картинка — генерация изображений\n` +
     `🎵 Музыка — генерация музыки\n` +
     `🎬 Видео — генерация видео\n\n` +
+    `После каждого сообщения и генерации показываю остаток Caspers.\n\n` +
     `Просто пиши сообщения — отвечаю в выбранном режиме. Файлы и голосовые пока только в приложении 👇`,
     {
       parse_mode: 'Markdown',
@@ -344,6 +346,23 @@ async function buyCaspers(ctx: Context, amount: number): Promise<void> {
 
 // ─── /balance — баланс Caspers и лимиты ────────────────────────────────────────
 
+/** Сколько что стоит в Caspers — с бэкенда (GET /plans → casper_costs), не зашито в коде. */
+async function casperPriceList(): Promise<string> {
+  try {
+    const { data } = await api.get('/plans');
+    const c = data.casper_costs ?? {};
+    return (
+      `\n\n💰 <b>Цены в Caspers:</b>\n` +
+      `🧠 Про чат — ${c.chat_pro} / сообщ.\n` +
+      `🎨 Картинка — ${c.image_generate} / шт\n` +
+      `🎵 Музыка — ${c.music_generate} / трек\n` +
+      `🎬 Видео — ${c.video_std_4s}–${c.video_pro_8s} (зависит от модели и длительности)`
+    );
+  } catch {
+    return '';
+  }
+}
+
 async function sendBalance(ctx: Context): Promise<void> {
   if (!ctx.from) return;
   try {
@@ -364,6 +383,8 @@ async function sendBalance(ctx: Context): Promise<void> {
         `\n\n📊 <b>На этой неделе:</b>\n🎨 Картинок: ${me.images_this_week}\n🎵 Треков: ${me.music_this_week}` +
         `\n\n📊 <b>В этом месяце:</b>\n🎬 Видео: ${me.videos_this_month}`;
     }
+
+    text += await casperPriceList();
 
     await ctx.reply(text, {
       parse_mode: 'HTML',
@@ -437,6 +458,26 @@ async function editOrSend(ctx: Context, messageId: number, text: string, extra?:
     if (err?.description?.includes?.('message is not modified')) return;
     await ctx.reply(text, extra).catch(() => {});
   }
+}
+
+// ─── Остаток Caspers после каждого обращения (чат, картинка, музыка, видео) ────
+// Явного "сколько списано" бэкенд не отдаёт ни в WS-ответе чата (tokensCost
+// там всегда 0 — не используется), ни в статусе задачи генерации — поэтому
+// сравниваем баланс до/после самой операции, а не пытаемся угадать стоимость.
+
+async function getCasperBalance(session: UserSession): Promise<number | null> {
+  return getMe(session).then((m) => m.caspers_balance).catch(() => null);
+}
+
+/** Показывается после ЛЮБОГО обращения — со списанием (если оно было) или без. */
+async function casperSpendNote(session: UserSession, before: number | null): Promise<string> {
+  if (before === null) return '';
+  const after = await getCasperBalance(session);
+  if (after === null) return '';
+  const spent = before - after;
+  return spent > 0
+    ? `👻 Списано: ${spent} · Остаток: ${after} Caspers`
+    : `👻 Остаток: ${after} Caspers`;
 }
 
 // ─── /mode — смена режима без создания нового чата ─────────────────────────────
@@ -578,6 +619,9 @@ async function handleTextChat(ctx: Context, session: UserSession, prompt: string
   const EDIT_INTERVAL_MS = 1200;
   const chatId = ctx.chat!.id;
 
+  // Остаток Caspers показываем после любого сообщения — и обычного чата, и Про.
+  const balanceBefore = await getCasperBalance(session);
+
   try {
     const result = await streamChat(
       session,
@@ -591,11 +635,15 @@ async function handleTextChat(ctx: Context, session: UserSession, prompt: string
       },
     );
 
+    const spendNote = await casperSpendNote(session, balanceBefore);
+
     if (result.content.length <= 4000) {
-      await editOrSend(ctx, placeholder.message_id, result.content.trim() || '(пустой ответ)');
+      const text = (result.content.trim() || '(пустой ответ)') + (spendNote ? `\n\n${spendNote}` : '');
+      await editOrSend(ctx, placeholder.message_id, text);
     } else {
       await ctx.api.deleteMessage(chatId, placeholder.message_id).catch(() => {});
       await sendLongText(ctx, result.content);
+      if (spendNote) await ctx.reply(spendNote);
     }
 
     session.history.push({ role: 'user', content: prompt });
@@ -616,6 +664,8 @@ const GEN_TIMEOUT_MS: Record<string, number> = { vision: 3 * 60_000, sound: 3 * 
 async function handleGeneration(ctx: Context, session: UserSession, prompt: string, sourceImageUrl?: string): Promise<void> {
   const mode = session.mode as 'vision' | 'sound' | 'reel';
   const placeholder = await ctx.reply(`${GEN_ICON[mode]} Генерирую ${GEN_LABEL[mode]}... обычно 30с–3мин`);
+  // Генерация медиа всегда списывает Caspers — баланс до и после проверяем безусловно.
+  const balanceBefore = await getCasperBalance(session);
 
   try {
     const jobId = mode === 'vision' ? await startVisionJob(session, session.activeChatId!, prompt, sourceImageUrl)
@@ -633,6 +683,9 @@ async function handleGeneration(ctx: Context, session: UserSession, prompt: stri
     if (mode === 'vision') await ctx.replyWithPhoto(result.mediaUrl, { caption });
     else if (mode === 'sound') await ctx.replyWithAudio(result.mediaUrl, { caption });
     else await ctx.replyWithVideo(result.mediaUrl, { caption });
+
+    const spendNote = await casperSpendNote(session, balanceBefore);
+    if (spendNote) await ctx.reply(spendNote);
   } catch (err: any) {
     const msg = apiErrorMessage(err, 'Ошибка генерации');
     await editOrSend(ctx, placeholder.message_id, `❌ ${msg}`);

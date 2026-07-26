@@ -299,7 +299,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     return { ...tokens, isNew: !user.onboardingDone };
   });
 
-  // ── Бот: получить данные пользователя по Telegram ID (план, имя) ─────────
+  // ── Бот: получить данные пользователя по Telegram ID (план, имя, баланс) ──
   fastify.get('/bot/user-info', async (request, reply) => {
     if (!checkBotSecret(request, reply)) return;
     const { tgId } = request.query as { tgId?: string };
@@ -307,12 +307,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const user = await prisma.user.findFirst({
       where: { telegramId: tgId },
-      select: { plan: true, name: true },
+      select: { plan: true, name: true, caspers_balance: true },
     });
 
     return {
       plan: user?.plan ?? 'FREE',
       name: user?.name ?? null,
+      caspers_balance: user?.caspers_balance ?? 0,
     };
   });
 

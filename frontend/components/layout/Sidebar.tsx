@@ -136,7 +136,7 @@ export function Sidebar() {
                     if (e.key === 'Escape') setEditingId(null);
                   }}
                   className="w-full bg-transparent outline-none text-sm"
-                  style={{ color: 'var(--text-primary)' }}
+                  style={{ color: 'var(--text-primary)', fontSize: '16px' }}
                   onClick={(e) => e.preventDefault()}
                 />
               ) : (

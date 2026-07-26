@@ -96,7 +96,7 @@ export default function HistoryPage() {
                     if (e.key === 'Escape') setEditingId(null);
                   }}
                   className="flex-1 bg-transparent text-sm"
-                  style={{ color: 'var(--text-primary)' }}
+                  style={{ color: 'var(--text-primary)', fontSize: '16px' }}
                 />
               </div>
             ) : (

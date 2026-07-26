@@ -389,7 +389,7 @@ function MusicWidget({
             title="Введите название трека, например: «Ночной город» или «Летнее утро»"
             maxLength={100}
             className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
+            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)', fontSize: '16px' }}
           />
           <input
             value={options.style}
@@ -398,7 +398,7 @@ function MusicWidget({
             title="Укажите жанр или настроение, например: «lo-fi, грустный» или «поп, энергичный»"
             maxLength={100}
             className="flex-1 px-3 py-1.5 rounded-lg text-[12px] outline-none border"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)' }}
+            style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', borderColor: 'var(--border)', fontSize: '16px' }}
           />
         </div>
 
@@ -449,7 +449,7 @@ function MusicWidget({
               rows={4}
               maxLength={10000}
               className="w-full rounded-lg px-3 py-2 text-[12px] outline-none resize-none placeholder:opacity-30 leading-relaxed"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: '16px' }}
             />
           </div>
         )}

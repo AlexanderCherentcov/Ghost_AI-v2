@@ -110,6 +110,7 @@ export function SupportWidget() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full mb-3 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-base)] text-sm text-white placeholder-[rgba(255,255,255,0.3)] focus:outline-none focus:border-accent"
+                    style={{ fontSize: '16px' }}
                   />
                 )}
                 {user && (
@@ -123,6 +124,7 @@ export function SupportWidget() {
                   onChange={(e) => setMessage(e.target.value)}
                   rows={4}
                   className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-base)] text-sm text-white placeholder-[rgba(255,255,255,0.3)] focus:outline-none focus:border-accent resize-none"
+                  style={{ fontSize: '16px' }}
                 />
                 {error && (
                   <p className="mt-2 text-xs text-red-400">{error}</p>

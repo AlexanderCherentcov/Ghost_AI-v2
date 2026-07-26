@@ -9,9 +9,7 @@
  *   /user  <id>    — карточка пользователя
  *   /find  <query> — поиск по имени/email/TG ID/username
  *   /setplan <userId> <PLAN>
- *   /setlimits <userId> [chat=N] [pro=N] [img=N] [video=N] [files=N]
- *   /addlimits <userId> [chat=N] [pro=N] [img=N] [video=N] [files=N]
- *   /resetlimits <userId>
+ *   /resetlimits <userId>  — сбросить дневной/недельный счётчик FREE-тарифа
  *   /ban   <userId>
  *   /newpromo <CODE> type=caspers amount=N [maxuses=N] [expires=YYYY-MM-DD]
  *   /newpromo <CODE> type=discount percent=N [plans=BASIC,PRO] [maxuses=N] [expires=YYYY-MM-DD]
@@ -490,46 +488,6 @@ bot.command('setplan', async (ctx) => {
   try {
     await api.post('/setplan', { userId, plan: plan.toUpperCase() });
     await ctx.reply(`✅ <code>${userId}</code> → план <b>${plan.toUpperCase()}</b>`, { parse_mode: 'HTML' });
-  } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
-  }
-});
-
-bot.command('setlimits', async (ctx) => {
-  const parts  = (ctx.match ?? '').trim().split(/\s+/);
-  const userId = parts[0];
-  if (!userId) { await ctx.reply('❌ /setlimits <userId> [chat=N] [pro=N] [img=N] [video=N] [files=N]\n(-1 = безлимит)'); return; }
-
-  const body: Record<string, any> = { userId };
-  for (const p of parts.slice(1)) {
-    const [k, v] = p.split('=');
-    if (k && v !== undefined) body[k] = parseInt(v);
-  }
-
-  try {
-    const { data } = await api.post('/setlimits', body);
-    const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
-    await ctx.reply(`✅ Лимиты установлены для <code>${userId}</code>\n${changed}`, { parse_mode: 'HTML' });
-  } catch (err: any) {
-    await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
-  }
-});
-
-bot.command('addlimits', async (ctx) => {
-  const parts  = (ctx.match ?? '').trim().split(/\s+/);
-  const userId = parts[0];
-  if (!userId) { await ctx.reply('❌ /addlimits <userId> [chat=N] [pro=N] [img=N] [video=N] [files=N]'); return; }
-
-  const body: Record<string, any> = { userId };
-  for (const p of parts.slice(1)) {
-    const [k, v] = p.split('=');
-    if (k && v !== undefined) body[k] = parseInt(v);
-  }
-
-  try {
-    const { data } = await api.post('/addlimits', body);
-    const changed  = Object.entries(data.updated ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
-    await ctx.reply(`✅ Лимиты добавлены для <code>${userId}</code>\n${changed || (data.note ?? '')}`, { parse_mode: 'HTML' });
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${err.message?.slice(0, 200) ?? 'неизвестная ошибка'}`);
   }
@@ -1022,38 +980,6 @@ bot.callbackQuery(/^caspers_sub:(.+)$/, async (ctx) => {
     `➖ <b>Списать Caspers</b>\n\nПользователь: <code>${userId}</code>\n\nВведи команду (отрицательное значение):\n/addcaspers ${userId} -<кол-во>`,
     { parse_mode: 'HTML' },
   );
-});
-
-// dis:<userId>:<feature>  — disable a feature (set limit = 0)
-bot.callbackQuery(/^dis:([^:]+):([a-z]+)$/, async (ctx) => {
-  const userId  = ctx.match[1];
-  const feature = ctx.match[2]; // video | image | pro | chat
-  await ctx.answerCallbackQuery(`Отключаю ${feature}...`);
-  const fieldMap: Record<string, string> = {
-    video: 'video', image: 'img', pro: 'pro', chat: 'chat',
-  };
-  const field = fieldMap[feature];
-  if (!field) return;
-  await api.post('/setlimits', { userId, [field]: 0 });
-  await replyUserCard(ctx, userId, true);
-});
-
-// ena:<userId>:<feature>  — re-enable by restoring only the specific feature's default limit
-bot.callbackQuery(/^ena:([^:]+):([a-z]+)$/, async (ctx) => {
-  const userId = ctx.match[1];
-  const feature = ctx.match[2]; // video | image | pro | chat
-  await ctx.answerCallbackQuery('Восстанавливаю...');
-  // Restore default values by plan (only the specific feature)
-  const featureDefaults: Record<string, Record<string, number>> = {
-    video: { video: 3 },
-    image: { img: 5 },
-    pro: { pro: 10 },
-    chat: { chat: 30 },
-  };
-  const defaults = featureDefaults[feature];
-  if (!defaults) return;
-  await api.post('/setlimits', { userId, ...defaults });
-  await replyUserCard(ctx, userId, true);
 });
 
 bot.callbackQuery(/^restart:(.+)$/, async (ctx) => {

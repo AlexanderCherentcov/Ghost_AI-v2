@@ -57,13 +57,18 @@ export function fmtStats(s: any): string {
   return (
     `📊 <b>Статистика GhostLine</b>\n\n` +
     `👥 Всего пользователей: <b>${s.totalUsers}</b>\n` +
-    `🆕 Новых сегодня: <b>${s.newToday}</b>\n` +
-    `💬 Сообщений сегодня: <b>${s.messagesToday}</b>\n` +
-    `🖼 Генераций сегодня: <b>${s.genToday}</b>\n\n` +
-    `💰 <b>Платежи сегодня:</b>\n` +
-    `  Успешных: <b>${s.paymentsToday}</b>\n` +
-    `  Выручка сегодня: <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
-    `  Выручка всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
+    `🆕 Новых сегодня: <b>${s.newToday}</b> · за месяц: <b>${s.newThisMonth}</b>\n\n` +
+    `📈 <b>Использование сегодня:</b>\n` +
+    `  💬 Чат: <b>${s.chatToday ?? 0}</b>\n` +
+    `  🧠 Про-чат: <b>${s.proChatToday ?? 0}</b>\n` +
+    `  🖼 Картинки: <b>${s.imagesToday ?? 0}</b>\n` +
+    `  🎵 Музыка: <b>${s.musicToday ?? 0}</b>\n` +
+    `  🎬 Видео: <b>${s.videosToday ?? 0}</b>\n` +
+    `  👻 Caspers потрачено: <b>${s.caspersSpentToday ?? 0}</b>\n\n` +
+    `💰 <b>Платежи:</b>\n` +
+    `  Сегодня: <b>${s.paymentsToday}</b> · <b>${(s.revenueToday ?? 0).toLocaleString('ru')} ₽</b>\n` +
+    `  За месяц: <b>${s.paymentsThisMonth}</b> · <b>${(s.revenueThisMonth ?? 0).toLocaleString('ru')} ₽</b>\n` +
+    `  Всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
     `📦 <b>Распределение планов:</b>\n${planLines}\n\n` +
     `🕐 ${new Date().toLocaleTimeString('ru')}`
   );

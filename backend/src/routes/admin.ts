@@ -252,23 +252,51 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
     const [
       totalUsers,
       newToday,
+      newThisMonth,
       messagesToday,
+      chatToday,
+      proChatToday,
+      imagesToday,
+      musicToday,
+      videosToday,
       genToday,
+      caspersSpentToday,
       paymentsToday,
       revenueToday,
+      paymentsThisMonth,
+      revenueThisMonth,
       revenueTotal,
       planCounts,
     ] = await prisma.$transaction([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: todayStart } } }),
+      prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
       prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user' } }),
+      prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user', mode: 'chat' } }),
+      prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user', mode: 'think' } }),
+      prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'vision' } }),
+      prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'sound' } }),
+      prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'reel' } }),
       prisma.generateJob.count({ where: { createdAt: { gte: todayStart } } }),
+      prisma.casperTransaction.aggregate({
+        where: { createdAt: { gte: todayStart }, amount: { lt: 0 } },
+        _sum: { amount: true },
+      }),
       prisma.payment.count({ where: { createdAt: { gte: todayStart }, status: 'SUCCEEDED' } }),
       prisma.payment.aggregate({
         where: { createdAt: { gte: todayStart }, status: 'SUCCEEDED' },
+        _sum: { amount: true },
+      }),
+      prisma.payment.count({ where: { createdAt: { gte: monthStart }, status: 'SUCCEEDED' } }),
+      prisma.payment.aggregate({
+        where: { createdAt: { gte: monthStart }, status: 'SUCCEEDED' },
         _sum: { amount: true },
       }),
       prisma.payment.aggregate({
@@ -285,10 +313,19 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return {
       totalUsers,
       newToday,
+      newThisMonth,
       messagesToday,
+      chatToday,
+      proChatToday,
+      imagesToday,
+      musicToday,
+      videosToday,
       genToday,
+      caspersSpentToday: Math.abs(caspersSpentToday._sum.amount ?? 0),
       paymentsToday,
       revenueToday: revenueToday._sum.amount ?? 0,
+      paymentsThisMonth,
+      revenueThisMonth: revenueThisMonth._sum.amount ?? 0,
       revenueTotal:  revenueTotal._sum.amount ?? 0,
       planCounts: planCountsMap,
     };

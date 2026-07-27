@@ -29,7 +29,10 @@ import { apiErrorMessage } from './lib/error-message.js';
 import { api } from './lib/admin-api.js';
 import { ALL_SERVICES, RESTARTABLE_SERVICES, LOGGABLE_SERVICES, containerLogs, containerRestart, allContainerStatuses, containerStats } from './lib/docker.js';
 import { esc, fmtUser, fmtUserList, fmtStats, quickStats, fmtHealth, fmtPromoShort, fmtPromoDetail } from './lib/admin-format.js';
-import { mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb } from './lib/admin-keyboards.js';
+import {
+  mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb,
+  ADMIN_KEYBOARD, KB_START, KB_USERS, KB_STATS, KB_PROMOS, KB_HEALTH, KB_SERVER,
+} from './lib/admin-keyboards.js';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -74,14 +77,18 @@ async function replyUserCard(ctx: any, userId: string, edit = false): Promise<vo
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
-bot.command('start', async (ctx) => {
+async function sendMainMenu(ctx: any): Promise<void> {
   const text = await quickStats();
   await ctx.reply(text + '\n\nВыберите раздел:', { parse_mode: 'HTML', reply_markup: mainKb() });
+}
+
+bot.command('start', async (ctx) => {
+  await sendMainMenu(ctx);
+  await ctx.reply('👇 Меню всегда под рукой снизу', { reply_markup: ADMIN_KEYBOARD });
 });
 
-bot.command('users', async (ctx) => {
+async function sendUsersPage(ctx: any, page: number): Promise<void> {
   try {
-    const page     = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
     const { data } = await api.get(`/users?page=${page}&limit=8`);
     await ctx.reply(fmtUserList(data, page), {
       parse_mode: 'HTML',
@@ -90,6 +97,11 @@ bot.command('users', async (ctx) => {
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
+}
+
+bot.command('users', async (ctx) => {
+  const page = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
+  await sendUsersPage(ctx, page);
 });
 
 bot.command('user', async (ctx) => {
@@ -252,9 +264,8 @@ bot.command('newpromo', async (ctx) => {
   }
 });
 
-bot.command('promos', async (ctx) => {
+async function sendPromosPage(ctx: any, page: number): Promise<void> {
   try {
-    const page = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
     const { data } = await api.get(`/promo/list?page=${page}&limit=10`);
     const text = data.promos.length
       ? `🎟 <b>Промокоды</b> (стр. ${page}, всего: ${data.total})\n\n` + data.promos.map(fmtPromoShort).join('\n')
@@ -263,6 +274,11 @@ bot.command('promos', async (ctx) => {
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
+}
+
+bot.command('promos', async (ctx) => {
+  const page = Math.max(1, parseInt((ctx.match ?? '1').trim()) || 1);
+  await sendPromosPage(ctx, page);
 });
 
 bot.command('promo', async (ctx) => {
@@ -294,7 +310,7 @@ bot.command('delpromo', async (ctx) => {
   }
 });
 
-bot.command('stats', async (ctx) => {
+async function sendStatsMsg(ctx: any): Promise<void> {
   try {
     const { data } = await api.get('/stats');
     await ctx.reply(fmtStats(data), { parse_mode: 'HTML',
@@ -303,9 +319,11 @@ bot.command('stats', async (ctx) => {
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
-});
+}
 
-bot.command('health', async (ctx) => {
+bot.command('stats', sendStatsMsg);
+
+async function sendHealthMsg(ctx: any): Promise<void> {
   try {
     const statuses = await allContainerStatuses();
     await ctx.reply(fmtHealth(statuses), { parse_mode: 'HTML',
@@ -314,7 +332,13 @@ bot.command('health', async (ctx) => {
   } catch (err: any) {
     await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
   }
-});
+}
+
+bot.command('health', sendHealthMsg);
+
+async function sendServerMenu(ctx: any): Promise<void> {
+  await ctx.reply('🔧 <b>Управление сервером</b>', { parse_mode: 'HTML', reply_markup: serverKb() });
+}
 
 bot.command('restart', async (ctx) => {
   const svc     = (ctx.match ?? '').trim();
@@ -682,6 +706,20 @@ bot.callbackQuery(/^logs:([^:]+):(\d+)$/, async (ctx) => {
   } catch (e: any) {
     await ctx.reply(`❌ ${apiErrorMessage(e)}`);
   }
+});
+
+// ─── Кнопки постоянного нижнего меню ────────────────────────────────────────
+// Обычные текстовые сообщения (не команды) — срабатывает, только если текст
+// совпал с одной из подписей ADMIN_KEYBOARD, иначе просто игнорируем.
+
+bot.on('message:text', async (ctx) => {
+  const text = ctx.message.text;
+  if (text === KB_START)  { await sendMainMenu(ctx);      return; }
+  if (text === KB_USERS)  { await sendUsersPage(ctx, 1);  return; }
+  if (text === KB_STATS)  { await sendStatsMsg(ctx);      return; }
+  if (text === KB_PROMOS) { await sendPromosPage(ctx, 1); return; }
+  if (text === KB_HEALTH) { await sendHealthMsg(ctx);     return; }
+  if (text === KB_SERVER) { await sendServerMenu(ctx);    return; }
 });
 
 // ─── Error handler ────────────────────────────────────────────────────────────

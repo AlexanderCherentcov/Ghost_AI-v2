@@ -1,8 +1,27 @@
 // Клавиатуры админ-бота — вынесены из admin-bot.ts, чтобы файл с командами
 // не смешивал регистрацию хендлеров со сборкой клавиатур.
-import { InlineKeyboard } from 'grammy';
+import { InlineKeyboard, Keyboard } from 'grammy';
 import { PLAN_KEYS } from './plan-keys.js';
 import { PLAN_ICON } from './admin-format.js';
+
+// ─── Постоянное нижнее меню ─────────────────────────────────────────────────
+// В отличие от инлайн-клавиатур (привязаны к конкретному сообщению и пропадают
+// из вида, если проскроллить чат), это меню остаётся под полем ввода после
+// любого сообщения — админу не нужно каждый раз писать /start заново.
+
+export const KB_START    = '🏠 Старт';
+export const KB_USERS    = '👥 Пользователи';
+export const KB_STATS    = '📊 Статистика';
+export const KB_PROMOS   = '🎟 Промокоды';
+export const KB_HEALTH   = '🏥 Здоровье';
+export const KB_SERVER   = '🔧 Сервер';
+
+export const ADMIN_KEYBOARD = new Keyboard()
+  .text(KB_START).text(KB_STATS).row()
+  .text(KB_USERS).text(KB_PROMOS).row()
+  .text(KB_HEALTH).text(KB_SERVER)
+  .resized()
+  .persistent();
 
 export function mainKb(): InlineKeyboard {
   return new InlineKeyboard()

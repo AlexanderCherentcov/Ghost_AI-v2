@@ -114,7 +114,7 @@ else
         --webroot -w /var/www/certbot \
         --email "$EMAIL" \
         --agree-tos --no-eff-email \
-        -d "$DOMAIN" -d "www.$DOMAIN" -d "miniapp.$DOMAIN" -d "api.$DOMAIN" \
+        -d "$DOMAIN" -d "www.$DOMAIN" -d "api.$DOMAIN" \
         --non-interactive 2>&1
 
     docker stop ghostline-nginx-tmp && docker rm ghostline-nginx-tmp 2>/dev/null || true

@@ -10,7 +10,6 @@
 ghostline/
 ├── backend/              # Fastify 4 + TypeScript + Prisma + Redis + BullMQ
 ├── frontend/             # Next.js 14 App Router + Tailwind + shadcn/ui
-├── telegram-miniapp/     # Next.js 14 + Telegram WebApp SDK
 ├── .env.example          # Шаблон переменных окружения
 └── package.json          # Workspace root
 ```
@@ -40,9 +39,6 @@ npm run dev:backend
 
 # Запустить frontend (в другом терминале)
 npm run dev:frontend
-
-# Запустить Telegram Mini App (в третьем терминале)
-npm run dev:miniapp
 ```
 
 ### 4. Деплой
@@ -50,7 +46,6 @@ npm run dev:miniapp
 | Сервис         | Платформа |
 |---------------|-----------|
 | Frontend      | Vercel    |
-| Mini App      | Vercel    |
 | Backend       | Railway   |
 | PostgreSQL    | Railway   |
 | Redis         | Railway   |

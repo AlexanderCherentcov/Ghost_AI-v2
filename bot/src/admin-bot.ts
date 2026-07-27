@@ -28,6 +28,7 @@ import { PLAN_KEYS } from './lib/plan-keys.js';
 import { apiErrorMessage } from './lib/error-message.js';
 import { api } from './lib/admin-api.js';
 import { ALL_SERVICES, RESTARTABLE_SERVICES, LOGGABLE_SERVICES, containerLogs, containerRestart, allContainerStatuses, containerStats } from './lib/docker.js';
+import { watchDockerEvents } from './lib/docker-events.js';
 import { esc, fmtUser, fmtUserList, fmtStats, quickStats, fmtHealth, fmtPromoShort, fmtPromoDetail } from './lib/admin-format.js';
 import {
   mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb,
@@ -733,10 +734,50 @@ bot.catch(async (err) => {
   } catch { /* игнорируем */ }
 });
 
+// ─── Уведомления: рестарты контейнеров + периодический отчёт о здоровье ────────
+
+async function broadcast(text: string): Promise<void> {
+  await Promise.allSettled(
+    [...ADMIN_IDS].map(id => bot.api.sendMessage(id, text, { parse_mode: 'HTML' }).catch(() => {})),
+  );
+}
+
+const SERVICE_LABEL: Record<string, string> = {
+  backend: 'backend', bot: 'bot', 'admin-bot': 'admin-bot',
+  nginx: 'nginx', redis: 'redis', postgres: 'postgres', certbot: 'certbot',
+};
+
+function startDockerWatch(): void {
+  watchDockerEvents((svc, action, exitCode) => {
+    const label = SERVICE_LABEL[svc] ?? svc;
+    if (action === 'die') {
+      const code = exitCode && exitCode !== '0' ? ` (код ${exitCode})` : '';
+      broadcast(`🔴 <b>${label}</b> упал${code}`);
+    } else {
+      broadcast(`🟢 <b>${label}</b> снова в строю`);
+    }
+  });
+}
+
+const HEALTH_REPORT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 2 раза в день
+
+function startHealthReports(): void {
+  setInterval(async () => {
+    try {
+      const statuses = await allContainerStatuses();
+      await broadcast(fmtHealth(statuses));
+    } catch (err: any) {
+      console.error('[AdminBot] Health report failed:', err.message);
+    }
+  }, HEALTH_REPORT_INTERVAL_MS);
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log('[AdminBot] Starting GhostLine Admin Bot...');
+  startDockerWatch();
+  startHealthReports();
   await bot.start({
     onStart: (info) => console.log(`[AdminBot] Running as @${info.username}`),
   });

@@ -16,7 +16,6 @@ if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
 const API_URL      = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
-const MINIAPP_URL     = process.env.MINIAPP_URL ?? 'https://miniapp.ghostlineai.ru';
 const BOT_USERNAME    = process.env.BOT_USERNAME ?? 'GhostSuperAI_bot';
 
 // Список Telegram ID администраторов через запятую
@@ -190,9 +189,7 @@ bot.command('start', async (ctx) => {
     .text('💬 Начать чат', 'newchat_menu')
     .text('📂 Мои чаты', 'chats_menu')
     .row()
-    .webApp('🤖 Мини-апп', MINIAPP_URL)
     .url('🌐 Сайт', FRONTEND_URL)
-    .row()
     .text('📦 Тарифы', 'show_plans');
 
   await ctx.reply(
@@ -233,11 +230,8 @@ async function sendHelp(ctx: Context): Promise<void> {
     `🎵 Музыка — генерация музыки\n` +
     `🎬 Видео — генерация видео\n\n` +
     `После каждого сообщения и генерации показываю остаток Caspers.\n\n` +
-    `Просто пиши сообщения — отвечаю в выбранном режиме. Файлы и голосовые пока только в приложении 👇`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().webApp('🤖 Открыть приложение', MINIAPP_URL),
-    }
+    `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю, а вот видео и голосовые пока нет.`,
+    { parse_mode: 'Markdown' }
   );
 }
 
@@ -877,14 +871,9 @@ bot.on('message:document', async (ctx) => {
 });
 
 // Видеофайлы, голосовые и аудио пока не подключены к AI-движку бота
-// (транскрипции и понимания видео здесь нет) — только мини-апп/сайт.
+// (транскрипции и понимания видео здесь нет).
 bot.on(['message:video', 'message:audio', 'message:voice'], async (ctx) => {
-  const keyboard = new InlineKeyboard().webApp('🤖 Открыть GhostLine', MINIAPP_URL);
-
-  await ctx.reply(
-    `👻 Видео, аудио и голосовые пока доступны в приложении:`,
-    { reply_markup: keyboard }
-  );
+  await ctx.reply('👻 Видео, аудио и голосовые пока не понимаю — пришли текстом или файлом/фото.');
 });
 
 // ─── Запуск бота ──────────────────────────────────────────────────────────────────

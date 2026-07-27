@@ -52,11 +52,9 @@ export async function buildApp() {
   const corsOrigins: Set<string> = new Set([
     ...(process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     process.env.FRONTEND_URL ?? 'http://localhost:3000',
-    process.env.MINIAPP_URL ?? 'http://localhost:3001',
     // Продовые домены — разрешены всегда, независимо от env-переменных
     'https://ghostlineai.ru',
     'https://www.ghostlineai.ru',
-    'https://miniapp.ghostlineai.ru',
   ].filter(Boolean));
 
   // Автоматически добавляем www.-варианты, чтобы принимались и ghostlineai.ru, и www.ghostlineai.ru.

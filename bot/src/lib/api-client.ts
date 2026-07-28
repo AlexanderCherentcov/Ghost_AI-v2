@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { UserSession, Mode } from './session.js';
+import type { UserSession, Mode, VideoOptions, MusicOptions } from './session.js';
 
 const API_URL = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 
@@ -56,13 +56,48 @@ export async function startVisionJob(session: UserSession, chatId: string, promp
   return data.jobId;
 }
 
-export async function startSoundJob(session: UserSession, chatId: string, prompt: string): Promise<string> {
-  const { data } = await client(session).post('/generate/sound', { prompt, chatId });
+/**
+ * musicMode: 'suno' — как на сайте (frontend/components/chat/InputBar.tsx): только в
+ * этом режиме бэкенд (sound.worker.ts) учитывает title/style/instrumental/lyrics,
+ * иначе они молча игнорируются.
+ */
+export async function startSoundJob(session: UserSession, chatId: string, prompt: string, options: MusicOptions): Promise<string> {
+  const effectivePrompt = prompt.trim() || options.style || options.title || 'создай трек';
+  const { data } = await client(session).post('/generate/sound', {
+    prompt: effectivePrompt,
+    chatId,
+    musicMode: 'suno',
+    sunoStyle: options.style || undefined,
+    sunoTitle: options.title || undefined,
+    sunoInstrumental: options.instrumental,
+    lyrics: options.lyrics || undefined,
+  });
   return data.jobId;
 }
 
-export async function startReelJob(session: UserSession, chatId: string, prompt: string, videoImageUrl?: string): Promise<string> {
-  const { data } = await client(session).post('/generate/reel', { prompt, chatId, ...(videoImageUrl ? { videoImageUrl } : {}) });
+export async function generateLyrics(session: UserSession, topic: string, style: string, instrumental: boolean): Promise<string> {
+  const { data } = await client(session).post('/generate/lyrics', {
+    topic,
+    style: style || undefined,
+    instrumental,
+  });
+  return data.lyrics as string;
+}
+
+export async function startReelJob(
+  session: UserSession, chatId: string, prompt: string, options: VideoOptions, videoImageUrl?: string,
+): Promise<string> {
+  const { data } = await client(session).post('/generate/reel', {
+    prompt,
+    chatId,
+    videoModel: options.videoModel,
+    videoDuration: options.duration,
+    videoAspectRatio: options.aspectRatio,
+    videoEnableAudio: options.enableAudio,
+    videoResolution: options.resolution,
+    ...(options.negativePrompt ? { negativePrompt: options.negativePrompt } : {}),
+    ...(videoImageUrl ? { videoImageUrl } : {}),
+  });
   return data.jobId;
 }
 

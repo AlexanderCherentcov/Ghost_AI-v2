@@ -1,9 +1,13 @@
 import { Bot, InlineKeyboard, Keyboard, webhookCallback, type Context } from 'grammy';
 import axios from 'axios';
-import { ensureSession, type Mode, type UserSession } from './lib/session.js';
+import {
+  ensureSession, type Mode, type UserSession,
+  type VideoModel, type VideoOptions, type MusicOptions,
+  DEFAULT_VIDEO_OPTIONS, DEFAULT_MUSIC_OPTIONS,
+} from './lib/session.js';
 import {
   listChats, createChat, deleteChat, getChatMessages,
-  startVisionJob, startSoundJob, startReelJob, pollJob,
+  startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
   getMe, createPlanPayment, createCasperPayment,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
@@ -219,6 +223,7 @@ async function sendHelp(ctx: Context): Promise<void> {
     `/newchat — новый чат (выбор режима)\n` +
     `/chats — список чатов, переключение, удаление\n` +
     `/mode — сменить режим текущего диалога\n` +
+    `/settings — настройки видео (модель, разрешение, длительность...) или музыки (название, стиль, вокал/инструментал)\n` +
     `/balance — баланс Caspers, лимиты и цены на все операции\n` +
     `/plans — тарифы, оплата сразу через ЮKassa\n` +
     `/caspers <количество> — докупить Caspers\n` +
@@ -477,6 +482,284 @@ async function casperSpendNote(session: UserSession, before: number | null): Pro
     : `👻 Остаток: ${after} Caspers`;
 }
 
+// ─── Настройки видео/музыки — паритет с VideoSettingsMenu/MusicWidget на сайте ──
+// Опции живут в сессии (session.videoOptions/musicOptions) и применяются к
+// следующей генерации, пока пользователь их не поменяет — как state виджета на сайте.
+
+const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
+  motion:  '⚡ Motion (Veo 3.1 Fast)',
+  cinema:  '🎬 Cinema (Veo 3.1 Pro)',
+  reality: '🎥 Reality (Kling V-2.5)',
+};
+
+/** Та же формула, что backend/src/services/tokens.ts:resolveVideoRequestType — только cinema тарифицируется как pro. */
+function videoCasperCost(costs: Record<string, number>, o: VideoOptions): number {
+  const isPro = o.videoModel === 'cinema';
+  if (isPro) return o.duration === '4s' ? costs.video_pro_4s : costs.video_pro_8s;
+  return o.duration === '4s' ? costs.video_std_4s : costs.video_std_8s;
+}
+
+async function fetchCasperCosts(): Promise<Record<string, number>> {
+  try {
+    const { data } = await api.get('/plans');
+    return data.casper_costs ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Правит сообщение-меню настроек; если правка не удалась из-за "message is not
+ * modified" (повторный тап по уже выбранной опции) — тихо игнорирует, а не шлёт
+ * дубликат меню новым сообщением. Та же логика, что у editOrSend выше.
+ */
+async function editMessageOrIgnore(ctx: Context, text: string, extra: object): Promise<void> {
+  try {
+    await ctx.editMessageText(text, extra);
+  } catch (err: any) {
+    if (err?.description?.includes?.('message is not modified')) return;
+    await ctx.reply(text, extra).catch(() => {});
+  }
+}
+
+/** Показывает кнопку настроек под подтверждением смены режима — только для reel/sound. */
+function modeSwitchKb(mode: Mode): InlineKeyboard | undefined {
+  if (mode === 'reel')  return new InlineKeyboard().text('⚙️ Настройки видео', 'vs:open');
+  if (mode === 'sound') return new InlineKeyboard().text('⚙️ Настройки музыки', 'ms:open');
+  return undefined;
+}
+
+async function sendVideoSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
+  const o = session.videoOptions;
+  const costs = await fetchCasperCosts();
+  const cost = videoCasperCost(costs, o);
+
+  const kb = new InlineKeyboard();
+  (['motion', 'cinema', 'reality'] as VideoModel[]).forEach((m) => {
+    kb.text(`${o.videoModel === m ? '✅ ' : ''}${VIDEO_MODEL_LABELS[m]}`, `vs:model:${m}`).row();
+  });
+  kb.text(`${o.resolution === '720p' ? '✅ ' : ''}720p`, 'vs:res:720p')
+    .text(`${o.resolution === '1080p' ? '✅ ' : ''}1080p`, 'vs:res:1080p').row();
+  kb.text(`${o.duration === '4s' ? '✅ ' : ''}4с`, 'vs:dur:4s')
+    .text(`${o.duration === '8s' ? '✅ ' : ''}8с`, 'vs:dur:8s').row();
+  kb.text(`${o.aspectRatio === '16:9' ? '✅ ' : ''}16:9`, 'vs:ar:16:9')
+    .text(`${o.aspectRatio === '9:16' ? '✅ ' : ''}9:16`, 'vs:ar:9:16').row();
+  kb.text(o.enableAudio ? '🔊 Звук: вкл' : '🔇 Звук: выкл', 'vs:audio:toggle').row();
+  kb.text(o.negativePrompt ? '✏️ Исключить: изменить' : '✏️ Исключить из видео...', 'vs:negprompt');
+  if (o.negativePrompt) kb.text('🗑 Очистить', 'vs:negprompt:clear');
+  kb.row().text('↩️ Сбросить всё', 'vs:reset').text('✅ Готово', 'vs:close');
+
+  const text =
+    `🎬 <b>Настройки видео</b>\n\n` +
+    `Модель: <b>${VIDEO_MODEL_LABELS[o.videoModel]}</b>\n` +
+    `Разрешение: <b>${o.resolution}</b> · Длительность: <b>${o.duration}</b>\n` +
+    `Формат: <b>${o.aspectRatio}</b> · Звук: <b>${o.enableAudio ? 'вкл' : 'выкл'}</b>\n` +
+    (o.negativePrompt ? `Исключить: <i>${o.negativePrompt.slice(0, 200)}</i>\n` : '') +
+    `\n💰 Стоимость следующей генерации: <b>${cost || '?'}</b> Caspers\n\n` +
+    `На FREE-тарифе видео всегда идёт через Kling, независимо от выбора модели.`;
+
+  const extra = { parse_mode: 'HTML' as const, reply_markup: kb };
+  if (edit) await editMessageOrIgnore(ctx, text, extra);
+  else await ctx.reply(text, extra);
+}
+
+function musicSettingsKb(o: MusicOptions): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  kb.text(o.instrumental ? '🎹 Инструментал (переключить)' : '🎤 С вокалом (переключить)', 'ms:instrumental:toggle').row();
+  kb.text(o.title ? '✏️ Название: изменить' : '✏️ Название...', 'ms:title');
+  kb.text(o.style ? '✏️ Стиль: изменить' : '✏️ Стиль/жанр...', 'ms:style').row();
+  if (!o.instrumental) {
+    kb.text(o.lyrics ? '✏️ Текст песни: изменить' : '✏️ Текст песни...', 'ms:lyrics').row();
+    kb.text('✨ Сгенерировать текст по названию/стилю', 'ms:lyrics:gen').row();
+  }
+  kb.text('↩️ Сбросить всё', 'ms:reset').text('✅ Готово', 'ms:close');
+  return kb;
+}
+
+async function sendMusicSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
+  const o = session.musicOptions;
+  const costs = await fetchCasperCosts();
+
+  const text =
+    `🎵 <b>Настройки музыки</b>\n\n` +
+    `Режим: <b>${o.instrumental ? 'Инструментал' : 'С вокалом'}</b>\n` +
+    `Название: <b>${o.title || '—'}</b>\n` +
+    `Стиль/жанр: <b>${o.style || '—'}</b>\n` +
+    (!o.instrumental ? `Текст песни: <b>${o.lyrics ? `задан (${o.lyrics.length} симв.)` : '—'}</b>\n` : '') +
+    `\n💰 Стоимость следующей генерации: <b>${costs.music_generate ?? '?'}</b> Caspers\n\n` +
+    `Всё необязательно — можно просто написать сообщение с описанием трека.`;
+
+  const extra = { parse_mode: 'HTML' as const, reply_markup: musicSettingsKb(o) };
+  if (edit) await editMessageOrIgnore(ctx, text, extra);
+  else await ctx.reply(text, extra);
+}
+
+bot.command('settings', async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  if (session.mode === 'reel')  { await sendVideoSettings(ctx, session, false); return; }
+  if (session.mode === 'sound') { await sendMusicSettings(ctx, session, false); return; }
+  await ctx.reply('⚙️ Настройки есть только для режимов 🎬 Видео и 🎵 Музыка. Переключись через /mode.');
+});
+
+bot.callbackQuery('vs:open', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendVideoSettings(ctx, await ensureSession(ctx.from), true);
+});
+
+bot.callbackQuery(/^vs:model:(motion|cinema|reality)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.videoModel = ctx.match[1] as VideoModel;
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery(/^vs:res:(720p|1080p)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.resolution = ctx.match[1] as '720p' | '1080p';
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery(/^vs:dur:(4s|8s)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.duration = ctx.match[1] as '4s' | '8s';
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery(/^vs:ar:(16:9|9:16)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.aspectRatio = ctx.match[1] as '16:9' | '9:16';
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery('vs:audio:toggle', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.enableAudio = !session.videoOptions.enableAudio;
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery('vs:negprompt', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.awaitingInput = 'video_negative_prompt';
+  await ctx.reply('✏️ Напиши текстом, что исключить из видео (например: «размытость, водяной знак»).\n/cancel — отменить.');
+});
+
+bot.callbackQuery('vs:negprompt:clear', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions.negativePrompt = '';
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery('vs:reset', async (ctx) => {
+  await ctx.answerCallbackQuery('Сброшено');
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.videoOptions = { ...DEFAULT_VIDEO_OPTIONS };
+  await sendVideoSettings(ctx, session, true);
+});
+
+bot.callbackQuery('vs:close', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.deleteMessage().catch(() => {});
+});
+
+bot.callbackQuery('ms:open', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendMusicSettings(ctx, await ensureSession(ctx.from), true);
+});
+
+bot.callbackQuery('ms:instrumental:toggle', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  const wasInstrumental = session.musicOptions.instrumental;
+  session.musicOptions.instrumental = !wasInstrumental;
+  // Как на сайте: текст песни сохраняется только при переходе инструментал→вокал.
+  if (!wasInstrumental) session.musicOptions.lyrics = '';
+  await sendMusicSettings(ctx, session, true);
+});
+
+bot.callbackQuery('ms:title', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.awaitingInput = 'music_title';
+  await ctx.reply('✏️ Напиши название трека.\n/cancel — отменить.');
+});
+
+bot.callbackQuery('ms:style', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.awaitingInput = 'music_style';
+  await ctx.reply('✏️ Напиши стиль/жанр, например: «lo-fi, грустный».\n/cancel — отменить.');
+});
+
+bot.callbackQuery('ms:lyrics', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.awaitingInput = 'music_lyrics';
+  await ctx.reply('✏️ Напиши текст песни.\n/cancel — отменить.');
+});
+
+bot.callbackQuery('ms:lyrics:gen', async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  const topic = session.musicOptions.title || session.musicOptions.style;
+  if (!topic) {
+    await ctx.answerCallbackQuery({ text: 'Сначала укажи название или стиль', show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery('Генерирую текст...');
+  try {
+    const lyrics = await generateLyrics(session, topic, session.musicOptions.style, session.musicOptions.instrumental);
+    session.musicOptions.lyrics = lyrics;
+    await sendMusicSettings(ctx, session, true);
+  } catch {
+    await ctx.reply('❌ Не удалось сгенерировать текст. Попробуй позже.');
+  }
+});
+
+bot.callbackQuery('ms:reset', async (ctx) => {
+  await ctx.answerCallbackQuery('Сброшено');
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  session.musicOptions = { ...DEFAULT_MUSIC_OPTIONS };
+  await sendMusicSettings(ctx, session, true);
+});
+
+bot.callbackQuery('ms:close', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.deleteMessage().catch(() => {});
+});
+
+bot.command('cancel', async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  if (session.awaitingInput) {
+    session.awaitingInput = null;
+    await ctx.reply('❌ Отменено.');
+  } else {
+    await ctx.reply('Нечего отменять.');
+  }
+});
+
 // ─── /mode — смена режима без создания нового чата ─────────────────────────────
 
 bot.command('mode', async (ctx) => {
@@ -489,7 +772,7 @@ bot.callbackQuery(/^mode:(chat|think|vision|sound|reel)$/, async (ctx) => {
   try {
     const session = await ensureSession(ctx.from);
     session.mode = ctx.match[1] as Mode;
-    await ctx.editMessageText(`✅ Режим: ${MODE_LABELS[session.mode]}\n\nПиши сообщение — отвечу в этом режиме.`);
+    await ctx.editMessageText(`✅ Режим: ${MODE_LABELS[session.mode]}\n\nПиши сообщение — отвечу в этом режиме.`, { reply_markup: modeSwitchKb(session.mode) });
   } catch {
     await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
   }
@@ -511,7 +794,7 @@ bot.callbackQuery(/^newchat:(chat|think|vision|sound|reel)$/, async (ctx) => {
     session.activeChatId = chat.id;
     session.mode = mode;
     session.history = [];
-    await ctx.editMessageText(`✅ Новый чат создан (${MODE_LABELS[mode]}). Пиши сообщение!`);
+    await ctx.editMessageText(`✅ Новый чат создан (${MODE_LABELS[mode]}). Пиши сообщение!`, { reply_markup: modeSwitchKb(mode) });
   } catch {
     await ctx.reply('❌ Не удалось создать чат. Попробуй позже.');
   }
@@ -666,8 +949,8 @@ async function handleGeneration(ctx: Context, session: UserSession, prompt: stri
 
   try {
     const jobId = mode === 'vision' ? await startVisionJob(session, session.activeChatId!, prompt, sourceImageUrl)
-      : mode === 'sound' ? await startSoundJob(session, session.activeChatId!, prompt)
-      : await startReelJob(session, session.activeChatId!, prompt, sourceImageUrl);
+      : mode === 'sound' ? await startSoundJob(session, session.activeChatId!, prompt, session.musicOptions)
+      : await startReelJob(session, session.activeChatId!, prompt, session.videoOptions, sourceImageUrl);
     const result = await pollJob(session, jobId, { timeoutMs: GEN_TIMEOUT_MS[mode] });
 
     if (result.status !== 'done' || !result.mediaUrl) {
@@ -769,6 +1052,31 @@ async function sessionWithActiveChat(ctx: Context): Promise<UserSession | null> 
   return session;
 }
 
+// ─── Ввод текстом для настроек видео/музыки (negative prompt, название, стиль, текст песни) ──
+
+async function captureAwaitingInput(ctx: Context, session: UserSession, text: string): Promise<void> {
+  const field = session.awaitingInput;
+  session.awaitingInput = null;
+  switch (field) {
+    case 'video_negative_prompt':
+      session.videoOptions.negativePrompt = text.slice(0, 2500);
+      await sendVideoSettings(ctx, session, false);
+      break;
+    case 'music_title':
+      session.musicOptions.title = text.slice(0, 100);
+      await sendMusicSettings(ctx, session, false);
+      break;
+    case 'music_style':
+      session.musicOptions.style = text.slice(0, 200);
+      await sendMusicSettings(ctx, session, false);
+      break;
+    case 'music_lyrics':
+      session.musicOptions.lyrics = text.slice(0, 10000);
+      await sendMusicSettings(ctx, session, false);
+      break;
+  }
+}
+
 // ─── Обычный текст: маршрутизация через активный режим ──────────────────────
 
 bot.on('message:text', async (ctx) => {
@@ -781,17 +1089,26 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
+  if (!ctx.from) return;
+  let earlySession: UserSession;
+  try {
+    earlySession = await ensureSession(ctx.from);
+  } catch {
+    await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
+    return;
+  }
+
+  // Ждём ввод для настроек видео/музыки — текст уходит в поле настройки, а не в AI.
+  if (earlySession.awaitingInput) {
+    await captureAwaitingInput(ctx, earlySession, text);
+    return;
+  }
+
   // Кнопки нижнего меню — переключение режима или раздел, а не промпт для AI.
   const kbMode = KB_MODE_MAP[text];
   if (kbMode) {
-    if (!ctx.from) return;
-    try {
-      const session = await ensureSession(ctx.from);
-      session.mode = kbMode;
-      await ctx.reply(`✅ Режим: ${MODE_LABELS[kbMode]}\n\nПиши сообщение — отвечу в этом режиме.`);
-    } catch {
-      await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
-    }
+    earlySession.mode = kbMode;
+    await ctx.reply(`✅ Режим: ${MODE_LABELS[kbMode]}\n\nПиши сообщение — отвечу в этом режиме.`, { reply_markup: modeSwitchKb(kbMode) });
     return;
   }
   if (text === KB_CHATS)   { await sendChatList(ctx); return; }
@@ -893,6 +1210,7 @@ async function registerCommands(): Promise<void> {
     { command: 'newchat', description: 'Новый чат (выбор режима)' },
     { command: 'chats',   description: 'Мои чаты' },
     { command: 'mode',    description: 'Сменить режим текущего диалога' },
+    { command: 'settings', description: 'Настройки видео/музыки' },
     { command: 'balance', description: 'Баланс Caspers и лимиты' },
     { command: 'plans',   description: 'Тарифы — оплата через ЮKassa' },
     { command: 'caspers', description: 'Докупить Caspers' },

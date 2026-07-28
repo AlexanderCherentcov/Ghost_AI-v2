@@ -18,6 +18,50 @@ export interface ChatMsg {
   content: string;
 }
 
+// Модели видео: motion = Veo 3.1 Fast, cinema = Veo 3.1 Pro, reality = Kling V-2.5.
+// Значения и дефолты 1:1 с frontend/components/chat/InputBar.tsx — тот же /generate/reel.
+export type VideoModel = 'motion' | 'cinema' | 'reality';
+export type VideoResolution = '720p' | '1080p';
+export type VideoDuration = '4s' | '8s';
+export type VideoAspectRatio = '16:9' | '9:16';
+
+export interface VideoOptions {
+  videoModel: VideoModel;
+  resolution: VideoResolution;
+  duration: VideoDuration;
+  aspectRatio: VideoAspectRatio;
+  enableAudio: boolean;
+  negativePrompt: string;
+}
+
+export const DEFAULT_VIDEO_OPTIONS: VideoOptions = {
+  videoModel: 'motion',
+  resolution: '720p',
+  duration: '8s',
+  aspectRatio: '16:9',
+  enableAudio: false,
+  negativePrompt: '',
+};
+
+export interface MusicOptions {
+  title: string;
+  style: string;
+  instrumental: boolean;
+  lyrics: string;
+}
+
+export const DEFAULT_MUSIC_OPTIONS: MusicOptions = {
+  title: '',
+  style: '',
+  instrumental: false,
+  lyrics: '',
+};
+
+// Когда пользователь нажал кнопку "ввести текстом" (negative prompt / название /
+// стиль / текст песни) — следующее текстовое сообщение уходит не в AI-промпт,
+// а в это поле настроек. Сбрасывается после применения.
+export type AwaitingInput = 'video_negative_prompt' | 'music_title' | 'music_style' | 'music_lyrics' | null;
+
 export interface UserSession {
   accessToken: string;
   refreshToken: string;
@@ -26,6 +70,9 @@ export interface UserSession {
   mode: Mode;
   /** Недавняя история активного чата, синхронизирована, чтобы у /chat/stream был контекст. */
   history: ChatMsg[];
+  videoOptions: VideoOptions;
+  musicOptions: MusicOptions;
+  awaitingInput: AwaitingInput;
 }
 
 const sessions = new Map<number, UserSession>();
@@ -61,6 +108,9 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       activeChatId: null,
       mode: 'chat',
       history: [],
+      videoOptions: { ...DEFAULT_VIDEO_OPTIONS },
+      musicOptions: { ...DEFAULT_MUSIC_OPTIONS },
+      awaitingInput: null,
     };
     sessions.set(from.id, session);
     return session;

@@ -90,7 +90,8 @@ bot.callbackQuery(TERMS_ACCEPT_CB, async (ctx) => {
     return;
   }
   await ctx.answerCallbackQuery('Принято!');
-  await ctx.editMessageText('✅ Спасибо! Отправь /start, чтобы начать.');
+  await ctx.editMessageText('✅ Спасибо!');
+  await sendStartWelcome(ctx);
 });
 
 // ─── Сброс "ожидания текстового ввода" при любой навигации ──────────────────
@@ -216,8 +217,40 @@ async function mintMagicLink(from: TgFrom, redirectPath: string): Promise<string
 
 // ─── /start ────────────────────────────────────────────────────────────────────
 
-bot.command('start', async (ctx) => {
+/** Обычное приветствие /start — без ветки 'auth' (та актуальна только для самой команды). */
+async function sendStartWelcome(ctx: Context): Promise<void> {
   const tgName = ctx.from?.first_name ?? 'пользователь';
+
+  const { plan, dbName, caspers } = ctx.from
+    ? await getUserPlan(ctx.from.id)
+    : { plan: 'FREE', dbName: null, caspers: 0 };
+
+  const displayName = dbName ?? tgName;
+  const planLabel   = PLAN_LABELS[plan] ?? plan;
+
+  const keyboard = new InlineKeyboard()
+    .text('💬 Начать чат', 'newchat_menu')
+    .text('📂 Мои чаты', 'chats_menu')
+    .row()
+    .url('🌐 Сайт', FRONTEND_URL)
+    .text('📦 Тарифы', 'show_plans');
+
+  await ctx.reply(
+    `✨ *Твой личный ИИ\\-ассистент*\n\n` +
+    `Привет, *${displayName}*\\!\n` +
+    `Я готов к работе\\. Задавай вопросы, создавай изображения или генерируй видео в едином потоке\\.\n\n` +
+    `📦 Тариф: *${planLabel}*\n` +
+    `👻 Caspers: *${caspers}*`,
+    {
+      parse_mode: 'MarkdownV2',
+      reply_markup: keyboard,
+    }
+  );
+
+  await ctx.reply('👇 Меню действий всегда под рукой снизу', { reply_markup: MAIN_KEYBOARD });
+}
+
+bot.command('start', async (ctx) => {
   const payload = ctx.match; // текст после /start
 
   // ── Авторизация по ссылке из бота ────────────────────────────────────────
@@ -261,34 +294,7 @@ bot.command('start', async (ctx) => {
     }
   }
 
-  // ── Получаем тариф и баланс пользователя с бэкенда ────────────────────────
-  const { plan, dbName, caspers } = ctx.from
-    ? await getUserPlan(ctx.from.id)
-    : { plan: 'FREE', dbName: null, caspers: 0 };
-
-  const displayName = dbName ?? tgName;
-  const planLabel   = PLAN_LABELS[plan] ?? plan;
-
-  const keyboard = new InlineKeyboard()
-    .text('💬 Начать чат', 'newchat_menu')
-    .text('📂 Мои чаты', 'chats_menu')
-    .row()
-    .url('🌐 Сайт', FRONTEND_URL)
-    .text('📦 Тарифы', 'show_plans');
-
-  await ctx.reply(
-    `✨ *Твой личный ИИ\\-ассистент*\n\n` +
-    `Привет, *${displayName}*\\!\n` +
-    `Я готов к работе\\. Задавай вопросы, создавай изображения или генерируй видео в едином потоке\\.\n\n` +
-    `📦 Тариф: *${planLabel}*\n` +
-    `👻 Caspers: *${caspers}*`,
-    {
-      parse_mode: 'MarkdownV2',
-      reply_markup: keyboard,
-    }
-  );
-
-  await ctx.reply('👇 Меню действий всегда под рукой снизу', { reply_markup: MAIN_KEYBOARD });
+  await sendStartWelcome(ctx);
 });
 
 // ─── /help ─────────────────────────────────────────────────────────────────────

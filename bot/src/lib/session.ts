@@ -73,6 +73,8 @@ export interface UserSession {
   videoOptions: VideoOptions;
   musicOptions: MusicOptions;
   awaitingInput: AwaitingInput;
+  /** Согласие с условиями/политикой (см. /bot/accept-terms). Гейтится в bot.ts. */
+  termsAccepted: boolean;
 }
 
 const sessions = new Map<number, UserSession>();
@@ -84,7 +86,7 @@ interface TgFrom {
   username?: string;
 }
 
-async function mintTokens(from: TgFrom): Promise<{ accessToken: string; refreshToken: string }> {
+async function mintTokens(from: TgFrom): Promise<{ accessToken: string; refreshToken: string; termsAccepted: boolean }> {
   const res = await http.post(`${API_URL}/api/auth/telegram-bot`, {
     id: from.id,
     first_name: from.first_name,
@@ -92,7 +94,7 @@ async function mintTokens(from: TgFrom): Promise<{ accessToken: string; refreshT
     username: from.username,
     photo_url: undefined,
   }, { headers: { 'x-bot-secret': BOT_SECRET } });
-  return { accessToken: res.data.accessToken, refreshToken: res.data.refreshToken };
+  return { accessToken: res.data.accessToken, refreshToken: res.data.refreshToken, termsAccepted: !!res.data.termsAccepted };
 }
 
 /** Возвращает сессию с действующим (не истёкшим) access-токеном, при необходимости выпуская/обновляя его. */
@@ -100,7 +102,7 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
   let session = sessions.get(from.id);
 
   if (!session) {
-    const { accessToken, refreshToken } = await mintTokens(from);
+    const { accessToken, refreshToken, termsAccepted } = await mintTokens(from);
     session = {
       accessToken,
       refreshToken,
@@ -111,6 +113,7 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       videoOptions: { ...DEFAULT_VIDEO_OPTIONS },
       musicOptions: { ...DEFAULT_MUSIC_OPTIONS },
       awaitingInput: null,
+      termsAccepted,
     };
     sessions.set(from.id, session);
     return session;
@@ -124,10 +127,11 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       session.tokenExpiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
     } catch {
       // Refresh-токен истёк/невалиден — выпускаем новую пару
-      const { accessToken, refreshToken } = await mintTokens(from);
+      const { accessToken, refreshToken, termsAccepted } = await mintTokens(from);
       session.accessToken = accessToken;
       session.refreshToken = refreshToken;
       session.tokenExpiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
+      session.termsAccepted = session.termsAccepted || termsAccepted;
     }
   }
 

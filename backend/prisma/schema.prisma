@@ -76,6 +76,13 @@ model User {
   responseStyle String    @default("ghost")
   onboardingDone Boolean  @default(false)
 
+  // Согласие с пользовательским соглашением и политикой конфиденциальности.
+  // Для OAuth/Telegram-виджет регистраций проставляется при создании учётки
+  // (чекбокс на /register уже гейтит сами кнопки входа). Для бота — только
+  // явным тапом "✅ Принимаю" (см. bot.ts), т.к. /auth/telegram-bot дёргается
+  // при каждом первом сообщении, а не только при регистрации через сайт.
+  termsAcceptedAt DateTime?
+
   // ── Relations ─────────────────────────────────────────────────────────────
   messages          Message[]
   chats             Chat[]

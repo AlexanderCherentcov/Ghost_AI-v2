@@ -41,6 +41,58 @@ const api = axios.create({
   proxy: false,
 });
 
+// ─── Гейт: согласие с условиями использования / политикой конфиденциальности ──
+// Хранится в БД (User.termsAcceptedAt, backend/prisma/schema.prisma) и
+// кэшируется в session.termsAccepted при минте сессии (session.ts), чтобы не
+// дёргать бэкенд на каждое сообщение. OAuth-регистрация на сайте (/register)
+// проставляет это поле сама при создании аккаунта (чекбокс уже гейтит кнопки
+// входа там) — но /auth/telegram-bot дёргается при КАЖДОМ первом сообщении
+// в боте, а не только при регистрации, так что для Telegram-пользователей
+// (бот и "Зарегистрироваться через Telegram" на сайте — это один и тот же
+// telegramId) согласие фиксируется только явным тапом здесь.
+const TERMS_ACCEPT_CB = 'terms:accept';
+
+function termsGateKb(): InlineKeyboard {
+  return new InlineKeyboard()
+    .url('📄 Условия использования', `${FRONTEND_URL}/terms`)
+    .url('🔒 Конфиденциальность', `${FRONTEND_URL}/privacy`)
+    .row()
+    .text('✅ Принимаю', TERMS_ACCEPT_CB);
+}
+
+const TERMS_GATE_TEXT =
+  '👻 Прежде чем начать — прими условия использования и политику конфиденциальности GhostLine AI.';
+
+bot.use(async (ctx, next) => {
+  if (!ctx.from) return next();
+  if (ctx.callbackQuery?.data === TERMS_ACCEPT_CB) return next();
+
+  let session: UserSession;
+  try {
+    session = await ensureSession(ctx.from);
+  } catch {
+    return next(); // авторизация упадёт своим сообщением в конкретном хендлере
+  }
+  if (session.termsAccepted) return next();
+
+  if (ctx.callbackQuery) await ctx.answerCallbackQuery().catch(() => {});
+  await ctx.reply(TERMS_GATE_TEXT, { reply_markup: termsGateKb() });
+});
+
+bot.callbackQuery(TERMS_ACCEPT_CB, async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  try {
+    await api.post('/bot/accept-terms', { tgId: String(ctx.from.id) });
+    session.termsAccepted = true;
+  } catch {
+    await ctx.answerCallbackQuery({ text: 'Не удалось сохранить, попробуй ещё раз', show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery('Принято!');
+  await ctx.editMessageText('✅ Спасибо! Отправь /start, чтобы начать.');
+});
+
 // ─── Сброс "ожидания текстового ввода" при любой навигации ──────────────────
 // awaitingInput (session.ts) переключает следующее текстовое сообщение с
 // промпта для AI на значение настройки (стиль/название/текст песни/negative
@@ -90,6 +142,16 @@ const PLAN_LABELS: Record<string, string> = {
 const MODE_LABELS: Record<Mode, string> = {
   chat: '💬 Чат', think: '🧠 Про чат', vision: '🎨 Картинка', sound: '🎵 Музыка', reel: '🎬 Видео',
 };
+
+/**
+ * К какому "виду чата" backend'а относится режим — chat/think делят один и тот
+ * же Chat.mode='chat' (переключение стандарт↔про не начинает новый чат ни на
+ * сайте, ни здесь), у vision/sound/reel — свои отдельные виды. Используется,
+ * чтобы понять, нужно ли при смене режима искать/создавать другой активный чат.
+ */
+function chatBucket(mode: Mode): string {
+  return mode === 'chat' || mode === 'think' ? 'chat' : mode;
+}
 
 // ─── Постоянное нижнее меню ──────────────────────────────────────────────────
 // Кнопки — обычный текст, а не команды: пользователю не нужно ничего запоминать,
@@ -794,7 +856,12 @@ bot.callbackQuery(/^mode:(chat|think|vision|sound|reel)$/, async (ctx) => {
   if (!ctx.from) return;
   try {
     const session = await ensureSession(ctx.from);
-    session.mode = ctx.match[1] as Mode;
+    const newMode = ctx.match[1] as Mode;
+    if (chatBucket(newMode) !== chatBucket(session.mode)) {
+      session.activeChatId = null;
+      session.history = [];
+    }
+    session.mode = newMode;
     await ctx.editMessageText(`✅ Режим: ${MODE_LABELS[session.mode]}\n\nПиши сообщение — отвечу в этом режиме.`, { reply_markup: modeSwitchKb(session.mode) });
   } catch {
     await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
@@ -1065,8 +1132,24 @@ async function sessionWithActiveChat(ctx: Context): Promise<UserSession | null> 
   }
   if (!session.activeChatId) {
     try {
-      const chat = await createChat(session, session.mode);
-      session.activeChatId = chat.id;
+      // Продолжаем последний использованный чат этого вида (в т.ч. созданный
+      // на сайте — общий аккаунт по telegramId), а не молча плодим новый —
+      // иначе история в боте и на сайте выглядит "разной", хотя физически
+      // хранится под одним userId.
+      const bucket = chatBucket(session.mode);
+      const chats = await listChats(session);
+      const existing = chats.find((c) => chatBucket(c.mode as Mode) === bucket);
+      if (existing) {
+        session.activeChatId = existing.id;
+        const messages = await getChatMessages(session, existing.id, 20);
+        session.history = messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+          .slice(-20);
+      } else {
+        const chat = await createChat(session, session.mode);
+        session.activeChatId = chat.id;
+      }
     } catch {
       await ctx.reply('❌ Не удалось создать чат. Попробуй позже.');
       return null;
@@ -1127,6 +1210,10 @@ bot.on('message:text', async (ctx) => {
   const kbMode = KB_MODE_MAP[text];
   if (kbMode) {
     earlySession.awaitingInput = null;
+    if (chatBucket(kbMode) !== chatBucket(earlySession.mode)) {
+      earlySession.activeChatId = null;
+      earlySession.history = [];
+    }
     earlySession.mode = kbMode;
     await ctx.reply(`✅ Режим: ${MODE_LABELS[kbMode]}\n\nПиши сообщение — отвечу в этом режиме.`, { reply_markup: modeSwitchKb(kbMode) });
     return;

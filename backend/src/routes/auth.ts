@@ -117,6 +117,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
           telegramId,
           name: [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || null,
           avatarUrl: tgUser.photo_url,
+          // WebApp открывается из-под аккаунта Telegram, минуя чекбокс /register —
+          // формально согласия не было, поэтому здесь НЕ проставляем termsAcceptedAt
+          // (в отличие от OAuth ниже). Пусть решает бот-гейт при первом /start.
         },
       });
       await setupTrialForNewUser(user.id);
@@ -181,6 +184,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: info.default_avatar_id
             ? `https://avatars.yandex.net/get-yapic/${info.default_avatar_id}/islands-200`
             : undefined,
+          // Кнопка OAuth на /register активна только после чекбокса согласия.
+          termsAcceptedAt: new Date(),
         },
       });
       await setupTrialForNewUser(user.id);
@@ -253,6 +258,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
           email: info.email,
           name: info.name,
           avatarUrl: info.picture,
+          // Кнопка OAuth на /register активна только после чекбокса согласия.
+          termsAcceptedAt: new Date(),
         },
       });
       await setupTrialForNewUser(user.id);
@@ -296,7 +303,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     const tokens = signTokens(fastify, user.id);
-    return { ...tokens, isNew: !user.onboardingDone };
+    return { ...tokens, isNew: !user.onboardingDone, termsAccepted: !!user.termsAcceptedAt };
   });
 
   // ── Бот: получить данные пользователя по Telegram ID (план, имя, баланс) ──
@@ -307,14 +314,31 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const user = await prisma.user.findFirst({
       where: { telegramId: tgId },
-      select: { plan: true, name: true, caspers_balance: true },
+      select: { plan: true, name: true, caspers_balance: true, termsAcceptedAt: true },
     });
 
     return {
       plan: user?.plan ?? 'FREE',
       name: user?.name ?? null,
       caspers_balance: user?.caspers_balance ?? 0,
+      // Пользователя ещё нет в БД (первое /start) — считаем, что согласие не дано.
+      termsAccepted: !!user?.termsAcceptedAt,
     };
+  });
+
+  // ── Бот: зафиксировать согласие с условиями/политикой конфиденциальности ──
+  fastify.post('/bot/accept-terms', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { tgId } = request.body as { tgId?: string };
+    if (!tgId) return reply.code(400).send({ error: 'tgId required' });
+
+    const user = await prisma.user.findFirst({ where: { telegramId: tgId } });
+    if (!user) return reply.code(404).send({ error: 'Сначала войдите через /start' });
+
+    if (!user.termsAcceptedAt) {
+      await prisma.user.update({ where: { id: user.id }, data: { termsAcceptedAt: new Date() } });
+    }
+    return { ok: true };
   });
 
   // ── Бот: активировать промокод CASPERS по Telegram ID ─────────────────────
@@ -464,6 +488,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           purposes: true,
           responseStyle: true,
           onboardingDone: true,
+          termsAcceptedAt: true,
           createdAt: true,
         },
       });

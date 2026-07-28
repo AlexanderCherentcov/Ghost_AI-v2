@@ -243,10 +243,11 @@ async function sendPlans(ctx: Context): Promise<void> {
   if (!ctx.from) return;
   try {
     const { data } = await api.get('/plans');
-    const plans = data.plans as Array<{ key: string; price: number; caspers_monthly: number }>;
-    const lines = plans.map((p) =>
-      `${PLAN_LABELS[p.key] ?? p.key} — <b>${p.price.toLocaleString('ru')} ₽/мес</b> · ${p.caspers_monthly} Caspers/мес`
-    ).join('\n');
+    const plans = data.plans as Array<{ key: string; price: number; caspers_monthly: number; features: string[] }>;
+    const lines = plans.map((p) => {
+      const featureLines = p.features.map((f) => `   • ${f}`).join('\n');
+      return `${PLAN_LABELS[p.key] ?? p.key} — <b>${p.price.toLocaleString('ru')} ₽/мес</b> · ${p.caspers_monthly} Caspers/мес\n${featureLines}`;
+    }).join('\n\n');
 
     const kb = new InlineKeyboard();
     for (const p of plans) {

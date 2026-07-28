@@ -41,6 +41,24 @@ const api = axios.create({
   proxy: false,
 });
 
+// ─── Сброс "ожидания текстового ввода" при любой навигации ──────────────────
+// awaitingInput (session.ts) переключает следующее текстовое сообщение с
+// промпта для AI на значение настройки (стиль/название/текст песни/negative
+// prompt для видео и музыки). Если пользователь открыл этот ввод, а затем
+// вместо набора текста нажал любую другую кнопку или команду (переключил
+// чат, посмотрел баланс, сменил режим, закрыл меню настроек) — без этого
+// сброса следующее сообщение молча уходило бы в устаревшее поле настройки
+// вместо генерации. /cancel сам решает, что ответить, поэтому не трогаем
+// его здесь — обработчики vs:negprompt/ms:title/ms:style/ms:lyrics
+// выполняются ПОСЛЕ этого middleware и сами выставляют новое ожидание.
+bot.use(async (ctx, next) => {
+  const isCancelCmd = ctx.message?.text?.startsWith('/cancel');
+  if (!isCancelCmd && ctx.from && (ctx.callbackQuery || ctx.message?.text?.startsWith('/'))) {
+    await ensureSession(ctx.from).then((s) => { s.awaitingInput = null; }).catch(() => {});
+  }
+  await next();
+});
+
 // ─── Rate-limit авторизации ─────────────────────────────────────────────────
 const authRateLimit = new Map<number, number>(); // userId -> время последней попытки
 const AUTH_RATE_LIMIT_MS = 10_000;
@@ -602,23 +620,19 @@ bot.command('settings', async (ctx) => {
   await ctx.reply('⚙️ Настройки есть только для режимов 🎬 Видео и 🎵 Музыка. Переключись через /mode.');
 });
 
-// Любой тап по кнопке настроек, кроме запроса текстового ввода (vs:negprompt,
-// ms:title/style/lyrics), означает, что пользователь передумал печатать текст —
-// сбрасываем awaitingInput, иначе следующее сообщение (в т.ч. промпт для
-// генерации) молча уйдёт в устаревшее поле настройки вместо генерации.
+// Сброс awaitingInput на любом другом тапе/команде уже сделан глобальным
+// middleware выше — здесь только выставляем новое ожидание (vs:negprompt,
+// ms:title/style/lyrics) там, где это нужно намеренно.
 bot.callbackQuery('vs:open', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
-  const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
-  await sendVideoSettings(ctx, session, true);
+  await sendVideoSettings(ctx, await ensureSession(ctx.from), true);
 });
 
 bot.callbackQuery(/^vs:model:(motion|cinema|reality)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.videoModel = ctx.match[1] as VideoModel;
   await sendVideoSettings(ctx, session, true);
 });
@@ -627,7 +641,6 @@ bot.callbackQuery(/^vs:res:(720p|1080p)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.resolution = ctx.match[1] as '720p' | '1080p';
   await sendVideoSettings(ctx, session, true);
 });
@@ -636,7 +649,6 @@ bot.callbackQuery(/^vs:dur:(4s|8s)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.duration = ctx.match[1] as '4s' | '8s';
   await sendVideoSettings(ctx, session, true);
 });
@@ -645,7 +657,6 @@ bot.callbackQuery(/^vs:ar:(16:9|9:16)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.aspectRatio = ctx.match[1] as '16:9' | '9:16';
   await sendVideoSettings(ctx, session, true);
 });
@@ -654,11 +665,12 @@ bot.callbackQuery('vs:audio:toggle', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.enableAudio = !session.videoOptions.enableAudio;
   await sendVideoSettings(ctx, session, true);
 });
 
+// Единственный обработчик, которому НЕЛЬЗЯ попасть под общий сброс из
+// middleware — он сам выставляет awaitingInput последним действием.
 bot.callbackQuery('vs:negprompt', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
@@ -671,7 +683,6 @@ bot.callbackQuery('vs:negprompt:clear', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions.negativePrompt = '';
   await sendVideoSettings(ctx, session, true);
 });
@@ -680,30 +691,25 @@ bot.callbackQuery('vs:reset', async (ctx) => {
   await ctx.answerCallbackQuery('Сброшено');
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.videoOptions = { ...DEFAULT_VIDEO_OPTIONS };
   await sendVideoSettings(ctx, session, true);
 });
 
 bot.callbackQuery('vs:close', async (ctx) => {
   await ctx.answerCallbackQuery();
-  if (ctx.from) (await ensureSession(ctx.from)).awaitingInput = null;
   await ctx.deleteMessage().catch(() => {});
 });
 
 bot.callbackQuery('ms:open', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
-  const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
-  await sendMusicSettings(ctx, session, true);
+  await sendMusicSettings(ctx, await ensureSession(ctx.from), true);
 });
 
 bot.callbackQuery('ms:instrumental:toggle', async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   const wasInstrumental = session.musicOptions.instrumental;
   session.musicOptions.instrumental = !wasInstrumental;
   // Как на сайте: текст песни сохраняется только при переходе инструментал→вокал.
@@ -738,7 +744,6 @@ bot.callbackQuery('ms:lyrics', async (ctx) => {
 bot.callbackQuery('ms:lyrics:gen', async (ctx) => {
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   const topic = session.musicOptions.title || session.musicOptions.style;
   if (!topic) {
     await ctx.answerCallbackQuery({ text: 'Сначала укажи название или стиль', show_alert: true });
@@ -758,14 +763,12 @@ bot.callbackQuery('ms:reset', async (ctx) => {
   await ctx.answerCallbackQuery('Сброшено');
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  session.awaitingInput = null;
   session.musicOptions = { ...DEFAULT_MUSIC_OPTIONS };
   await sendMusicSettings(ctx, session, true);
 });
 
 bot.callbackQuery('ms:close', async (ctx) => {
   await ctx.answerCallbackQuery();
-  if (ctx.from) (await ensureSession(ctx.from)).awaitingInput = null;
   await ctx.deleteMessage().catch(() => {});
 });
 
@@ -792,7 +795,6 @@ bot.callbackQuery(/^mode:(chat|think|vision|sound|reel)$/, async (ctx) => {
   try {
     const session = await ensureSession(ctx.from);
     session.mode = ctx.match[1] as Mode;
-    session.awaitingInput = null;
     await ctx.editMessageText(`✅ Режим: ${MODE_LABELS[session.mode]}\n\nПиши сообщение — отвечу в этом режиме.`, { reply_markup: modeSwitchKb(session.mode) });
   } catch {
     await ctx.reply('❌ Ошибка авторизации. Попробуй /start');
@@ -815,7 +817,6 @@ bot.callbackQuery(/^newchat:(chat|think|vision|sound|reel)$/, async (ctx) => {
     session.activeChatId = chat.id;
     session.mode = mode;
     session.history = [];
-    session.awaitingInput = null;
     await ctx.editMessageText(`✅ Новый чат создан (${MODE_LABELS[mode]}). Пиши сообщение!`, { reply_markup: modeSwitchKb(mode) });
   } catch {
     await ctx.reply('❌ Не удалось создать чат. Попробуй позже.');

@@ -1193,6 +1193,13 @@ async function captureAwaitingInput(ctx: Context, session: UserSession, text: st
       await sendMusicSettings(ctx, session, false);
       break;
     case 'support_message':
+      if (text.trim().length < 5) {
+        // Бэкенд требует минимум 5 символов — проверяем на клиенте, чтобы не гонять
+        // короткое сообщение до сервера и не терять его на пустом месте.
+        session.awaitingInput = 'support_message';
+        await ctx.reply('✏️ Опиши чуть подробнее (минимум 5 символов) — так оператору будет понятнее.');
+        return;
+      }
       try {
         await sendSupportMessage(session, text.slice(0, 2000));
         await ctx.reply('✅ Сообщение отправлено в поддержку. Ответим в ближайшее время.');

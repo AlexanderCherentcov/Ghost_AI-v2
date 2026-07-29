@@ -1,90 +1,104 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { FREE_LIMITS } from '../config/plans.js';
-import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
-import { notifySupportTicket } from '../services/admin-notify.js';
+import { checkBotSecret } from '../lib/bot-auth.js';
+import {
+  getOrCreateOpenTicket, appendUserMessage, appendAdminReply,
+  takeTicket, closeTicket, reopenTicket, findTicketByTopicId,
+} from '../services/support-tickets.js';
 
-const SUPPORT_BOT_TOKEN = process.env.SUPPORT_BOT_TOKEN ?? '';
-const SUPPORT_GROUP_ID  = process.env.SUPPORT_GROUP_ID ?? '';
-
-const bodySchema = z.object({
+const messageSchema = z.object({
   message: z.string().min(5).max(2000),
   email:   z.string().email().optional(),
 });
 
-async function sendToTelegram(text: string) {
-  if (!SUPPORT_BOT_TOKEN || !SUPPORT_GROUP_ID) return;
-  await fetch(`https://api.telegram.org/bot${SUPPORT_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id:    SUPPORT_GROUP_ID,
-      text,
-      parse_mode: 'HTML',
-    }),
-  });
-}
+const replySchema = z.object({
+  text: z.string().min(1).max(4000),
+});
+
+const takeSchema = z.object({
+  adminId:   z.string().min(1),
+  adminName: z.string().min(1),
+});
 
 const supportRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/support/message — работает и для авторизованных, и для анонимных пользователей
+  // ── Пользователь/гость пишет в поддержку — работает и с сайта, и из бота ──
+  // (бот шлёт тот же JWT, что и обычные API-запросы сессии пользователя)
   fastify.post('/support/message', async (request, reply) => {
-    const body = bodySchema.parse(request.body);
+    const body = messageSchema.parse(request.body);
 
-    let userName   = 'Гость';
-    let userEmail  = body.email ?? 'не указан';
-    let userPlan   = '—';
     let userId: string | null = null;
-    let usage      = '';
+    let telegramId: string | null = null;
+    let guestEmail = body.email;
+    let displayName: string | undefined;
 
-    // Опциональная авторизация
     try {
       await request.jwtVerify();
       const sub = (request.user as unknown as { userId: string }).userId;
       const user = await prisma.user.findUnique({
         where: { id: sub },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          plan: true,
-          ...USAGE_COUNTERS_SELECT,
-        },
+        select: { id: true, telegramId: true, email: true, name: true },
       });
       if (user) {
-        userId    = user.id;
-        userName  = user.name ?? 'без имени';
-        userEmail = user.email ?? userEmail;
-        userPlan  = user.plan;
-        usage = [
-          `💬 Сообщения сегодня: ${user.std_messages_today}`,
-          user.pro_messages_today > 0
-            ? `⚡ Про сегодня: ${user.pro_messages_today}`
-            : '',
-          `Caspers: ${user.caspers_balance}/${user.caspers_monthly}/мес`,
-          user.plan === 'FREE' ? `🖼 Картинки/нед: ${user.images_this_week}/${FREE_LIMITS.images_weekly}` : '',
-          user.plan === 'FREE' ? `🎬 Видео/мес: ${user.videos_this_month}/${FREE_LIMITS.videos_monthly}` : '',
-        ].filter(Boolean).join('\n');
+        userId      = user.id;
+        telegramId  = user.telegramId;
+        guestEmail  = guestEmail ?? user.email ?? undefined;
+        displayName = user.name ?? undefined;
       }
     } catch {
-      // анонимный пользователь — используем email из тела запроса
+      // анонимный запрос с сайта — используем email из тела, гостя не идентифицируем
     }
 
-    const text =
-      `📩 <b>Обращение в поддержку GhostLine</b>\n\n` +
-      `👤 <b>Пользователь:</b> ${userName}\n` +
-      `📧 <b>Email:</b> ${userEmail}\n` +
-      `💎 <b>Тариф:</b> ${userPlan}\n` +
-      `🆔 <b>ID:</b> <code>${userId ?? '—'}</code>\n` +
-      (usage ? `\n📊 <b>Использование сегодня:</b>\n${usage}\n` : '') +
-      `\n💬 <b>Сообщение:</b>\n${body.message}`;
-
-    await sendToTelegram(text);
-    // Дублируем в админ-бот карточкой пользователя с кнопками (план/Caspers/бан) —
-    // группа поддержки выше видит текст, а админы могут сразу же среагировать.
-    await notifySupportTicket({ userId, guestEmail: body.email, message: body.message }).catch(() => {});
+    const ticket = await getOrCreateOpenTicket({ userId, telegramId, guestEmail, displayName });
+    await appendUserMessage(ticket, body.message);
 
     return reply.send({ ok: true });
+  });
+
+  // ── Операторские действия из группы поддержки (вызывает admin-bot, bot-secret) ──
+
+  fastify.post('/admin/support/tickets/:id/take', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const { adminId, adminName } = takeSchema.parse(request.body);
+    const ticket = await takeTicket(id, adminId, adminName);
+    if (!ticket) return reply.code(409).send({ error: 'Тикет не найден или уже закрыт' });
+    return { ok: true, ticket };
+  });
+
+  fastify.post('/admin/support/tickets/:id/close', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const ticket = await closeTicket(id);
+    if (!ticket) return reply.code(409).send({ error: 'Тикет не найден или уже закрыт' });
+    return { ok: true, ticket };
+  });
+
+  fastify.post('/admin/support/tickets/:id/reopen', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const ticket = await reopenTicket(id);
+    if (!ticket) return reply.code(409).send({ error: 'Тикет не найден или не закрыт' });
+    return { ok: true, ticket };
+  });
+
+  fastify.post('/admin/support/tickets/:id/reply', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const { text } = replySchema.parse(request.body);
+    const result = await appendAdminReply(id, text);
+    if (!result.ok && result.reason === 'not_found') return reply.code(404).send(result);
+    return reply.send(result);
+  });
+
+  fastify.get('/admin/support/tickets/by-topic/:topicId', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { topicId } = request.params as { topicId: string };
+    const parsed = parseInt(topicId, 10);
+    if (!Number.isFinite(parsed)) return reply.code(400).send({ error: 'topicId должен быть числом' });
+    const ticket = await findTicketByTopicId(parsed);
+    if (!ticket) return reply.code(404).send({ error: 'Тикет не найден' });
+    return ticket;
   });
 };
 

@@ -35,6 +35,17 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  CLOSED
+}
+
+enum MessageDirection {
+  IN  // от пользователя оператору
+  OUT // от оператора пользователю
+}
+
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -90,6 +101,7 @@ model User {
   imageRequests     UserImageRequest[]
   casperTransactions CasperTransaction[]
   promoRedemptions   PromoRedemption[]
+  supportTickets     SupportTicket[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,4 +234,39 @@ model UserImageRequest {
 
   @@unique([userId, promptHash])
   @@index([promptHash])
+}
+
+// ─── Тикеты поддержки ───────────────────────────────────────────────────────
+// Один тикет = одна тема (topic) в Telegram-супергруппе поддержки.
+// userId/telegramId нет для гостя с сайта без входа — тогда ответ оператора
+// релеить некуда, тикет виден только текстом в теме.
+
+model SupportTicket {
+  id           String        @id @default(cuid())
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramId   String?       // куда релеить ответ оператора; null — только сайт, без бота
+  guestEmail   String?
+  status       TicketStatus  @default(OPEN)
+  topicId      Int?          // message_thread_id темы в группе поддержки
+  assigneeId   String?       // Telegram ID оператора, взявшего тикет
+  assigneeName String?
+  messages     SupportMessage[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([telegramId])
+  @@index([topicId])
+  @@index([status])
+}
+
+model SupportMessage {
+  id        String            @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  direction MessageDirection
+  text      String            @db.Text
+  createdAt DateTime          @default(now())
+
+  @@index([ticketId, createdAt])
 }

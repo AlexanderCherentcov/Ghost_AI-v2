@@ -60,7 +60,7 @@ export const DEFAULT_MUSIC_OPTIONS: MusicOptions = {
 // Когда пользователь нажал кнопку "ввести текстом" (negative prompt / название /
 // стиль / текст песни) — следующее текстовое сообщение уходит не в AI-промпт,
 // а в это поле настроек. Сбрасывается после применения.
-export type AwaitingInput = 'video_negative_prompt' | 'music_title' | 'music_style' | 'music_lyrics' | null;
+export type AwaitingInput = 'video_negative_prompt' | 'music_title' | 'music_style' | 'music_lyrics' | 'support_message' | null;
 
 export interface UserSession {
   accessToken: string;

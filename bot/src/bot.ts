@@ -8,7 +8,7 @@ import {
 import {
   listChats, createChat, deleteChat, getChatMessages,
   startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
-  getMe, createPlanPayment, createCasperPayment,
+  getMe, createPlanPayment, createCasperPayment, sendSupportMessage,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
 import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-files.js';
@@ -163,12 +163,13 @@ const KB_CHATS   = '📂 Мои чаты';
 const KB_PLANS   = '📦 Тарифы';
 const KB_BALANCE = '👤 Баланс';
 const KB_HELP    = '❓ Помощь';
+const KB_SUPPORT = '🆘 Поддержка';
 
 const MAIN_KEYBOARD = new Keyboard()
   .text(MODE_LABELS.chat).text(MODE_LABELS.think).row()
   .text(MODE_LABELS.vision).text(MODE_LABELS.sound).text(MODE_LABELS.reel).row()
   .text(KB_CHATS).text(KB_PLANS).row()
-  .text(KB_BALANCE).text(KB_HELP)
+  .text(KB_BALANCE).text(KB_HELP).text(KB_SUPPORT)
   .resized()
   .persistent()
   .placeholder('Напиши сообщение или выбери действие ниже');
@@ -321,6 +322,7 @@ async function sendHelp(ctx: Context): Promise<void> {
     `🎵 Музыка — генерация музыки\n` +
     `🎬 Видео — генерация видео\n\n` +
     `После каждого сообщения и генерации показываю остаток Caspers.\n\n` +
+    `🆘 Поддержка — кнопка в нижнем меню, если что-то не работает или есть вопрос по оплате.\n\n` +
     `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю, а вот видео и голосовые пока нет.`,
     { parse_mode: 'Markdown' }
   );
@@ -1190,6 +1192,14 @@ async function captureAwaitingInput(ctx: Context, session: UserSession, text: st
       session.musicOptions.lyrics = text.slice(0, 10000);
       await sendMusicSettings(ctx, session, false);
       break;
+    case 'support_message':
+      try {
+        await sendSupportMessage(session, text.slice(0, 2000));
+        await ctx.reply('✅ Сообщение отправлено в поддержку. Ответим в ближайшее время.');
+      } catch {
+        await ctx.reply('❌ Не удалось отправить сообщение. Попробуй позже.');
+      }
+      break;
   }
 }
 
@@ -1234,6 +1244,11 @@ bot.on('message:text', async (ctx) => {
     if (text === KB_PLANS)   await sendPlans(ctx);
     if (text === KB_BALANCE) await sendBalance(ctx);
     if (text === KB_HELP)    await sendHelp(ctx);
+    return;
+  }
+  if (text === KB_SUPPORT) {
+    earlySession.awaitingInput = 'support_message';
+    await ctx.reply('🆘 Опиши проблему или вопрос одним сообщением — отправлю в поддержку.\n/cancel — отменить.');
     return;
   }
 

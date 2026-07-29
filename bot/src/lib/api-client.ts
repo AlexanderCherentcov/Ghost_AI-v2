@@ -43,6 +43,10 @@ export async function getChatMessages(session: UserSession, chatId: string, limi
   return data.messages as Array<{ role: string; content: string; mode: string; mediaUrl: string | null }>;
 }
 
+export async function sendSupportMessage(session: UserSession, message: string): Promise<void> {
+  await client(session).post('/support/message', { message });
+}
+
 // ─── Задачи генерации ───────────────────────────────────────────────────────
 
 export interface GenJobResult {

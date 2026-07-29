@@ -8,7 +8,7 @@ import {
 import {
   listChats, createChat, deleteChat, getChatMessages,
   startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
-  getMe, createPlanPayment, createCasperPayment, sendSupportMessage,
+  getMe, createPlanPayment, createCasperPayment,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
 import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-files.js';
@@ -20,6 +20,7 @@ if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
 const API_URL      = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
+const SUPPORT_BOT_URL = `https://t.me/${process.env.SUPPORT_BOT_USERNAME ?? 'GhostLineAisup_bot'}`;
 const BOT_USERNAME    = process.env.BOT_USERNAME ?? 'GhostSuperAI_bot';
 
 // Список Telegram ID администраторов через запятую
@@ -1192,21 +1193,6 @@ async function captureAwaitingInput(ctx: Context, session: UserSession, text: st
       session.musicOptions.lyrics = text.slice(0, 10000);
       await sendMusicSettings(ctx, session, false);
       break;
-    case 'support_message':
-      if (text.trim().length < 5) {
-        // Бэкенд требует минимум 5 символов — проверяем на клиенте, чтобы не гонять
-        // короткое сообщение до сервера и не терять его на пустом месте.
-        session.awaitingInput = 'support_message';
-        await ctx.reply('✏️ Опиши чуть подробнее (минимум 5 символов) — так оператору будет понятнее.');
-        return;
-      }
-      try {
-        await sendSupportMessage(session, text.slice(0, 2000));
-        await ctx.reply('✅ Сообщение отправлено в поддержку. Ответим в ближайшее время.');
-      } catch {
-        await ctx.reply('❌ Не удалось отправить сообщение. Попробуй позже.');
-      }
-      break;
   }
 }
 
@@ -1254,8 +1240,10 @@ bot.on('message:text', async (ctx) => {
     return;
   }
   if (text === KB_SUPPORT) {
-    earlySession.awaitingInput = 'support_message';
-    await ctx.reply('🆘 Опиши проблему или вопрос одним сообщением — отправлю в поддержку.\n/cancel — отменить.');
+    earlySession.awaitingInput = null;
+    await ctx.reply('🆘 Напиши свой вопрос напрямую в бота поддержки — там тебе ответит оператор:', {
+      reply_markup: new InlineKeyboard().url('💬 Открыть поддержку', SUPPORT_BOT_URL),
+    });
     return;
   }
 

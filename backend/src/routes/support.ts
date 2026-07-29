@@ -21,6 +21,12 @@ const takeSchema = z.object({
   adminName: z.string().min(1),
 });
 
+const telegramMessageSchema = z.object({
+  telegramId:  z.string().min(1),
+  text:        z.string().min(1).max(2000),
+  displayName: z.string().optional(),
+});
+
 const supportRoutes: FastifyPluginAsync = async (fastify) => {
   // ── Пользователь/гость пишет в поддержку — работает и с сайта, и из бота ──
   // (бот шлёт тот же JWT, что и обычные API-запросы сессии пользователя)
@@ -53,6 +59,29 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     await appendUserMessage(ticket, body.message);
 
     return reply.send({ ok: true });
+  });
+
+  // ── Пользователь пишет напрямую боту поддержки (bot-secret, нет JWT-сессии) ──
+  // В отличие от /support/message (сайт/основной бот, есть access-токен),
+  // сюда стучится support-bot от лица пользователя — известен только его
+  // Telegram ID, поэтому userId резолвим здесь по telegramId в БД.
+  fastify.post('/admin/support/message-from-telegram', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    const { telegramId, text, displayName } = telegramMessageSchema.parse(request.body);
+
+    const user = await prisma.user.findUnique({
+      where: { telegramId },
+      select: { id: true, name: true },
+    });
+
+    const ticket = await getOrCreateOpenTicket({
+      userId: user?.id ?? null,
+      telegramId,
+      displayName: user?.name ?? displayName,
+    });
+    await appendUserMessage(ticket, text);
+
+    return reply.send({ ok: true, knownUser: !!user });
   });
 
   // ── Операторские действия из группы поддержки (вызывает admin-bot, bot-secret) ──

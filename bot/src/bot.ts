@@ -572,10 +572,12 @@ async function casperSpendNote(session: UserSession, before: number | null): Pro
 // Опции живут в сессии (session.videoOptions/musicOptions) и применяются к
 // следующей генерации, пока пользователь их не поменяет — как state виджета на сайте.
 
-const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
-  motion:  '⚡ Motion (Veo 3.1 Fast)',
-  cinema:  '🎬 Cinema (Veo 3.1 Pro)',
-  reality: '🎥 Reality (Kling V-2.5)',
+// Фирменные названия моделей — 1:1 с models[] в frontend/components/chat/VideoSettingsMenu.tsx.
+// Реальный провайдер (Veo/Kling) уходит в sub — так же, как на сайте, а не в основной ярлык.
+const VIDEO_MODEL_LABELS: Record<VideoModel, { emoji: string; label: string; sub: string }> = {
+  motion:  { emoji: '⚡', label: 'GhostLine Motion',  sub: 'Быстро · Veo 3.1 Fast' },
+  cinema:  { emoji: '🎬', label: 'GhostLine Cinema',  sub: 'Высокое качество · Veo 3.1 Pro' },
+  reality: { emoji: '🎥', label: 'GhostLine Reality', sub: 'Реализм · Kling V-2.5' },
 };
 
 /** Та же формула, что backend/src/services/tokens.ts:resolveVideoRequestType — только cinema тарифицируется как pro. */
@@ -622,7 +624,8 @@ async function sendVideoSettings(ctx: Context, session: UserSession, edit: boole
 
   const kb = new InlineKeyboard();
   (['motion', 'cinema', 'reality'] as VideoModel[]).forEach((m) => {
-    kb.text(`${o.videoModel === m ? '✅ ' : ''}${VIDEO_MODEL_LABELS[m]}`, `vs:model:${m}`).row();
+    const { emoji, label } = VIDEO_MODEL_LABELS[m];
+    kb.text(`${o.videoModel === m ? '✅ ' : ''}${emoji} ${label}`, `vs:model:${m}`).row();
   });
   kb.text(`${o.resolution === '720p' ? '✅ ' : ''}720p`, 'vs:res:720p')
     .text(`${o.resolution === '1080p' ? '✅ ' : ''}1080p`, 'vs:res:1080p').row();
@@ -637,7 +640,8 @@ async function sendVideoSettings(ctx: Context, session: UserSession, edit: boole
 
   const text =
     `🎬 <b>Настройки видео</b>\n\n` +
-    `Модель: <b>${VIDEO_MODEL_LABELS[o.videoModel]}</b>\n` +
+    `Модель: <b>${VIDEO_MODEL_LABELS[o.videoModel].emoji} ${VIDEO_MODEL_LABELS[o.videoModel].label}</b> ` +
+    `<i>(${VIDEO_MODEL_LABELS[o.videoModel].sub})</i>\n` +
     `Разрешение: <b>${o.resolution}</b> · Длительность: <b>${o.duration}</b>\n` +
     `Формат: <b>${o.aspectRatio}</b> · Звук: <b>${o.enableAudio ? 'вкл' : 'выкл'}</b>\n` +
     (o.negativePrompt ? `Исключить: <i>${o.negativePrompt.slice(0, 200)}</i>\n` : '') +

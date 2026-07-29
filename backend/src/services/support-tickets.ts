@@ -30,7 +30,8 @@ const OPEN_STATUSES = ['OPEN', 'ASSIGNED'] as const;
 
 const USER_MESSAGES = {
   ticketAccepted: '✅ Обращение принято! Оператор ответит в ближайшее время 🕐',
-  closed:         '✅ Ваш вопрос решён! Если появятся новые вопросы — просто напишите нам 💬',
+  assigned:       '👤 Оператор подключился к диалогу — сейчас ответит.',
+  closed:         '🔒 Тема закрыта. Если появятся новые вопросы — просто напишите нам 💬',
   reopened:       '↩️ Оператор возобновил ваш запрос. Если есть дополнительные вопросы — просто напишите 💬',
 };
 
@@ -204,10 +205,16 @@ export async function appendAdminReply(ticketId: string, text: string): Promise<
 export async function takeTicket(ticketId: string, adminId: string, adminName: string): Promise<SupportTicket | null> {
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
   if (!ticket || ticket.status === 'CLOSED') return null;
-  return prisma.supportTicket.update({
+
+  const updated = await prisma.supportTicket.update({
     where: { id: ticketId },
     data: { status: 'ASSIGNED', assigneeId: adminId, assigneeName: adminName },
   });
+
+  if (updated.telegramId) {
+    await sendTelegramMessage(MAIN_BOT_TOKEN, updated.telegramId, USER_MESSAGES.assigned).catch(() => {});
+  }
+  return updated;
 }
 
 export async function closeTicket(ticketId: string): Promise<SupportTicket | null> {

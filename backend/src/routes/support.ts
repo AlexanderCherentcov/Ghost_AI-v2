@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { FREE_LIMITS } from '../config/plans.js';
 import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
+import { notifySupportTicket } from '../services/admin-notify.js';
 
 const SUPPORT_BOT_TOKEN = process.env.SUPPORT_BOT_TOKEN ?? '';
 const SUPPORT_GROUP_ID  = process.env.SUPPORT_GROUP_ID ?? '';
@@ -30,11 +31,11 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/support/message', async (request, reply) => {
     const body = bodySchema.parse(request.body);
 
-    let userName  = 'Гость';
-    let userEmail = body.email ?? 'не указан';
-    let userPlan  = '—';
-    let userId    = '—';
-    let usage     = '';
+    let userName   = 'Гость';
+    let userEmail  = body.email ?? 'не указан';
+    let userPlan   = '—';
+    let userId: string | null = null;
+    let usage      = '';
 
     // Опциональная авторизация
     try {
@@ -74,11 +75,14 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
       `👤 <b>Пользователь:</b> ${userName}\n` +
       `📧 <b>Email:</b> ${userEmail}\n` +
       `💎 <b>Тариф:</b> ${userPlan}\n` +
-      `🆔 <b>ID:</b> <code>${userId}</code>\n` +
+      `🆔 <b>ID:</b> <code>${userId ?? '—'}</code>\n` +
       (usage ? `\n📊 <b>Использование сегодня:</b>\n${usage}\n` : '') +
       `\n💬 <b>Сообщение:</b>\n${body.message}`;
 
     await sendToTelegram(text);
+    // Дублируем в админ-бот карточкой пользователя с кнопками (план/Caspers/бан) —
+    // группа поддержки выше видит текст, а админы могут сразу же среагировать.
+    await notifySupportTicket({ userId, guestEmail: body.email, message: body.message }).catch(() => {});
 
     return reply.send({ ok: true });
   });

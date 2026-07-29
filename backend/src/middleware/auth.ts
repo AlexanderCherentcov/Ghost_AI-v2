@@ -14,7 +14,7 @@ export async function authenticate(
 // Расширяем FastifyRequest типом user из JWT
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { userId: string; email?: string };
-    user: { userId: string; email?: string };
+    payload: { userId: string; email?: string; type?: string };
+    user: { userId: string; email?: string; type?: string };
   }
 }

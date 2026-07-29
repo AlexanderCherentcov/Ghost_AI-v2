@@ -47,13 +47,22 @@ const updateProfileSchema = z.object({
 
 // ─── Вспомогательные функции ──────────────────────────────────────────────────
 
+/** timingSafeEqual вместо `===` — HMAC Telegram-хеша сравнивается посимвольно, что даёт микроутечку через тайминг. */
+function hashesMatch(expected: string, actual: string | null | undefined): boolean {
+  if (!actual) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(actual);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 function signTokens(fastify: FastifyInstance, userId: string, email?: string) {
   const accessToken = fastify.jwt.sign(
-    { userId, email },
+    { userId, email, type: 'access' },
     { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' }
   );
   const refreshToken = fastify.jwt.sign(
-    { userId, email } as { userId: string; email?: string },
+    { userId, email, type: 'refresh' },
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '30d' }
   );
   return { accessToken, refreshToken };
@@ -86,7 +95,7 @@ function verifyTelegramWebApp(initData: string): {
     .update(dataCheckString)
     .digest('hex');
 
-  if (expectedHash !== hash) {
+  if (!hashesMatch(expectedHash, hash)) {
     throw new Error('Invalid Telegram auth');
   }
 
@@ -370,7 +379,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const secretKey = crypto.createHash('sha256').update(process.env.TELEGRAM_BOT_TOKEN ?? '').digest();
     const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
 
-    if (expectedHash !== hash) return reply.code(401).send({ error: 'Invalid hash' });
+    if (!hashesMatch(expectedHash, hash)) return reply.code(401).send({ error: 'Invalid hash' });
     if (Date.now() / 1000 - parseInt(fields.auth_date ?? '0') > 86400) return reply.code(401).send({ error: 'Expired' });
 
     const telegramId = String(fields.id);
@@ -416,7 +425,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       .update(checkString)
       .digest('hex');
 
-    if (expectedHash !== hash) {
+    if (!hashesMatch(expectedHash, hash)) {
       return reply.redirect(`${process.env.FRONTEND_URL}/login?error=invalid_hash`);
     }
     if (Date.now() / 1000 - parseInt(fields.auth_date ?? '0') > 86400) {
@@ -450,7 +459,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (!body?.refreshToken) return reply.code(400).send({ error: 'No refresh token' });
 
     try {
-      const payload = fastify.jwt.verify<{ userId: string }>(body.refreshToken);
+      const payload = fastify.jwt.verify<{ userId: string; type?: string }>(body.refreshToken);
+      // Без этой проверки короткоживущий access-токен (15 мин) можно предъявить
+      // сюда и получить свежую пару, включая 30-дневный refresh — что сводит
+      // на нет весь смысл его короткого TTL. type отсутствует у токенов, выпущенных
+      // до этого фикса — их не блокируем (иначе разлогинит всех разом), но явный
+      // type: 'access' отклоняем всегда: все новые access-токены его проставляют.
+      if (payload.type === 'access') throw new Error('Not a refresh token');
 
       const user = await prisma.user.findUnique({ where: { id: payload.userId } });
       if (!user) throw new Error('User not found');

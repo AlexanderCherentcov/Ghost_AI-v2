@@ -156,6 +156,29 @@ export function resolveVideoRequestType(
   return duration === '4s' ? 'video_std_4s' : 'video_std_8s';
 }
 
+// ─── Атомарное списание Caspers ────────────────────────────────────────────────
+// ВАЖНО: проверка баланса и decrement объединены в один UPDATE с условием в WHERE
+// (как claimOneUse в promo.ts), а не read-then-write — иначе два параллельных
+// запроса (например, двойной клик или скрипт) читают один и тот же баланс,
+// оба проходят проверку "хватает" и оба списывают, уводя баланс в минус.
+async function deductCaspersOrThrow(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  userId: string,
+  cost: number,
+  reason: string,
+  errorCode: string,
+  errorMessage: string,
+): Promise<void> {
+  const result = await tx.user.updateMany({
+    where: { id: userId, caspers_balance: { gte: cost } },
+    data: { caspers_balance: { decrement: cost } },
+  });
+  if (result.count === 0) {
+    throw Object.assign(new Error(errorMessage), { code: errorCode });
+  }
+  await tx.casperTransaction.create({ data: { userId, amount: -cost, reason } });
+}
+
 // ─── Проверка лимитов и списание (единая логика для FREE и платных тарифов) ──
 
 export async function checkAndDeduct(
@@ -229,20 +252,14 @@ export async function checkAndDeduct(
         return;
       }
 
-      // Списываем Caspers
-      if (user.caspers_balance < cost) {
-        throw Object.assign(
-          new Error('Недостаточно Caspers'),
-          { code: 'LIMIT_PRO_MESSAGES' },
-        );
-      }
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          caspers_balance: { decrement: cost },
-          pro_messages_today: { increment: 1 },
-        },
+      // Списываем Caspers (атомарно — см. deductCaspersOrThrow)
+      const proClaimed = await tx.user.updateMany({
+        where: { id: userId, caspers_balance: { gte: cost } },
+        data: { caspers_balance: { decrement: cost }, pro_messages_today: { increment: 1 } },
       });
+      if (proClaimed.count === 0) {
+        throw Object.assign(new Error('Недостаточно Caspers'), { code: 'LIMIT_PRO_MESSAGES' });
+      }
       await tx.casperTransaction.create({
         data: { userId, amount: -cost, reason: 'chat_pro' },
       });
@@ -251,27 +268,19 @@ export async function checkAndDeduct(
 
     // ── генерация изображений ────────────────────────────────────────────────
     if (requestType === 'image_generate' || requestType === 'image_edit') {
-      if (user.caspers_balance < cost) {
-        throw Object.assign(
-          new Error('Недостаточно Caspers для генерации изображения'),
-          { code: 'LIMIT_IMAGES' },
-        );
-      }
-      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: requestType } });
+      await deductCaspersOrThrow(
+        tx, userId, cost, requestType,
+        'LIMIT_IMAGES', 'Недостаточно Caspers для генерации изображения',
+      );
       return;
     }
 
     // ── генерация музыки ─────────────────────────────────────────────────────
     if (requestType === 'music_generate') {
-      if (user.caspers_balance < cost) {
-        throw Object.assign(
-          new Error('Недостаточно Caspers для генерации музыки'),
-          { code: 'LIMIT_MUSIC' },
-        );
-      }
-      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: 'music_generate' } });
+      await deductCaspersOrThrow(
+        tx, userId, cost, 'music_generate',
+        'LIMIT_MUSIC', 'Недостаточно Caspers для генерации музыки',
+      );
       return;
     }
 
@@ -282,14 +291,10 @@ export async function checkAndDeduct(
       requestType === 'video_pro_4s' ||
       requestType === 'video_pro_8s'
     ) {
-      if (user.caspers_balance < cost) {
-        throw Object.assign(
-          new Error('Недостаточно Caspers для генерации видео'),
-          { code: 'LIMIT_VIDEOS' },
-        );
-      }
-      await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: cost } } });
-      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason: requestType } });
+      await deductCaspersOrThrow(
+        tx, userId, cost, requestType,
+        'LIMIT_VIDEOS', 'Недостаточно Caspers для генерации видео',
+      );
       return;
     }
   });

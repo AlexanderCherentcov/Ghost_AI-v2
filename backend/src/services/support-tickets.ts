@@ -22,9 +22,9 @@ import {
 } from '../lib/telegram-forum.js';
 import { fmtUserCard, userActionKeyboard, escHtml } from '../lib/admin-user-card.js';
 
-const ADMIN_BOT_TOKEN  = process.env.ADMIN_BOT_TOKEN ?? '';
-const MAIN_BOT_TOKEN   = process.env.TELEGRAM_BOT_TOKEN ?? '';
-const SUPPORT_GROUP_ID = process.env.GHOSTLINE_SUPPORT_GROUP_ID ?? '';
+const SUPPORT_BOT_TOKEN = process.env.SUPPORT_BOT_TOKEN ?? '';
+const MAIN_BOT_TOKEN    = process.env.TELEGRAM_BOT_TOKEN ?? '';
+const SUPPORT_GROUP_ID  = process.env.GHOSTLINE_SUPPORT_GROUP_ID ?? '';
 
 const OPEN_STATUSES = ['OPEN', 'ASSIGNED'] as const;
 
@@ -71,7 +71,7 @@ async function postTicketOpenCard(ticket: SupportTicket): Promise<void> {
       (ticket.telegramId ? `\n🆔 TG: <code>${ticket.telegramId}</code>` : '');
 
   try {
-    await sendTelegramMessage(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, body, {
+    await sendTelegramMessage(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, body, {
       messageThreadId: ticket.topicId,
       replyMarkup: ticket.userId ? userActionKeyboard(ticket.userId) : undefined,
     });
@@ -146,14 +146,14 @@ export async function getOrCreateOpenTicket(origin: TicketOrigin): Promise<Suppo
     let topicId: number;
     if (priorTopicId) {
       try {
-        await reopenForumTopic(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, priorTopicId);
+        await reopenForumTopic(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, priorTopicId);
         topicId = priorTopicId;
       } catch {
         // Тема могла быть удалена вручную — создаём новую вместо падения
-        topicId = await createForumTopic(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, await resolveTopicName(origin));
+        topicId = await createForumTopic(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, await resolveTopicName(origin));
       }
     } else {
-      topicId = await createForumTopic(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, await resolveTopicName(origin));
+      topicId = await createForumTopic(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, await resolveTopicName(origin));
     }
 
     const updated = await prisma.supportTicket.update({ where: { id: ticket.id }, data: { topicId } });
@@ -171,7 +171,7 @@ export async function appendUserMessage(ticket: SupportTicket, text: string): Pr
   await prisma.supportMessage.create({ data: { ticketId: ticket.id, direction: 'IN', text } });
   if (!SUPPORT_GROUP_ID || !ticket.topicId) return;
   try {
-    await sendTelegramMessage(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, escHtml(text), {
+    await sendTelegramMessage(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, escHtml(text), {
       messageThreadId: ticket.topicId,
       replyMarkup: ticketKeyboard(ticket),
     });
@@ -217,7 +217,7 @@ export async function closeTicket(ticketId: string): Promise<SupportTicket | nul
   const updated = await prisma.supportTicket.update({ where: { id: ticketId }, data: { status: 'CLOSED' } });
 
   if (SUPPORT_GROUP_ID && updated.topicId) {
-    await closeForumTopic(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, updated.topicId).catch(() => {});
+    await closeForumTopic(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, updated.topicId).catch(() => {});
   }
   if (updated.telegramId) {
     await sendTelegramMessage(MAIN_BOT_TOKEN, updated.telegramId, USER_MESSAGES.closed).catch(() => {});
@@ -235,7 +235,7 @@ export async function reopenTicket(ticketId: string): Promise<SupportTicket | nu
   });
 
   if (SUPPORT_GROUP_ID && updated.topicId) {
-    await reopenForumTopic(ADMIN_BOT_TOKEN, SUPPORT_GROUP_ID, updated.topicId).catch(() => {});
+    await reopenForumTopic(SUPPORT_BOT_TOKEN, SUPPORT_GROUP_ID, updated.topicId).catch(() => {});
   }
   if (updated.telegramId) {
     await sendTelegramMessage(MAIN_BOT_TOKEN, updated.telegramId, USER_MESSAGES.reopened).catch(() => {});

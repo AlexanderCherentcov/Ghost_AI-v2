@@ -69,9 +69,9 @@ jobs:
             fi
 
             if [ "$DEPLOY_BOT" = "true" ]; then
-              echo "→ Rebuilding bot + admin-bot..."
-              docker compose build --no-cache bot admin-bot
-              docker compose up -d --no-deps bot admin-bot
+              echo "→ Rebuilding bot + admin-bot + support-bot..."
+              docker compose build --no-cache bot admin-bot support-bot
+              docker compose up -d --no-deps bot admin-bot support-bot
               echo "→ Bot deployed"
             fi
 

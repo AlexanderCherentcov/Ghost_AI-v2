@@ -77,6 +77,22 @@ services:
     networks:
       - ghost_net
 
+  # ── Support Bot (тикеты поддержки, отдельно от admin-bot — без доступа к данным) ──
+  support-bot:
+    build:
+      context: ../bot
+      dockerfile: Dockerfile.support
+    image: ghostline-support-bot:latest
+    restart: always
+    env_file: .env
+    environment:
+      - INTERNAL_API_URL=http://backend:4000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ghost_net
+
   # ── Admin Bot ─────────────────────────────────────────────────────────────────
   admin-bot:
     build:

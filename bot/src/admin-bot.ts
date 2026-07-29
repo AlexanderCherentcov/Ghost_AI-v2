@@ -34,7 +34,6 @@ import {
   mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb,
   ADMIN_KEYBOARD, KB_START, KB_USERS, KB_STATS, KB_PROMOS, KB_HEALTH, KB_SERVER,
 } from './lib/admin-keyboards.js';
-import { registerSupportHandlers } from './support-admin.js';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -58,10 +57,6 @@ bot.use(async (ctx, next) => {
   }
   await next();
 });
-
-// Должно быть зарегистрировано раньше общего bot.on('message:text', ...) ниже —
-// тот не вызывает next(), иначе ответы операторов в темах поддержки до него не дойдут.
-registerSupportHandlers(bot);
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 

@@ -77,7 +77,7 @@ export default function ChatPage() {
     useChatStore.getState().setMessages([]);
   }, []);
 
-  async function handleSend(prompt: string, file?: File, _videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) {
+  async function handleSend(prompt: string, file?: File, videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) {
     let chat: Awaited<ReturnType<typeof api.chats.create>>;
     try {
       chat = await api.chats.create({ mode: 'chat' });
@@ -90,6 +90,7 @@ export default function ChatPage() {
     // Режим видео — сохраняем промпт и переходим
     if (chatMode === 'video') {
       sessionStorage.setItem('initialVideoPrompt', prompt);
+      if (videoOptions) sessionStorage.setItem('initialVideoOptions', JSON.stringify(videoOptions));
       router.push(`/chat/${chat.id}`);
       return;
     }

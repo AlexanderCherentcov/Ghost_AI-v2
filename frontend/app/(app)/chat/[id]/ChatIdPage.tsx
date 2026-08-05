@@ -189,6 +189,11 @@ export default function ChatConversationPage() {
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
     const initialVideoPrompt = sessionStorage.getItem('initialVideoPrompt');
+    const initialVideoOptionsRaw = sessionStorage.getItem('initialVideoOptions');
+    let initialVideoOptions: VideoOptions | undefined;
+    if (initialVideoOptionsRaw) {
+      try { initialVideoOptions = JSON.parse(initialVideoOptionsRaw); } catch {}
+    }
     const initialMusicPrompt = sessionStorage.getItem('initialMusicPrompt');
     const initialMusicMode = (sessionStorage.getItem('initialMusicMode') ?? 'short') as MusicMode;
     const initialMusicDuration = sessionStorage.getItem('initialMusicDuration') ? Number(sessionStorage.getItem('initialMusicDuration')) : undefined;
@@ -207,14 +212,14 @@ export default function ChatConversationPage() {
     if (!hasAny) return;
 
     autoSentChatRef.current = id; // помечаем чат как автоотправленный до начала асинхронной работы
-    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialMusicPrompt','initialMusicMode','initialMusicDuration',
+    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialVideoOptions','initialMusicPrompt','initialMusicMode','initialMusicDuration',
      'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
       if (initialVideoPrompt) {
-        handleGenerateVideo(initialVideoPrompt);
+        handleGenerateVideo(initialVideoPrompt, initialVideoOptions);
       } else if (initialMusicPrompt) {
         handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
       } else if (initialImagePrompt) {

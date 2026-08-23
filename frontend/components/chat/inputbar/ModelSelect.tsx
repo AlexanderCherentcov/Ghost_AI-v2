@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn, planAtLeast } from '@/lib/utils';
+import { useFloatingPanel } from './useFloatingPanel';
 
 export interface ModelSelectOption {
   id: string;
@@ -35,50 +36,7 @@ export function ModelSelect({
   direction?: 'up' | 'down';
 }) {
   const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<{ left: number; top: number; bottom: number; maxHeight: number; direction: 'up' | 'down' } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Раньше maxHeight был фиксирован в 360px независимо от того, сколько места реально
-  // есть до края экрана — если триггер стоял близко к краю (композер внизу экрана,
-  // список видео-моделей длинный), панель вылезала за viewport и часть пунктов (включая
-  // последний) была физически недостижима: overflow-y:auto скроллит СОДЕРЖИМОЕ внутри
-  // своей же 360px-коробки, а не то, что видно на экране — если сама коробка вылезает
-  // за границу viewport, эта её часть не появится ни при каком скролле.
-  // Фикс: считаем реально доступное место в обе стороны и открываем панель туда, где
-  // его больше — не только когда предпочтительная сторона совсем впритык (было <160px,
-  // но у VideoWidget/ImageWidget триггер стоит невысоко над композером, и 250-300px
-  // вниз — уже достаточно тесно для списка видео-моделей из 14 пунктов, а места вверх
-  // при этом почти всегда в разы больше).
-  const updateRect = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const margin = 12;
-    const spaceAbove = r.top - margin;
-    const spaceBelow = window.innerHeight - r.bottom - margin;
-    const preferred = direction === 'up' ? spaceAbove : spaceBelow;
-    const other = direction === 'up' ? spaceBelow : spaceAbove;
-    const effectiveDirection = other > preferred ? (direction === 'up' ? 'down' : 'up') : direction;
-    const available = effectiveDirection === 'up' ? spaceAbove : spaceBelow;
-    const maxHeight = Math.max(120, Math.min(360, available));
-    setRect({ left: r.left, top: r.top, bottom: r.bottom, maxHeight, direction: effectiveDirection });
-  }, [direction]);
-
-  useLayoutEffect(() => {
-    if (open) updateRect();
-  }, [open, updateRect]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onScrollOrResize() { updateRect(); }
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
-    return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
-    };
-  }, [open, updateRect]);
+  const { triggerRef, panelRef, rect } = useFloatingPanel(open, direction);
 
   useEffect(() => {
     function handler(e: MouseEvent) {

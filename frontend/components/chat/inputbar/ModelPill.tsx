@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CasperCoin } from '@/components/icons';
 import { cn, planAtLeast } from '@/lib/utils';
 import { api, type ChatModelOption } from '@/lib/api';
 import { modelIcon } from '@/lib/model-icons';
+import { useFloatingPanel } from './useFloatingPanel';
 
 // Иконка модели в белом чипе — большинство SVG-лого брендов (claude/deepseek/perplexity —
 // однотонная заливка, sora/kling — используют белый в градиенте) нечитаемы на тёмной
@@ -37,7 +39,11 @@ export function ModelPill({
 }) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ChatModelOption[]>([]);
-  const ref = useRef<HTMLDivElement>(null);
+  // Список моделей чата обычно длиннее того, что помещается фиксированной высотой
+  // (было 360px без учёта реального места на экране) — та же беда и тот же фикс,
+  // что в ModelSelect.tsx (видео/картинки): портал в document.body + позиционирование
+  // по rect триггера, открываем туда, где реально больше места, см. useFloatingPanel.
+  const { triggerRef, panelRef, rect } = useFloatingPanel(open, 'up');
 
   useEffect(() => {
     // llama-3.1-fast — бесплатная модель для «Авто», не показываем её отдельным
@@ -50,11 +56,14 @@ export function ModelPill({
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [triggerRef, panelRef]);
 
   const current = options.find((o) => o.id === model) ?? options.find((o) => o.id === 'auto');
 
@@ -79,8 +88,9 @@ export function ModelPill({
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex items-center justify-between gap-1.5 px-3 py-[7px] rounded-[9px] border text-[13px] font-semibold transition-all hover:border-[var(--accent-border)] flex-shrink-0 min-w-0 w-full sm:w-auto"
@@ -101,19 +111,22 @@ export function ModelPill({
           <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         </svg>
       </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            className="absolute bottom-full mb-2 left-0 z-50 rounded-xl overflow-hidden shadow-xl"
-            style={{
-              minWidth: '210px', maxHeight: '360px', overflowY: 'auto',
-              background: 'var(--panel-glass-sidebar)', border: '1px solid var(--panel-glass-border)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)',
-            }}
-          >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {open && rect && (
+            <motion.div
+              ref={panelRef}
+              initial={{ opacity: 0, y: rect.direction === 'up' ? 4 : -4, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: rect.direction === 'up' ? 4 : -4, scale: 0.97 }}
+              transition={{ duration: 0.12 }}
+              className="fixed z-[80] rounded-xl overflow-hidden shadow-xl"
+              style={{
+                left: rect.left, minWidth: '210px', maxWidth: 'calc(100vw - 24px)', maxHeight: rect.maxHeight, overflowY: 'auto',
+                background: 'var(--panel-glass-sidebar)', border: '1px solid var(--panel-glass-border)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)',
+                ...(rect.direction === 'up' ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+              }}
+            >
             {options.map((opt) => {
               const locked = !planAtLeast(userPlan, opt.minPlan) && opt.id !== 'auto';
               return (
@@ -155,9 +168,11 @@ export function ModelPill({
                 </button>
               );
             })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </>
   );
 }

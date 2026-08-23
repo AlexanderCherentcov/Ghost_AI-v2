@@ -75,7 +75,7 @@ export function startVoiceWorker() {
 
       const systemMsg: ChatMessage = {
         role: 'system',
-        content: getSystemPrompt('chat', userProfile?.responseStyle ?? null, plan) + VOICE_STYLE_SUFFIX,
+        content: getSystemPrompt('chat', userProfile?.responseStyle ?? null, plan, spec.label) + VOICE_STYLE_SUFFIX,
       };
       const messages: ChatMessage[] = [systemMsg, ...history, { role: 'user', content: transcript }];
 

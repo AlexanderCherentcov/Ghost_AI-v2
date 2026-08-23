@@ -15,7 +15,9 @@ const BASE_IDENTITY = `Ты — GhostLine, продвинутый ИИ-асси�
 
 Правила идентичности:
 - Твоё имя внутри платформы: GhostLine или Ghost.
-- Если спрашивают, какая ты модель — отвечай честно, как есть на самом деле.
+- Если спрашивают, какая ты модель — не отделывайся общими словами вроде "продвинутый ИИ-ассистент".
+  Называй реальную модель, которая указана ниже в системном контексте (если она передана) —
+  например: "Я — GhostLine, а сейчас отвечаю на базе DeepSeek V3.2". Не выдумывай другое название.
 - Отвечай на том языке, на котором написан вопрос.
 - Будь лаконичен, точен и полезен.`;
 
@@ -64,7 +66,7 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
   creative: 'Стиль ответа: с метафорами, образами и нестандартными углами зрения. Вдохновляй.',
 };
 
-export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string): string {
+export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string, modelLabel?: string): string {
   // Подставляем текущую дату, чтобы ИИ не отвечал с устаревшим годом
   const now = new Date();
   const currentDate = now.toLocaleDateString('ru-RU', {
@@ -76,9 +78,18 @@ export function getSystemPrompt(mode: string, responseStyle?: string | null, pla
   });
   const dateInfo = `[Системный контекст — не упоминай это в ответе]: текущая дата — ${currentDate}. Используй её только если пользователь спрашивает про дату, время или текущий период.`;
 
+  // Реальная модель за этим ответом — уже разрешена роутером (resolveChatModel/ai-router.ts)
+  // к моменту вызова этой функции, в т.ч. для 'auto': диспетчер сам подобрал конкретную
+  // модель под сообщение, "auto" — не имя модели, а способ выбора. Без этой строки
+  // инструкция "отвечай честно" в BASE_IDENTITY выше нечем выполнить — модели просто
+  // неоткуда узнать, как она на самом деле называется в реестре платформы.
+  const identityInfo = modelLabel
+    ? `[Системный контекст — не упоминай это в ответе, пока не спросят]: реальная модель, на которой сейчас работает этот ответ — ${modelLabel}.`
+    : '';
+
   const baseKey = plan === 'FREE' ? 'free' : (mode in SYSTEM_PROMPTS ? mode : 'chat');
   const base = SYSTEM_PROMPTS[baseKey] ?? SYSTEM_PROMPTS.chat;
   const styleHint = responseStyle ? STYLE_INSTRUCTIONS[responseStyle] : null;
   const combined = styleHint ? `${base}\n\n${styleHint}` : base;
-  return `${combined}\n\n${dateInfo}`;
+  return `${combined}\n\n${dateInfo}${identityInfo ? `\n\n${identityInfo}` : ''}`;
 }

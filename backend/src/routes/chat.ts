@@ -376,7 +376,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // модели несёт тот же сигнал (см. lib/prompts.ts: ключ 'think' даёт
         // инструкцию рассуждать пошагово и структурировать ответ).
         const promptStyleKey = spec.cost > 0 ? 'think' : 'chat';
-        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, plan) };
+        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, plan, spec.label) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;

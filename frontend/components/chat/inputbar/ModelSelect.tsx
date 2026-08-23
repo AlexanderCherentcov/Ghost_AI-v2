@@ -45,8 +45,11 @@ export function ModelSelect({
   // последний) была физически недостижима: overflow-y:auto скроллит СОДЕРЖИМОЕ внутри
   // своей же 360px-коробки, а не то, что видно на экране — если сама коробка вылезает
   // за границу viewport, эта её часть не появится ни при каком скролле.
-  // Фикс: считаем реально доступное место в выбранном направлении и если его заметно
-  // меньше, чем в противоположном — разворачиваем панель туда, где она поместится целиком.
+  // Фикс: считаем реально доступное место в обе стороны и открываем панель туда, где
+  // его больше — не только когда предпочтительная сторона совсем впритык (было <160px,
+  // но у VideoWidget/ImageWidget триггер стоит невысоко над композером, и 250-300px
+  // вниз — уже достаточно тесно для списка видео-моделей из 14 пунктов, а места вверх
+  // при этом почти всегда в разы больше).
   const updateRect = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
@@ -56,7 +59,7 @@ export function ModelSelect({
     const spaceBelow = window.innerHeight - r.bottom - margin;
     const preferred = direction === 'up' ? spaceAbove : spaceBelow;
     const other = direction === 'up' ? spaceBelow : spaceAbove;
-    const effectiveDirection = preferred < 160 && other > preferred ? (direction === 'up' ? 'down' : 'up') : direction;
+    const effectiveDirection = other > preferred ? (direction === 'up' ? 'down' : 'up') : direction;
     const available = effectiveDirection === 'up' ? spaceAbove : spaceBelow;
     const maxHeight = Math.max(120, Math.min(360, available));
     setRect({ left: r.left, top: r.top, bottom: r.bottom, maxHeight, direction: effectiveDirection });

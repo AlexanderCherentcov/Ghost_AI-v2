@@ -259,6 +259,12 @@ export default function ChatPage() {
     api.payments.plans().then((data) => setModels(data.models)).catch(() => {});
   }, []);
 
+  // Клик по карточке в витрине картинок/видео — imageModel/videoOptions.videoModel
+  // живут внутри InputBar (не подняты в этот компонент), поэтому пробрасываем выбор
+  // через пропс presetImageModel/presetVideoModel (см. InputBar.tsx).
+  const [presetImageModel, setPresetImageModel] = useState<string | undefined>();
+  const [presetVideoModel, setPresetVideoModel] = useState<string | undefined>();
+
   const name = user?.name?.split(' ')[0] ?? 'Ghost';
   const firstName = name.charAt(0).toUpperCase() + name.slice(1);
 
@@ -415,6 +421,8 @@ export default function ChatPage() {
           onUpgradeRequired={() => router.push('/billing')}
           chatMode={chatMode}
           setChatMode={setChatMode}
+          presetImageModel={presetImageModel}
+          presetVideoModel={presetVideoModel}
           userImages={user?.images_this_week}
           userMusic={user?.music_this_week}
           userVideos={user?.videos_this_month}
@@ -447,6 +455,21 @@ export default function ChatPage() {
                 domain="chat"
                 items={models.chat.filter((m) => m.id !== 'llama-3.1-fast')}
                 onPick={(id) => { setModel(id); setShowDiscovery(false); }}
+              />
+              <ModelDiscoveryRow
+                title="Картинки"
+                domain="image"
+                items={models.image}
+                onPick={(id) => { setPresetImageModel(id); setShowDiscovery(false); }}
+              />
+              <ModelDiscoveryRow
+                title="Видео"
+                domain="video"
+                // VideoModelOption.cost зависит от длительности ({'4s','8s'}), а витрина
+                // (DiscoveryItem) показывает один бейдж — берём цену за короткий ролик
+                // (4с) как отправную «от», как и в других местах UI.
+                items={models.video.map((m) => ({ ...m, cost: m.cost['4s'] }))}
+                onPick={(id) => { setPresetVideoModel(id); setShowDiscovery(false); }}
               />
             </div>
           </motion.div>

@@ -35,16 +35,32 @@ export function ModelSelect({
   direction?: 'up' | 'down';
 }) {
   const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<{ left: number; top: number; bottom: number } | null>(null);
+  const [rect, setRect] = useState<{ left: number; top: number; bottom: number; maxHeight: number; direction: 'up' | 'down' } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Раньше maxHeight был фиксирован в 360px независимо от того, сколько места реально
+  // есть до края экрана — если триггер стоял близко к краю (композер внизу экрана,
+  // список видео-моделей длинный), панель вылезала за viewport и часть пунктов (включая
+  // последний) была физически недостижима: overflow-y:auto скроллит СОДЕРЖИМОЕ внутри
+  // своей же 360px-коробки, а не то, что видно на экране — если сама коробка вылезает
+  // за границу viewport, эта её часть не появится ни при каком скролле.
+  // Фикс: считаем реально доступное место в выбранном направлении и если его заметно
+  // меньше, чем в противоположном — разворачиваем панель туда, где она поместится целиком.
   const updateRect = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setRect({ left: r.left, top: r.top, bottom: r.bottom });
-  }, []);
+    const margin = 12;
+    const spaceAbove = r.top - margin;
+    const spaceBelow = window.innerHeight - r.bottom - margin;
+    const preferred = direction === 'up' ? spaceAbove : spaceBelow;
+    const other = direction === 'up' ? spaceBelow : spaceAbove;
+    const effectiveDirection = preferred < 160 && other > preferred ? (direction === 'up' ? 'down' : 'up') : direction;
+    const available = effectiveDirection === 'up' ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(120, Math.min(360, available));
+    setRect({ left: r.left, top: r.top, bottom: r.bottom, maxHeight, direction: effectiveDirection });
+  }, [direction]);
 
   useLayoutEffect(() => {
     if (open) updateRect();
@@ -97,14 +113,14 @@ export function ModelSelect({
           {open && rect && (
             <motion.div
               ref={panelRef}
-              initial={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
+              initial={{ opacity: 0, y: rect.direction === 'up' ? 4 : -4, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: direction === 'up' ? 4 : -4, scale: 0.97 }}
+              exit={{ opacity: 0, y: rect.direction === 'up' ? 4 : -4, scale: 0.97 }}
               transition={{ duration: 0.12 }}
               className="fixed z-[80] bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl overflow-hidden shadow-xl"
               style={{
-                left: rect.left, minWidth: '240px', maxWidth: 'calc(100vw - 24px)', maxHeight: '360px', overflowY: 'auto',
-                ...(direction === 'up' ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+                left: rect.left, minWidth: '240px', maxWidth: 'calc(100vw - 24px)', maxHeight: rect.maxHeight, overflowY: 'auto',
+                ...(rect.direction === 'up' ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
               }}
             >
               {options.map((opt) => {

@@ -310,7 +310,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
   {
     // minPlan BASIC (не FREE) — видео недоступно на FREE вообще, см. FREE_LIMITS в
     // config/plans.ts и жёсткую блокировку в services/tokens.ts:checkAndDeduct.
-    id: 'kling-v2.5', domain: 'video', label: 'GhostLine Reality', blurb: 'Реализм · Kling V-2.5', minPlan: 'BASIC',
+    id: 'kling-v2.5', domain: 'video', label: 'Kling 2.5', blurb: 'Kuaishou · реализм', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'kling',
     // 2026-08-20: явно закреплена version:'2.5' — раньше поле не передавалось, и
     // GoAPI молча подставлял дефолт "2.6" (goapi.ai/docs/kling-api/create-task),
@@ -330,7 +330,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     },
   },
   {
-    id: 'veo-3.1-pro', domain: 'video', label: 'GhostLine Cinema', blurb: 'Высокое качество · Veo 3.1 Pro', minPlan: 'BASIC',
+    id: 'veo-3.1-pro', domain: 'video', label: 'Veo 3.1 Pro', blurb: 'Google · высокое качество', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'veo3.1', goapiTaskType: 'veo3.1-video',
     cost: (d) => (d === '4s' ? 50 : 90),
     autoEligible: true, capabilities: { imageToVideo: true },
@@ -365,7 +365,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // 2026-08-20: та же модель, что GhostLine Reality, но mode: 'pro' форсирован
     // независимо от звука (klingMode) — goapi.ai/docs/kling-api/create-task
     // подтверждает цену pro-режима $0.33/5с против $0.20/5с у std (×1.65).
-    id: 'kling-v2.5-pro', domain: 'video', label: 'GhostLine Reality Pro', blurb: 'Высокое качество · Kling Pro', minPlan: 'BASIC',
+    id: 'kling-v2.5-pro', domain: 'video', label: 'Kling 2.5 Pro', blurb: 'Kuaishou · высокое качество', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'kling',
     klingMode: 'pro', klingVersion: '2.5', // см. комментарий у kling-v2.5 выше — тот же фикс честности версии
     cost: (d) => (d === '4s' ? 42 : 83),
@@ -382,7 +382,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // 2026-08-20: старшая версия Kling — goapi.ai/docs/kling-api/create-task
     // подтверждает version:"2.1-master" (только pro-режим, других не поддерживает)
     // и цену $0.96/5с, $1.92/10с (в доке явно: "price for 10s = 2x price for 5s").
-    id: 'kling-2.1-master', domain: 'video', label: 'GhostLine Reality Master', blurb: 'Премиум-качество · Kling 2.1 Master', minPlan: 'BASIC',
+    id: 'kling-2.1-master', domain: 'video', label: 'Kling 2.1 Master', blurb: 'Kuaishou · премиум-качество', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'kling',
     klingMode: 'pro', klingVersion: '2.1-master',
     cost: (d) => (d === '4s' ? 120 : 240),
@@ -396,7 +396,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     },
   },
   {
-    id: 'veo-3.1-standard', domain: 'video', label: 'GhostLine Motion', blurb: 'Быстро · Veo 3.1 Fast', minPlan: 'BASIC',
+    id: 'veo-3.1-standard', domain: 'video', label: 'Veo 3.1 Fast', blurb: 'Google · быстро', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'veo3.1', goapiTaskType: 'veo3.1-video-fast',
     cost: (d) => (d === '4s' ? 25 : 40),
     autoEligible: true, capabilities: { imageToVideo: true },

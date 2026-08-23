@@ -73,6 +73,12 @@ interface InputBarProps {
   setChatMode?: (m: ChatMode) => void;
   // Автозаполнение от диспетчера, приходит от родителя
   dispatchResult?: { category: string; autoFill: Record<string, unknown> } | null;
+  // Явный выбор модели картинки/видео извне (например, клик по карточке в витрине
+  // на главной чата) — imageModel/videoOptions.videoModel живут внутри InputBar,
+  // родитель не может обратиться к ним напрямую, поэтому прокидываем через пропс
+  // + useEffect, тем же способом, что и dispatchResult выше.
+  presetImageModel?: string;
+  presetVideoModel?: string;
   // Уведомляет родителя об изменениях ввода (для дебаунс-диспетчера)
   onInputChange?: (text: string) => void;
   // Заполняет textarea внешним значением промта (например, кнопкой "Использовать этот промт")
@@ -88,6 +94,7 @@ export function InputBar({
   placeholder, model, setModel, userPlan, onUpgradeRequired,
   chatMode = 'chat', setChatMode,
   dispatchResult,
+  presetImageModel, presetVideoModel,
   onInputChange,
   fillPrompt,
   userImages, userMusic, userVideos,
@@ -182,9 +189,23 @@ export function InputBar({
     }
   }, [dispatchResult]);
 
+  // Клик по карточке модели в витрине на главной чата — переключает режим и
+  // сразу выставляет выбранную модель (аналог выбора модели чата, setModel(id)).
+  useEffect(() => {
+    if (!presetImageModel) return;
+    setChatMode?.('images');
+    setImageModel(presetImageModel);
+  }, [presetImageModel, setChatMode]);
+
+  useEffect(() => {
+    if (!presetVideoModel) return;
+    setChatMode?.('video');
+    setVideoOptions((prev) => ({ ...prev, videoModel: presetVideoModel }));
+  }, [presetVideoModel, setChatMode]);
+
   // Если пользователь уже прикрепил файл, а затем сменил модель/режим на не умеющую
   // его обработать (например, переключился со Стандартной Gemini на Llama без vision,
-  // или с GhostLine Reality на Sora) — снимаем вложение сразу, а не оставляем его
+  // или с Kling 2.5 на Sora) — снимаем вложение сразу, а не оставляем его
   // висеть до отправки, где оно всё равно будет отклонено бэкендом.
   useEffect(() => {
     if (!attachedFile) return;

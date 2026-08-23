@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const PLAN_ORDER = ['FREE', 'START', 'BASIC', 'PRO', 'PRO_PLUS', 'VIP', 'ULTRA'];
+
+/** Сравнение тарифов по порядку (FREE < START < BASIC < PRO < PRO_PLUS < VIP < ULTRA) — единая логика гейтинга для UI. */
+export function planAtLeast(userPlan: string | undefined, required: string): boolean {
+  if (!userPlan) return false;
+  return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(required);
+}
+
 /** Полное число с разделителями тысяч, как принято в ru-RU (Caspers, рубли и т.п.) */
 export function formatNumber(n: number): string {
   return n.toLocaleString('ru-RU');

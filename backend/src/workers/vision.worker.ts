@@ -1,7 +1,8 @@
 import { Worker, type Job } from 'bullmq';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateImageFlux, OR_MODELS } from '../services/providers/openrouter.js';
+import { generateImageFlux } from '../services/providers/openrouter.js';
+import { findModel } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 import fs from 'node:fs';
@@ -25,29 +26,35 @@ interface VisionJob {
   prompt: string;
   chatId: string | null;
   size: '1024x1024' | '1792x1024' | '1024x1792';
+  modelId: string;
+  mediaCacheMode: string;
   sourceImageUrl?: string; // режим редактирования изображения
+  // Реально прокидывается только для Gemini-семейства (image_config.aspect_ratio
+  // через OpenRouter chat/completions) — см. providerModel-проверку в generateImageFlux.
+  imageAspectRatio?: string;
 }
 
 export function startVisionWorker() {
   const worker = new Worker<VisionJob>(
     'vision',
     async (job: Job<VisionJob>) => {
-      const { jobId, userId, prompt, chatId, sourceImageUrl } = job.data;
+      const { jobId, userId, prompt, chatId, sourceImageUrl, modelId, mediaCacheMode, imageAspectRatio } = job.data;
 
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { status: 'processing' },
       });
 
-      // Для редактирования изображения используем fluxFill; обычная генерация — Gemini Flash.
-      // Если основная модель падает (пустые изображения, content policy) — резерв FLUX.2 Pro.
-      const primaryModel = sourceImageUrl ? OR_MODELS.fluxFill : OR_MODELS.flux;
+      const spec = findModel('image', modelId);
+      if (!spec) throw new Error(`[VisionWorker] Unknown image model: ${modelId}`);
+
       let mediaUrl: string;
       try {
-        mediaUrl = await generateImageFlux(prompt, primaryModel, sourceImageUrl);
+        mediaUrl = await generateImageFlux(prompt, spec.providerModel, sourceImageUrl, imageAspectRatio);
       } catch (err) {
-        console.warn('[VisionWorker] Primary model failed, falling back to FLUX.2 Pro:', (err as Error).message);
-        mediaUrl = await generateImageFlux(prompt, OR_MODELS.fluxFill, sourceImageUrl);
+        if (!spec.fallbackModel) throw err;
+        console.warn(`[VisionWorker] ${spec.id} failed, falling back to ${spec.fallbackModel}:`, (err as Error).message);
+        mediaUrl = await generateImageFlux(prompt, spec.fallbackModel, sourceImageUrl, imageAspectRatio);
       }
 
       // Всегда раздаём с нашего сервера — так избегаем проблем CORS/истечения ссылок на внешних CDN
@@ -74,19 +81,22 @@ export function startVisionWorker() {
       // Сохраняем сообщение ассистента с изображением в историю чата
       if (chatId) {
         await prisma.message.create({
-          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl },
+          data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl, provider: spec.id },
         }).catch((e) => console.error('[VisionWorker] Failed to save assistant message:', e.message));
       }
 
-      // Кэшируем для будущих идентичных промптов (TTL 30 дней)
-      setMediaCached('vision', prompt, mediaUrl).catch(() => {});
+      // Кэш ТОЛЬКО для генерации без исходного изображения. Раньше кэш срабатывал
+      // и на правках, ключ был только по тексту промпта — двум разным правкам с
+      // одинаковой текстовой инструкцией ("сделай ярче") мог прилететь чужой
+      // результат чужого исходного фото. Реальная бага, не поведенческое изменение
+      // ради изменения.
+      if (!sourceImageUrl) {
+        await setMediaCached(mediaCacheMode, prompt, mediaUrl).catch(() => {});
+      }
 
       return { mediaUrl };
     },
-    {
-      connection: bullmqConnection,
-      concurrency: 5,
-    }
+    { connection: bullmqConnection, concurrency: 5 },
   );
 
   worker.on('failed', async (job, err) => {
@@ -103,6 +113,6 @@ export function startVisionWorker() {
     console.info(`[VisionWorker] Job ${job.id} completed`);
   });
 
-  console.info('[VisionWorker] Started (OpenRouter Flux)');
+  console.info('[VisionWorker] Started');
   return worker;
 }

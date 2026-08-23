@@ -10,8 +10,13 @@
  *   - Год маркетингово подаётся как "скидка 70%" от фейковой оригинальной цены
  */
 
-export const PLAN_KEYS = ['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'] as const;
+export const PLAN_KEYS = ['FREE', 'START', 'BASIC', 'PRO', 'PRO_PLUS', 'VIP', 'ULTRA'] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
+
+/** Сравнение тарифов по порядку в PLAN_KEYS — для гейтинга моделей по minPlan. */
+export function planAtLeast(userPlan: PlanKey, required: PlanKey): boolean {
+  return PLAN_KEYS.indexOf(userPlan) >= PLAN_KEYS.indexOf(required);
+}
 
 // Приветственный бонус Caspers для новых пользователей — используется в
 // routes/auth.ts при регистрации И здесь же, в тексте фичи FREE-плана,
@@ -22,19 +27,23 @@ export const FREE_WELCOME_CASPERS = 100;
 // Объявлены до PLANS, т.к. используются в тексте фич FREE-плана ниже.
 
 export const FREE_LIMITS = {
-  std_messages_daily: 5,
   images_weekly: 5,
   music_weekly: 5,
-  videos_monthly: 3,   // 3 видео в МЕСЯЦ (not week)
+  // Видео — самый дорогой домен по себестоимости (в разы дороже картинок/музыки за
+  // генерацию). На FREE недоступно вообще, даже за докупленные Caspers — см.
+  // services/tokens.ts:checkAndDeduct (LIMIT_VIDEOS_FREE_PLAN). Раньше здесь было
+  // videos_monthly: 3, но лимит нигде не проверялся — приветственный бонус можно было
+  // целиком потратить на видео без ограничений.
+  videos_monthly: 0,
 } as const;
 
 export interface PlanInfo {
   key: PlanKey;
   label: string;
+  description: string;  // короткая строка под названием тарифа (см. features ниже для деталей)
   price: number;        // реальная месячная цена (RUB)
   price_yearly: number; // реальная годовая цена (RUB) = price * 12 * 0.8
   caspers_monthly: number;
-  pro_free_daily: number; // -1 = безлимит
   badge: string | null;
   popular: boolean;
   features: string[];
@@ -44,104 +53,142 @@ export const PLANS: Record<PlanKey, PlanInfo> = {
   FREE: {
     key: 'FREE',
     label: 'Бесплатный',
+    description: 'Попробовать без карты — стандартный чат и немного Caspers на генерации.',
     price: 0,
     price_yearly: 0,
     caspers_monthly: 0,
-    pro_free_daily: 0,
     badge: null,
     popular: false,
     features: [
       `${FREE_WELCOME_CASPERS} Caspers при регистрации`,
-      `Стандартный чат: ${FREE_LIMITS.std_messages_daily} сообщений/день`,
-      'Изображения и видео — за Caspers',
-      'Музыка — за Caspers',
+      'Стандартный чат: без ограничений',
+      'Изображения и музыка — за Caspers',
+      'Видео — с тарифа BASIC',
+    ],
+  },
+  START: {
+    key: 'START',
+    label: 'Старт',
+    description: 'Дешёвый вход для тех, кому пока хватит по чуть-чуть картинок, музыки и видео.',
+    price: 390,
+    price_yearly: 3744, // 390 * 12 * 0.8
+    caspers_monthly: 130,
+    badge: null,
+    popular: false,
+    features: [
+      'Стандартный чат: безлимит',
+      '130 Caspers в месяц',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
+      'Музыка — 5 Caspers/трек',
     ],
   },
   BASIC: {
     key: 'BASIC',
     label: 'Базовый',
+    description: 'Безлимитный чат и Caspers на регулярные картинки, музыку и видео.',
     price: 790,
     price_yearly: 7584, // 790 * 12 * 0.8
     caspers_monthly: 300,
-    pro_free_daily: 0,
     badge: null,
     popular: false,
     features: [
       'Стандартный чат: безлимит',
       '300 Caspers в месяц',
-      'Про чат: 1 Casper/сообщ.',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
       'Музыка — 5 Caspers/трек',
     ],
   },
   PRO: {
     key: 'PRO',
     label: 'Про',
+    description: 'Больше Caspers каждый месяц для активного использования.',
     price: 1690,
     price_yearly: 16224, // 1690 * 12 * 0.8
     caspers_monthly: 700,
-    pro_free_daily: 20,
     badge: 'Популярный',
     popular: true,
     features: [
       'Стандартный чат: безлимит',
       '700 Caspers в месяц',
-      'Про чат: 20 запросов/день бесплатно',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
+      'Музыка — 5 Caspers/трек',
+    ],
+  },
+  PRO_PLUS: {
+    key: 'PRO_PLUS',
+    label: 'Про+',
+    description: 'Промежуточный шаг между Про и VIP — больше Caspers без прыжка в цене почти в 2.4 раза.',
+    price: 2790,
+    price_yearly: 26784, // 2790 * 12 * 0.8
+    caspers_monthly: 1200,
+    badge: null,
+    popular: false,
+    features: [
+      'Стандартный чат: безлимит',
+      '1 200 Caspers в месяц',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
       'Музыка — 5 Caspers/трек',
     ],
   },
   VIP: {
     key: 'VIP',
     label: 'VIP',
+    description: 'Для активной работы: большой запас Caspers каждый месяц.',
     price: 3990,
     price_yearly: 38304, // 3990 * 12 * 0.8
     caspers_monthly: 1800,
-    pro_free_daily: 50,
     badge: null,
     popular: false,
     features: [
       'Стандартный чат: безлимит',
       '1 800 Caspers в месяц',
-      'Про чат: 50 запросов/день бесплатно',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
       'Музыка — 5 Caspers/трек',
     ],
   },
   ULTRA: {
     key: 'ULTRA',
     label: 'Ультра',
+    description: 'Максимальный запас Caspers каждый месяц.',
     price: 5990,
     price_yearly: 57504, // 5990 * 12 * 0.8
     caspers_monthly: 2800,
-    pro_free_daily: -1,
     badge: 'Максимум',
     popular: false,
     features: [
       'Стандартный чат: безлимит',
       '2 800 Caspers в месяц',
-      'Про чат: безлимит',
-      'Изображения — 10 Caspers/шт',
-      'Видео — от 25 Caspers',
+      'Платные модели чата — от 1 Casper/сообщ.',
+      'Изображения — от 5 Caspers/шт',
+      'Видео — от 20 Caspers',
       'Музыка — 5 Caspers/трек',
     ],
   },
 };
 
 // ─── Стоимость операций в Caspers ─────────────────────────────────────────────
+// Чат/картинки/видео тарифицируются по модели (config/models.ts, ModelSpec.cost) —
+// здесь остаётся музыка и голос: для них пока нет реестра моделей (один провайдер).
 
 export const CASPER_COSTS = {
-  chat_pro:        1,
-  image_generate:  10,
-  image_edit:      10,
-  video_std_4s:    25,
-  video_std_8s:    40,
-  video_pro_4s:    50,
-  video_pro_8s:    90,
-  music_generate:  5,
+  music_generate: 5,
+  // ⚠️ ЦЕНА-ЗАГЛУШКА. Голос = STT (openai/gpt-audio-mini, $0.6/1M токенов аудио-входа)
+  // + ответ "мозга" (модель 'auto') + TTS (тот же gpt-audio-mini, $2.4/1M токенов аудио-выхода).
+  // Точное отношение "секунды аудио → токены" для gpt-audio-mini не сверено (see
+  // services/providers/openrouter.ts:synthesizeSpeech/transcribeAudio) — эта цена
+  // консервативная оценка сверху, не факт. НЕ запускать в продакшн без проверки на
+  // реальном трафике.
+  voice_exchange: 8,
 } as const;
 
 // ─── Ступенчатая цена докупки Caspers ─────────────────────────────────────────

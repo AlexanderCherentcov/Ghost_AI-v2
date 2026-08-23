@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -16,17 +16,27 @@ html, body {
 
 /* ─── CSS Variables ─────────────────────────────────────────────────────────── */
 :root {
-  --bg-void:        #06060B;
-  --bg-primary:     #0A0A12;
-  --bg-surface:     #0E0E1A;
-  --bg-elevated:    #13131F;
-  --bg-input:       #161625;
-  --bg-base:        #0A0A12;
+  --bg-void:        #050311;
+  --bg-primary:     #0a0620;
+  --bg-surface:     #140e22;
+  --bg-elevated:    #1a1430;
+  --bg-input:       #1c1730;
+  --bg-base:        #0a0620;
 
   --accent:         #7B5CF0;
   --accent-glow:    rgba(123, 92, 240, 0.15);
   --accent-dim:     rgba(123, 92, 240, 0.12);
   --accent-border:  rgba(123, 92, 240, 0.25);
+  --accent-teal:    #2dd4bf;
+  --accent-gold:    #f2b544;
+
+  /* glass panel — translucent surfaces over the radial-gradient brand backdrop (landing, dropdown menus, orb) */
+  --panel-glass:        rgba(20, 14, 34, 0.6);
+  --panel-glass-border: rgba(167, 139, 250, 0.14);
+  /* чуть темнее и плотнее panel-glass — фон сайдбара, чтобы вложенные glass-карточки (юзер-блок) были видны на нём */
+  --panel-glass-sidebar: rgba(10, 7, 20, 0.7);
+
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
 
   --text-primary:   rgba(255, 255, 255, 0.90);
   --text-secondary: rgba(255, 255, 255, 0.45);
@@ -51,7 +61,7 @@ html, body {
 /* ─── Light theme ────────────────────────────────────────────────────────────── */
 html.light {
   /* Soft off-white — not blinding pure white */
-  --bg-void:        #ECEDF5;
+  --bg-void:        #F4F1FB;
   --bg-primary:     #F6F6FC;
   --bg-surface:     #EFEFF8;
   --bg-elevated:    #E8E8F2;
@@ -62,6 +72,12 @@ html.light {
   --accent-glow:    rgba(107, 76, 224, 0.12);
   --accent-dim:     rgba(107, 76, 224, 0.10);
   --accent-border:  rgba(107, 76, 224, 0.30);
+  --accent-teal:    #14b8a6;
+  --accent-gold:    #d99a1f;
+
+  --panel-glass:        rgba(255, 255, 255, 0.7);
+  --panel-glass-border: rgba(123, 92, 240, 0.18);
+  --panel-glass-sidebar: #ffffff;
 
   --text-primary:   rgba(0, 0, 0, 0.82);
   --text-secondary: rgba(0, 0, 0, 0.48);
@@ -88,7 +104,7 @@ html.light {
   --shadow-xl:  0 16px 40px rgba(0,0,0,0.6);
 }
 
-html.light body { background: var(--bg-primary); color: var(--text-primary); }
+html.light body { background: var(--bg-void); color: var(--text-primary); }
 
 /* ── Light mode: override hardcoded white/rgba(255) from Tailwind classes ─────
    Since this CSS comes after @tailwind utilities it wins on equal specificity. */
@@ -201,15 +217,41 @@ html {
 }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg-void);
   color: var(--text-primary);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+/* ::-webkit-scrollbar* не понимает Firefox — там свой стандартный API
+   (scrollbar-width/scrollbar-color), без него скролл был бы дефолтным широким. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
+html.light * { scrollbar-color: rgba(0,0,0,0.15) transparent; }
 ::-webkit-scrollbar         { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track   { background: transparent; }
 ::-webkit-scrollbar-thumb   { background: rgba(255,255,255,0.12); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+
+/* ─── Ползунок аудиоплеера (MessageBubble) ──────────────────────────────────────
+   appearance-none снимает нативный вид, но каждый браузер рисует thumb своим
+   псевдоэлементом (Chrome/Safari — -webkit-, Firefox — -moz-) — без явного стиля
+   на обоих трек остаётся нашим градиентом, а бегунок — угадай-каким дефолтным. */
+input.audio-seek::-webkit-slider-runnable-track { background: transparent; height: 4px; }
+input.audio-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(123,92,240,.25);
+  cursor: pointer;
+  margin-top: -4px;
+}
+input.audio-seek::-moz-range-track { background: transparent; height: 4px; }
+input.audio-seek::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(123,92,240,.25);
+  border: none;
+  cursor: pointer;
+}
 
 /* ─── Selection ──────────────────────────────────────────────────────────────── */
 ::selection {
@@ -262,9 +304,12 @@ pre code {
 }
 
 /* ─── Typography ─────────────────────────────────────────────────────────────── */
-h1 { font-size: 36px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.15; }
-h2 { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.25; }
-h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
+h1, h2, h3 { font-family: var(--font-display); }
+h1 { font-size: 36px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
+h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+h3 { font-size: 18px; font-weight: 600; line-height: 1.4; }
+
+.font-display { font-family: var(--font-display); }
 
 /* ─── Animations ─────────────────────────────────────────────────────────────── */
 @keyframes float {
@@ -305,6 +350,18 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.4; }
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
+}
+
+/* Мигающая точка статус-пилюли в футере лендинга (GhostLine.dc.html) */
+@keyframes statusBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* Дрейф фоновой сетки на лендинге (GhostLine.dc.html: gridDrift) */
+@keyframes gridDrift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 64px; }
 }
 
 /* ─── Gradient text ──────────────────────────────────────────────────────────── */

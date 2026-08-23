@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { GhostIcon } from '@/components/icons/GhostIcon';
-import { PlusIcon, EditIcon, TrashIcon, TokenIcon } from '@/components/icons';
+import { PlusIcon, EditIcon, TrashIcon, TokenIcon, HistoryIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { api, type Chat } from '@/lib/api';
@@ -35,16 +34,8 @@ export default function HistoryPage() {
   const [editTitle, setEditTitle] = useState('');
   const renamingRef = useRef(false); // M-15: предотвращаем двойной вызов handleRename
 
-  // Дневной лимит FREE-тарифа — с бэкенда (GET /plans), не захардкожен
-  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
-  useEffect(() => {
-    api.payments.plans().then((data) => setDailyLimit(data.free.limits.std_messages_daily)).catch(() => {});
-  }, []);
-
-  const plan = user?.plan ?? 'FREE';
-  const stdToday = user?.std_messages_today ?? 0;
-  const showMsgBar = plan === 'FREE' && dailyLimit !== null;
-  const tokenPercent = showMsgBar ? Math.min((stdToday / dailyLimit!) * 100, 100) : 0;
+  // Стандартный чат безлимитный на всех тарифах (включая FREE) — полоса всегда про Caspers.
+  const tokenPercent = 0; // не используется для платных тарифов
   const grouped = groupChats(chats);
 
   function handleNewChat() {
@@ -158,7 +149,7 @@ export default function HistoryPage() {
     <div className="flex flex-col flex-1 min-h-0">
       {/* Шапка */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
-        <GhostIcon size={22} className="text-accent" />
+        <img src="/ghostline-logo-icon.png" alt="" className="w-[22px] h-[22px] rounded-[6px] object-cover" />
         <span className="text-base font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Чаты</span>
         <button
           onClick={handleNewChat}
@@ -175,7 +166,7 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <TokenIcon size={12} className="text-accent" />
-            <span>{showMsgBar ? `${stdToday}/${dailyLimit} сегодня` : (user?.caspers_balance != null ? `${user.caspers_balance} Caspers` : 'Безлимитный')}</span>
+            <span>{user?.caspers_balance != null ? `${user.caspers_balance} Caspers` : 'Безлимитный'}</span>
           </div>
           <Link href="/billing" className="text-[11px] text-accent">Тарифы</Link>
         </div>
@@ -198,7 +189,7 @@ export default function HistoryPage() {
 
         {!chats.length && (
           <div className="flex flex-col items-center justify-center mt-20 gap-3">
-            <GhostIcon size={48} className="opacity-10" />
+            <HistoryIcon size={48} className="opacity-10" />
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>История пустая</p>
             <button
               onClick={handleNewChat}

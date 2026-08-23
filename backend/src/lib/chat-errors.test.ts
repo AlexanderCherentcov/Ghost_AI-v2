@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { CHAT_LIMIT_CODES, isChatLimitCode, shouldRefundCaspers, resolveChatErrorMessage } from './chat-errors.js';
 
 describe('chat-errors — классификация кодов ошибок WS-чата', () => {
-  it('LIMIT_MESSAGES_DAILY — реальный код FREE-лимита — распознаётся как лимит', () => {
+  it('LIMIT_PRO_MESSAGES — реальный код лимита платного чата — распознаётся как лимит', () => {
     // Регрессионный тест: раньше в списке был опечатанный 'LIMIT_FREE_MESSAGES',
     // которого tokens.ts никогда не бросает, из-за чего этот код проваливался
     // в общую ветку "Генерация провалась, попробуйте позже".
-    expect(isChatLimitCode('LIMIT_MESSAGES_DAILY')).toBe(true);
+    expect(isChatLimitCode('LIMIT_PRO_MESSAGES')).toBe(true);
   });
 
   it('несуществующие/устаревшие коды не входят в список', () => {
+    expect(CHAT_LIMIT_CODES).not.toContain('LIMIT_MESSAGES_DAILY');
     expect(CHAT_LIMIT_CODES).not.toContain('LIMIT_FREE_MESSAGES');
     expect(CHAT_LIMIT_CODES).not.toContain('LIMIT_STD_MESSAGES');
     expect(CHAT_LIMIT_CODES).not.toContain('LIMIT_FILES');
@@ -23,14 +24,14 @@ describe('chat-errors — классификация кодов ошибок WS-
   });
 
   it('shouldRefundCaspers: для лимита — false (списаний не было), для остальных — true', () => {
-    expect(shouldRefundCaspers('LIMIT_MESSAGES_DAILY')).toBe(false);
+    expect(shouldRefundCaspers('LIMIT_PRO_MESSAGES')).toBe(false);
     expect(shouldRefundCaspers('SERVER_ERROR')).toBe(true);
     expect(shouldRefundCaspers(undefined)).toBe(true);
   });
 
   it('resolveChatErrorMessage: для лимита отдаёт точный текст с бэкенда', () => {
-    expect(resolveChatErrorMessage('LIMIT_MESSAGES_DAILY', 'Лимит бесплатных сообщений исчерпан'))
-      .toBe('Лимит бесплатных сообщений исчерпан');
+    expect(resolveChatErrorMessage('LIMIT_PRO_MESSAGES', 'Недостаточно Caspers для про-сообщения'))
+      .toBe('Недостаточно Caspers для про-сообщения');
   });
 
   it('resolveChatErrorMessage: для лимита без текста — дефолт "Лимит исчерпан"', () => {

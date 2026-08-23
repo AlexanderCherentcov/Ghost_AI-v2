@@ -109,7 +109,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         left: 0,
         right: 0,
         height: 'var(--app-h, 100dvh)',
-        background: 'var(--bg-primary)',
+        background: 'var(--bg-void)',
         /* Запрещаем touch-скролл самой оболочки */
         touchAction: 'none',
       }}

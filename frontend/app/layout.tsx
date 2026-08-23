@@ -4,8 +4,8 @@ import { Providers } from './providers';
 
 // ─── Канонический домен ─────────────────────────────────────────────────────
 const BASE_URL = 'https://ghostlineai.ru';
-const TITLE    = 'GhostLine — Ваш AI-дух';
-const TAGLINE  = 'Думает. Создаёт. Исчезает в тишине.';
+const TITLE    = 'GhostLine — все нейросети в одном чате, без VPN';
+const TAGLINE  = 'Думает. Создаёт. Работает из России.';
 
 // Метаданные (title/description/JSON-LD) генерируются здесь статически, в
 // отрыве от React-рендера и без доступа к backend/src/config/plans.ts (другой
@@ -14,12 +14,11 @@ const TAGLINE  = 'Думает. Создаёт. Исчезает в тишине
 // видят пользователи в этом файле, объявлены здесь один раз — при смене
 // приветственного бонуса/дневного лимита в plans.ts поправить и эти константы.
 const FREE_WELCOME_CASPERS = 100;
-const FREE_DAILY_MESSAGES = 5;
 
 const DESC =
-  'GhostLine — многорежимный AI-ассистент нового поколения. ' +
-  'Умные диалоги, генерация изображений, музыки и видео. ' +
-  'Использует самые передовые разработки в области искусственного интеллекта. ' +
+  'GhostLine объединяет GPT-4o, Claude, Gemini, DeepSeek, Perplexity, Kling, Veo, Sora ' +
+  'и Suno в одном аккаунте — без VPN, без сложной регистрации и отдельных подписок на ' +
+  'каждый сервис. Диалоги, генерация изображений, видео и музыки в одном чате. ' +
   `Начните бесплатно — ${FREE_WELCOME_CASPERS} Caspers в подарок.`;
 
 // ─── Метаданные ──────────────────────────────────────────────────────────────
@@ -36,10 +35,13 @@ export const metadata: Metadata = {
   keywords: [
     'AI ассистент', 'нейросеть', 'искусственный интеллект онлайн',
     'GhostLine', 'чат с нейросетью', 'AI чат бесплатно',
+    'нейросети без VPN', 'все нейросети в одном месте', 'ChatGPT без VPN',
+    'Claude без VPN', 'GPT-4o на русском', 'Kling видео нейросеть',
+    'Sora видео', 'Suno музыка нейросеть', 'генерация видео из текста',
     'генерация изображений нейросеть', 'генерация музыки AI',
     'умный ассистент', 'AI для бизнеса', 'AI для работы',
     'генерация текста нейросеть', 'нейросеть онлайн бесплатно',
-    'мультимодальный AI', 'AI платформа',
+    'мультимодальный AI', 'AI платформа', 'нейросети для России',
   ],
 
   authors: [{ name: 'GhostLine Team', url: BASE_URL }],
@@ -53,14 +55,16 @@ export const metadata: Metadata = {
     languages: { 'ru-RU': BASE_URL },
   },
 
-  // ── Иконки (App Router сам находит app/icon.svg + app/apple-icon.svg) ────
+  // ── Иконки (App Router сам находит app/icon.png + app/apple-icon.png) ────
+  // Реальный логотип GhostLine (капюшон, светящиеся глаза) — тот же файл, что уже
+  // используется в сайдбаре/лендинге/AuthShell, раньше фавикон был старым placeholder'ом.
   icons: {
     icon: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/ghostline-logo-icon.png', type: 'image/png' },
     ],
-    shortcut: '/icon.svg',
+    shortcut: '/ghostline-logo-icon.png',
     apple: [
-      { url: '/apple-icon.svg', sizes: '180x180', type: 'image/svg+xml' },
+      { url: '/ghostline-logo-icon.png', sizes: '180x180', type: 'image/png' },
     ],
   },
 
@@ -135,9 +139,9 @@ const jsonLd = {
       url: BASE_URL,
       logo: {
         '@type': 'ImageObject',
-        url: `${BASE_URL}/icon.svg`,
-        width: 512,
-        height: 512,
+        url: `${BASE_URL}/ghostline-logo-icon.png`,
+        width: 670,
+        height: 670,
       },
       sameAs: ['https://t.me/ghostlineai'],
     },
@@ -163,14 +167,14 @@ const jsonLd = {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'RUB',
-        description: `${FREE_WELCOME_CASPERS} Caspers · ${FREE_DAILY_MESSAGES} сообщений/день бесплатно`,
+        description: `${FREE_WELCOME_CASPERS} Caspers · безлимитный чат бесплатно`,
       },
       featureList: [
-        'AI-диалоги',
+        'AI-диалоги с выбором модели',
         'Генерация изображений',
-        'Генерация музыки',
         'Генерация видео',
-        'Режим глубокого мышления',
+        'Генерация музыки',
+        'Голосовой чат',
       ],
     },
   ],

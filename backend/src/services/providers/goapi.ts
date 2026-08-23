@@ -77,14 +77,25 @@ function extractVideoUrl(data: any): string {
 
 // ─── Генерация видео Kling V-2.5 ───────────────────────────────────────────────
 
+export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '21:9' | '9:21' | '4:3' | '3:4';
+export type VideoResolution = '480p' | '720p' | '1080p' | '768p';
+
 export interface KlingVideoOptions {
   duration?: 5 | 10;
-  aspectRatio?: '16:9' | '9:16' | '1:1';
+  aspectRatio?: VideoAspectRatio;
   enableAudio?: boolean;
   imageUrl?: string;
   cameraPreset?: string;
   negativePrompt?: string;
   cfgScale?: number;
+  /** Форсирует std/pro независимо от enableAudio — нужно для тарифных уровней
+   *  (GhostLine Reality Pro), где качество, а не звук, определяет режим. */
+  mode?: 'std' | 'pro';
+  /** goapi.ai/docs/kling-api/create-task: enum 1.5/1.6/2.1/2.1-master/2.5/2.6,
+   *  default при отсутствии поля — "2.6". Не передаём для базовой модели (тот
+   *  же дефолт, что был всегда), но обязателен для 2.1-master — эта версия
+   *  не появится сама по себе без явного указания. */
+  version?: string;
 }
 
 function buildCameraControl(preset?: string): { type: string; config: Record<string, number> } | undefined {
@@ -111,9 +122,11 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
     cameraPreset,
     negativePrompt,
     cfgScale = 0.5,
+    mode: modeOverride,
+    version,
   } = options ?? {};
 
-  const mode = enableAudio ? 'pro' : 'std';
+  const mode = modeOverride ?? (enableAudio ? 'pro' : 'std');
   const cameraControl = buildCameraControl(cameraPreset);
 
   const input: Record<string, unknown> = {
@@ -121,6 +134,7 @@ export async function generateVideoKling(prompt: string, options?: KlingVideoOpt
     duration,
     mode,
     cfg_scale: cfgScale,
+    ...(version ? { version } : {}),
     ...(imageUrl ? { image_url: imageUrl } : { aspect_ratio: aspectRatio }),
     ...(enableAudio ? { enable_audio: true } : {}),
     ...(negativePrompt?.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
@@ -143,8 +157,8 @@ export type VeoResolution = '720p' | '1080p';
 export interface Veo3Options {
   model?: VeoModel;
   duration?: VeoDuration;
-  resolution?: VeoResolution;
-  aspectRatio?: '16:9' | '9:16';
+  resolution?: VideoResolution;
+  aspectRatio?: VideoAspectRatio;
   generateAudio?: boolean;
   negativePrompt?: string;
   /** URL изображения для генерации image-to-video */
@@ -178,6 +192,136 @@ export async function generateVideoVeo3(prompt: string, options: Veo3Options = {
   console.info(`[Veo3.1] ${taskType} | ${mode} | ${duration} | ${resolution} | audio=${generateAudio}`);
 
   const taskId = await createTask('veo3.1', taskType, input);
+  const data = await pollTask(taskId, 180, 5_000);
+  return extractVideoUrl(data);
+}
+
+// ─── Универсальный вход для новых видео-моделей (Seedance/Hailuo/Wan) ─────────
+// Kling и Veo3.1 выше оставлены как есть (проверенный код, не трогаем без нужды) —
+// это для моделей, подключённых через реестр models.ts. Формат input подтверждён
+// по докам goapi.ai/docs на момент подключения (2026); при ошибках 4xx от GoAPI —
+// первое, что проверять.
+
+export interface GenericVideoOptions {
+  prompt: string;
+  duration: '4s' | '8s';
+  aspectRatio: VideoAspectRatio;
+  enableAudio: boolean;
+  resolution: VideoResolution;
+  imageUrl?: string;
+  negativePrompt?: string;
+}
+
+function buildGenericVideoInput(
+  goapiModel: string,
+  opts: GenericVideoOptions,
+): { input: Record<string, unknown>; taskType: string } {
+  const seconds = opts.duration === '4s' ? 4 : 8;
+
+  switch (goapiModel) {
+    case 'seedance':
+      return {
+        taskType: 'seedance-2',
+        input: {
+          prompt: opts.prompt,
+          duration: seconds,
+          aspect_ratio: opts.aspectRatio,
+          resolution: opts.resolution,
+          ...(opts.imageUrl ? { image_urls: [opts.imageUrl] } : {}),
+        },
+      };
+    case 'hailuo':
+      // Провайдер принимает числовое разрешение (768/1080), не строку с "p" — см.
+      // goapi.ai/docs/hailuo-api/generate-video. "1080p+10s" провайдером не поддерживается,
+      // но это уже прикладная валидация UI (video-model-params.ts), не делаем её здесь дважды.
+      return {
+        taskType: 'video_generation',
+        input: {
+          prompt: opts.prompt,
+          model: 'v2.3',
+          expand_prompt: true,
+          duration: seconds,
+          resolution: parseInt(opts.resolution, 10) || 768,
+          ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
+        },
+      };
+    case 'Wan':
+      // Отдельный task_type для image-to-video — по паттерну из доков
+      // (wan26-text-to-video / wan26-image-to-video), точная строка НЕ
+      // подтверждена вызовом API. Проверить при первом реальном запуске.
+      return {
+        taskType: opts.imageUrl ? 'wan26-img2video' : 'wan26-txt2video',
+        input: {
+          prompt: opts.prompt,
+          ...(opts.negativePrompt?.trim() ? { negative_prompt: opts.negativePrompt.trim() } : {}),
+          ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
+          resolution: opts.resolution,
+          aspect_ratio: opts.aspectRatio,
+          duration: seconds,
+          audio: opts.enableAudio,
+          watermark: false,
+        },
+      };
+    case 'luma':
+      // Контракт подтверждён по goapi.ai/docs/dream-machine/create-task. Luma отдаёт
+      // ролики по 5с/9с, а не 4с/8с — маппим наш выбор на ближайшее значение провайдера.
+      return {
+        taskType: 'video_generation',
+        input: {
+          model: 'ray-v2',
+          prompt: opts.prompt,
+          duration: opts.duration === '4s' ? 5 : 9,
+          aspect_ratio: opts.aspectRatio,
+          ...(opts.imageUrl ? { start_image: opts.imageUrl } : {}),
+          loop: false,
+        },
+      };
+    case 'Qubico/skyreels':
+      // Контракт подтверждён по goapi.ai/docs/skyreels-api/create-task — модель
+      // ТОЛЬКО image-to-video (prompt и image оба обязательны у провайдера),
+      // длительность не настраивается вообще, цена — $0.15 фиксированно за
+      // генерацию. Наличие opts.imageUrl проверяется раньше, в routes/generate.ts
+      // (capabilities.imageRequired), сюда долетает уже гарантированно с картинкой.
+      return {
+        taskType: 'img2video',
+        input: {
+          prompt: opts.prompt,
+          image: opts.imageUrl,
+          aspect_ratio: opts.aspectRatio,
+        },
+      };
+    case 'Qubico/framepack':
+      // Контракт подтверждён по goapi.ai/docs/framepack-api/create-task — тоже
+      // только image-to-video, длительность провайдер принимает диапазоном
+      // 10-30с (наши корзины 4s/8s маппятся на 10с/20с, как Luma маппит на 5с/9с).
+      return {
+        taskType: 'img2video',
+        input: {
+          prompt: opts.prompt,
+          start_image: opts.imageUrl,
+          duration: opts.duration === '4s' ? 10 : 20,
+          ...(opts.negativePrompt?.trim() ? { negative_prompt: opts.negativePrompt.trim() } : {}),
+        },
+      };
+    case 'Qubico/hunyuan':
+      // Контракт подтверждён по goapi.ai/docs/hunyuan-video/txt2video-api. Длительность
+      // не настраивается провайдером — параметр duration из наших опций не передаётся.
+      return {
+        taskType: opts.imageUrl ? 'img2video-replace' : 'txt2video',
+        input: {
+          prompt: opts.prompt,
+          aspect_ratio: opts.aspectRatio,
+          ...(opts.imageUrl ? { image: opts.imageUrl } : {}),
+        },
+      };
+    default:
+      throw new Error(`buildGenericVideoInput: неизвестная модель GoAPI "${goapiModel}"`);
+  }
+}
+
+export async function generateVideoGeneric(goapiModel: string, opts: GenericVideoOptions): Promise<string> {
+  const { input, taskType } = buildGenericVideoInput(goapiModel, opts);
+  const taskId = await createTask(goapiModel, taskType, input);
   const data = await pollTask(taskId, 180, 5_000);
   return extractVideoUrl(data);
 }
@@ -267,6 +411,37 @@ export async function generateMusicDiffRhythm(
     data?.data?.task_result?.audio_url ??
     data?.data?.task_result?.url;
   if (!url) throw new Error(`No audio URL in DiffRhythm response: ${JSON.stringify(data).slice(0, 300)}`);
+  return url;
+}
+
+// ─── Генерация музыки Udio (альтернатива Suno) ─────────────────────────────────
+// Контракт подтверждён по goapi.ai/docs/music-api/create-task. $0.05/генерация —
+// заметно дешевле Suno, но лицензионные условия Udio на момент подключения
+// (2026) сами по себе спорные (идут судебные иски по обучающим данным) — решение
+// предлагать ли Udio пользователям как равноправную альтернативу Suno, а не
+// просто держать функцию наготове, требует отдельного решения по продукту:
+// сейчас эта функция НЕ подключена ни к одному воркеру/пикеру в интерфейсе.
+
+export async function generateMusicUdio(
+  prompt: string,
+  options?: { lyricsType?: 'instrumental' | 'user' | 'generate'; negativeTags?: string },
+): Promise<string> {
+  const { lyricsType = 'instrumental', negativeTags = '' } = options ?? {};
+
+  const taskId = await createTask('music-u', 'generate_music', {
+    gpt_description_prompt: prompt,
+    lyrics_type: lyricsType,
+    negative_tags: negativeTags,
+  });
+  const data = await pollTask(taskId, 180, 5_000);
+  const output = data?.data?.output ?? data?.output;
+  const url: string | undefined =
+    output?.audio_url ??
+    output?.url ??
+    output?.clips?.[0]?.audio_url ??
+    data?.data?.task_result?.audio_url ??
+    data?.data?.task_result?.url;
+  if (!url) throw new Error(`No audio URL in Udio response: ${JSON.stringify(data).slice(0, 300)}`);
   return url;
 }
 

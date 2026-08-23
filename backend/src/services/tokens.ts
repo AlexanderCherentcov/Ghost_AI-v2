@@ -1,53 +1,22 @@
 import { prisma } from '../lib/prisma.js';
-import { FREE_LIMITS, CASPER_COSTS as _COSTS } from '../config/plans.js';
+import { FREE_LIMITS, CASPER_COSTS } from '../config/plans.js';
 
-export type RequestType =
-  | 'chat_std'
-  | 'chat_pro'
-  | 'image_generate'
-  | 'image_edit'
-  | 'video_std_4s'
-  | 'video_std_8s'
-  | 'video_pro_4s'
-  | 'video_pro_8s'
-  | 'music_generate';
+/**
+ * Домен операции — определяет, какой путь списания применяется. Цена для
+ * 'chat'/'image'/'video' приходит из реестра моделей (config/models.ts,
+ * ModelSpec.cost), а не отсюда — эта функция больше не знает о конкретных
+ * моделях. 'music' — временно исключение: пока нет реестра музыкальных
+ * моделей, цена берётся из статического CASPER_COSTS.music_generate,
+ * как и раньше.
+ */
+export type SpendDomain = 'chat' | 'image' | 'video' | 'music' | 'voice';
 
-// ─── Стоимость в Caspers (chat_std всегда бесплатен) ──────────────────────────
-
-export const CASPER_COSTS: Record<RequestType, number> = {
-  chat_std:       0,
-  chat_pro:       _COSTS.chat_pro,
-  image_generate: _COSTS.image_generate,
-  image_edit:     _COSTS.image_edit,
-  video_std_4s:   _COSTS.video_std_4s,
-  video_std_8s:   _COSTS.video_std_8s,
-  video_pro_4s:   _COSTS.video_pro_4s,
-  video_pro_8s:   _COSTS.video_pro_8s,
-  music_generate: _COSTS.music_generate,
-};
+export { CASPER_COSTS };
 
 export const FREE_WEEKLY_LIMITS = {
   images: FREE_LIMITS.images_weekly,
   music:  FREE_LIMITS.music_weekly,
 };
-
-export const FREE_MONTHLY_LIMITS = {
-  videos: FREE_LIMITS.videos_monthly,  // 3 видео в месяц
-};
-
-export const FREE_DAILY_LIMITS = {
-  std_messages: FREE_LIMITS.std_messages_daily,
-};
-
-// ─── Бесплатная дневная квота про-чата по тарифам (-1 = безлимит) ────────────
-
-export const PRO_FREE_QUOTA: Record<string, number> = {
-  FREE:  0,
-  BASIC: 0,
-  PRO:   20,
-  VIP:   50,
-  ULTRA: -1,
-} as const;
 
 // ─── Санитизация ввода ─────────────────────────────────────────────────────────
 
@@ -143,19 +112,6 @@ export async function checkResets(userId: string): Promise<void> {
   void didGrantMonthly;
 }
 
-// ─── Определение типа видео-запроса по модели + длительности ─────────────────
-
-export function resolveVideoRequestType(
-  model: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality' = 'standard',
-  duration: '4s' | '8s' = '8s',
-): RequestType {
-  // cinema = Veo 3.1 Pro (дорогая), motion/standard = Veo 3.1 Fast, reality = Kling (стандартная цена)
-  if (model === 'pro' || model === 'cinema') {
-    return duration === '4s' ? 'video_pro_4s' : 'video_pro_8s';
-  }
-  return duration === '4s' ? 'video_std_4s' : 'video_std_8s';
-}
-
 // ─── Атомарное списание Caspers ────────────────────────────────────────────────
 // ВАЖНО: проверка баланса и decrement объединены в один UPDATE с условием в WHERE
 // (как claimOneUse в promo.ts), а не read-then-write — иначе два параллельных
@@ -180,14 +136,30 @@ async function deductCaspersOrThrow(
 }
 
 // ─── Проверка лимитов и списание (единая логика для FREE и платных тарифов) ──
+//
+// cost — Caspers-цена операции, уже разрешённая вызывающим кодом из реестра
+// моделей (ChatModelSpec.cost / VideoModelSpec.cost(duration) / ImageModelSpec.cost)
+// или из CASPER_COSTS.music_generate для музыки.
+//
+// Возвращает { caspersSpent } — сколько РЕАЛЬНО списано с баланса (0, если
+// операция покрылась дневным лимитом FREE-чата или бесплатной про-квотой).
+// Это важно для refundCaspers: раньше при ошибке возвращалась полная cost
+// независимо от того, списывались ли Caspers вообще — если про-сообщение
+// покрыла бесплатная квота, а не Caspers, refund всё равно начислял cost
+// пользователю, фактически даря Caspers. Теперь возвращаем ровно то, что
+// списали.
+
+export interface DeductResult {
+  caspersSpent: number;
+}
 
 export async function checkAndDeduct(
   userId: string,
-  requestType: RequestType,
-  _count = 1,
-  _hasFile = false,
-): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  domain: SpendDomain,
+  cost: number,
+  reason: string,
+): Promise<DeductResult> {
+  return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { id: userId },
       select: {
@@ -195,150 +167,90 @@ export async function checkAndDeduct(
         caspers_balance: true,
         std_messages_today: true,
         pro_messages_today: true,
-        images_this_week: true,
-        music_this_week: true,
-        videos_this_month: true,
       },
     });
     if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
     const plan = user.plan as string;
-    const cost = CASPER_COSTS[requestType];
 
-    // ── обычный чат ───────────────────────────────────────────────────────────
-    if (requestType === 'chat_std') {
-      if (plan === 'FREE') {
-        if (user.std_messages_today >= FREE_DAILY_LIMITS.std_messages) {
-          throw Object.assign(
-            new Error('Лимит бесплатных сообщений исчерпан'),
-            { code: 'LIMIT_MESSAGES_DAILY' },
-          );
-        }
-        await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
-      } else {
-        // Платные тарифы: обычный чат всегда бесплатный (списание не нужно)
-        await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
-      }
-      return;
+    // ── обычный чат (бесплатная модель, cost === 0) ─────────────────────────
+    // Безлимитный на всех тарифах, включая FREE — Cloudflare-модель ничего не
+    // стоит по себестоимости, ограничивать её незачем, платят только за платные
+    // модели чата (см. про-чат ниже) и генерацию. std_messages_today остаётся
+    // как счётчик для статистики/админки, не как лимит.
+    if (domain === 'chat' && cost === 0) {
+      await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
+      return { caspersSpent: 0 };
     }
 
-    // ── про-чат ───────────────────────────────────────────────────────────────
-    if (requestType === 'chat_pro') {
-      const freeQuota = PRO_FREE_QUOTA[plan] ?? 0;
-
-      if (freeQuota === 0 && plan !== 'ULTRA') {
-        // Бесплатной про-квоты нет — проверяем, не FREE ли план (про недоступен)
-        if (plan === 'FREE' || plan === 'BASIC') {
-          // Проверяем Caspers
-          if (user.caspers_balance < cost) {
-            throw Object.assign(
-              new Error('Недостаточно Caspers для про-сообщения'),
-              { code: 'LIMIT_PRO_UNAVAILABLE' },
-            );
-          }
-        }
-      }
-
-      // Сначала проверяем бесплатную квоту (у PRO/VIP есть дневные бесплатные про-сообщения)
-      if (freeQuota === -1) {
-        // ULTRA: безлимитный про — просто считаем
-        await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
-        return;
-      }
-
-      if (freeQuota > 0 && user.pro_messages_today < freeQuota) {
-        // Используем бесплатную квоту
-        await tx.user.update({ where: { id: userId }, data: { pro_messages_today: { increment: 1 } } });
-        return;
-      }
-
-      // Списываем Caspers (атомарно — см. deductCaspersOrThrow)
+    // ── про-чат (платная модель) ────────────────────────────────────────────
+    // Раньше здесь была бесплатная дневная квота по тарифам (PRO/VIP/ULTRA) —
+    // убрана по прямому решению Александра: модели, за которые платим мы,
+    // должны оплачиваться Caspers всеми тарифами одинаково, без исключений.
+    // pro_messages_today остаётся чистым счётчиком для статистики/админки,
+    // на списание больше не влияет.
+    if (domain === 'chat') {
       const proClaimed = await tx.user.updateMany({
         where: { id: userId, caspers_balance: { gte: cost } },
-        data: { caspers_balance: { decrement: cost }, pro_messages_today: { increment: 1 } },
+        data: { caspers_balance: { decrement: cost }, pro_messages_today: { increment: cost } },
       });
       if (proClaimed.count === 0) {
         throw Object.assign(new Error('Недостаточно Caspers'), { code: 'LIMIT_PRO_MESSAGES' });
       }
-      await tx.casperTransaction.create({
-        data: { userId, amount: -cost, reason: 'chat_pro' },
-      });
-      return;
+      await tx.casperTransaction.create({ data: { userId, amount: -cost, reason } });
+      return { caspersSpent: cost };
     }
 
-    // ── генерация изображений ────────────────────────────────────────────────
-    if (requestType === 'image_generate' || requestType === 'image_edit') {
-      await deductCaspersOrThrow(
-        tx, userId, cost, requestType,
-        'LIMIT_IMAGES', 'Недостаточно Caspers для генерации изображения',
+    // ── видео недоступно на FREE вообще — не только за приветственные Caspers,
+    // но и за любые докупленные позже. Видео — самый дорогой домен по себестоимости
+    // (в разы дороже картинок/музыки), пускать в него по одной лишь проверке баланса
+    // означало, что приветственный бонус (100 Caspers) можно было целиком сжечь на
+    // одну-две генерации видео без всякой реальной выручки. Раньше был необязательный
+    // FREE_MONTHLY_LIMITS.videos = 3, но нигде фактически не проверялся — мёртвый код.
+    if (domain === 'video' && plan === 'FREE') {
+      throw Object.assign(
+        new Error('Генерация видео доступна с тарифа BASIC и выше'),
+        { code: 'LIMIT_VIDEOS_FREE_PLAN' },
       );
-      return;
     }
 
-    // ── генерация музыки ─────────────────────────────────────────────────────
-    if (requestType === 'music_generate') {
-      await deductCaspersOrThrow(
-        tx, userId, cost, 'music_generate',
-        'LIMIT_MUSIC', 'Недостаточно Caspers для генерации музыки',
-      );
-      return;
-    }
-
-    // ── генерация видео ──────────────────────────────────────────────────────
-    if (
-      requestType === 'video_std_4s' ||
-      requestType === 'video_std_8s' ||
-      requestType === 'video_pro_4s' ||
-      requestType === 'video_pro_8s'
-    ) {
-      await deductCaspersOrThrow(
-        tx, userId, cost, requestType,
-        'LIMIT_VIDEOS', 'Недостаточно Caspers для генерации видео',
-      );
-      return;
-    }
+    // ── изображения / видео / музыка — всегда прямое списание Caspers ──────
+    const errorMap: Record<Exclude<SpendDomain, 'chat'>, { code: string; message: string }> = {
+      image: { code: 'LIMIT_IMAGES', message: 'Недостаточно Caspers для генерации изображения' },
+      video: { code: 'LIMIT_VIDEOS', message: 'Недостаточно Caspers для генерации видео' },
+      music: { code: 'LIMIT_MUSIC', message: 'Недостаточно Caspers для генерации музыки' },
+      voice: { code: 'LIMIT_VOICE', message: 'Недостаточно Caspers для голосового сообщения' },
+    };
+    const { code, message } = errorMap[domain as Exclude<SpendDomain, 'chat'>];
+    await deductCaspersOrThrow(tx, userId, cost, reason, code, message);
+    return { caspersSpent: cost };
   });
 }
 
 // ─── Возврат Caspers при ошибке API ───────────────────────────────────────────
+//
+// amount — берётся из DeductResult.caspersSpent, а не пересчитывается заново,
+// иначе легко повторить старый баг (возврат по прайсу вместо факта списания).
 
 export async function refundCaspers(
   userId: string,
-  requestType: RequestType,
+  amount: number,
+  reason: string,
 ): Promise<void> {
+  if (amount <= 0) return; // нечего возвращать — операция была бесплатной (квота/дневной лимит)
   try {
-    const cost = CASPER_COSTS[requestType];
-    if (cost === 0) return; // возвращать нечего
-
-    // Проверяем, реально ли списывались Caspers (а не лимиты FREE-тарифа)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { plan: true },
-    });
-    if (!user) return;
-
-    // Для про-чата: возвращаем, только если Caspers реально списывались (не из бесплатной квоты)
-    if (requestType === 'chat_pro') {
-      // Best-effort: просто возвращаем стоимость
-    }
-
     await prisma.$executeRaw`
       UPDATE "User"
-      SET "caspers_balance" = "caspers_balance" + ${cost}
+      SET "caspers_balance" = "caspers_balance" + ${amount}
       WHERE id = ${userId}
     `;
-
     await prisma.casperTransaction.create({
-      data: { userId, amount: cost, reason: `refund_${requestType}` },
+      data: { userId, amount, reason: `refund_${reason}` },
     }).catch(() => {});
   } catch {
     // Возврат делается по принципу best-effort
   }
 }
-
-// ─── Устаревший алиас для обратной совместимости ─────────────────────────────
-
-export const refundCounter = refundCaspers;
 
 // ─── Прямое списание Caspers (используется в yokassa.ts) ─────────────────────
 
@@ -391,14 +303,3 @@ export async function grantCaspers(
   }).catch(() => {});
 }
 
-// ─── Устаревшее: оставлено для совместимости типов с chat.ts ─────────────────
-// (chat.ts импортирует это, но использует новый checkAndDeduct выше)
-
-export interface PlanLimits {
-  std_messages_daily: number;
-  pro_messages_daily: number;
-  images_daily:       number;
-  videos_daily:       number;
-  music_daily:        number;
-  files_monthly:      number;
-}

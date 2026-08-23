@@ -57,7 +57,7 @@ export function ImageViewer({ url, onClose }: ImageViewerProps) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           className="fixed inset-0 z-[200] flex flex-col items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }}
+          style={{ background: 'rgba(0,0,0,0.88)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}
           onClick={onClose}
         >
           {/* Изображение */}

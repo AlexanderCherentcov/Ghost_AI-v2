@@ -128,7 +128,8 @@ export async function* streamOpenRouter(
 export async function generateImageFlux(
   prompt: string,
   model: string = OR_MODELS.flux,
-  sourceImageUrl?: string      // если передан — режим редактирования изображения
+  sourceImageUrl?: string,      // если передан — режим редактирования изображения
+  aspectRatio?: string,
 ): Promise<string> {
   // Собираем сообщение пользователя: редактирование = [изображение, текст], генерация = [текст]
   const userContent = sourceImageUrl
@@ -137,6 +138,12 @@ export async function generateImageFlux(
         { type: 'text', text: `Edit this image: ${prompt}` },
       ]
     : `Generate an image. Visual scene description: ${prompt}`;
+
+  // image_config.aspect_ratio подтверждён в доках OpenRouter только для Gemini-семейства
+  // (google/*-image модели) — у остальных провайдеров (OpenAI/ByteDance/Qwen) этот путь
+  // не проверен, поэтому не отправляем его им вслепую: absent-параметр безопаснее, чем
+  // непроверенный запрос, который может тихо сломать генерацию.
+  const supportsAspectRatio = model.startsWith('google/');
 
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
@@ -150,6 +157,7 @@ export async function generateImageFlux(
       model,
       messages: [{ role: 'user', content: userContent }],
       modalities: ['image'],
+      ...(aspectRatio && supportsAspectRatio ? { image_config: { aspect_ratio: aspectRatio } } : {}),
     }),
   });
 
@@ -195,4 +203,76 @@ export async function generateImageFlux(
 
   console.error('[generateImageFlux] Unknown response:\n', JSON.stringify(data, null, 2).slice(0, 2000));
   throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 300)}`);
+}
+
+// ─── Голос: распознавание и синтез речи (gpt-audio-mini через chat completions) ──
+// ⚠️ Формат запроса/ответа собран по документированному API OpenAI для
+// audio-модальности (modalities:['text','audio'], input_audio/audio в content,
+// message.audio.data в ответе) — НЕ проверен живым вызовом (нет доступа к
+// реальному ключу в момент написания). Если формат отличается, упадёт с понятной
+// ошибкой в voice.worker.ts, а не тихо вернёт мусор — но перед продакшном
+// нужен один реальный тестовый вызов.
+
+export const VOICE_MODEL = 'openai/gpt-audio-mini';
+
+function base64FromDataUri(dataUriOrUrl: string): { base64: string; format: string } | null {
+  const m = dataUriOrUrl.match(/^data:audio\/(\w+);base64,(.+)$/);
+  if (!m) return null;
+  return { format: m[1] === 'mpeg' ? 'mp3' : m[1], base64: m[2] };
+}
+
+/** Распознаёт речь из аудио (URL нашего сервера или data URI) и возвращает текст. */
+export async function transcribeAudio(audioUrl: string): Promise<string> {
+  let base64: string;
+  let format: string;
+  const dataUri = base64FromDataUri(audioUrl);
+  if (dataUri) {
+    ({ base64, format } = dataUri);
+  } else {
+    const res = await fetch(audioUrl);
+    if (!res.ok) throw new Error(`[transcribeAudio] Failed to fetch audio: ${res.status}`);
+    const contentType = res.headers.get('content-type') ?? 'audio/mpeg';
+    format = contentType.includes('wav') ? 'wav' : contentType.includes('ogg') ? 'ogg' : 'mp3';
+    base64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+  }
+
+  const client = getClient();
+  const resp = await client.chat.completions.create({
+    model: VOICE_MODEL,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Transcribe exactly what is said in this audio. Reply with ONLY the transcript text, no commentary, no quotes.' },
+          { type: 'input_audio', input_audio: { data: base64, format } } as any,
+        ],
+      },
+    ] as OpenAI.ChatCompletionMessageParam[],
+  });
+
+  const text = resp.choices[0]?.message?.content;
+  if (!text || typeof text !== 'string' || !text.trim()) {
+    throw new Error('[transcribeAudio] Empty transcript from model');
+  }
+  return text.trim();
+}
+
+/** Озвучивает текст и возвращает аудио как data URI (mp3, base64). */
+export async function synthesizeSpeech(text: string): Promise<string> {
+  const client = getClient();
+  const resp = await client.chat.completions.create({
+    model: VOICE_MODEL,
+    modalities: ['text', 'audio'] as any,
+    audio: { voice: 'alloy', format: 'mp3' } as any,
+    messages: [
+      { role: 'system', content: 'Read the following text aloud naturally, exactly as written. Do not add anything.' },
+      { role: 'user', content: text },
+    ] as OpenAI.ChatCompletionMessageParam[],
+  });
+
+  const audioData = (resp.choices[0]?.message as any)?.audio?.data;
+  if (!audioData || typeof audioData !== 'string') {
+    throw new Error('[synthesizeSpeech] No audio in model response');
+  }
+  return `data:audio/mp3;base64,${audioData}`;
 }

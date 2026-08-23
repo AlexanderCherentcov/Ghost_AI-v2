@@ -1,15 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { route } from '../services/ai-router.js';
+import { resolveChatModel } from '../services/ai-router.js';
+import { AUTO_MODEL_ID, findChatModelByProviderModel, type ChatModelSpec } from '../config/models.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { checkResets, checkAndDeduct, refundCaspers, sanitizeInput } from '../services/tokens.js';
-import type { RequestType } from '../services/tokens.js';
 import { checkChatRateLimit, acquireChatLock, releaseChatLock } from '../services/user-limiter.js';
 import { streamOpenRouter, type ChatMessage } from '../services/providers/openrouter.js';
 import { streamCloudflare } from '../services/providers/cloudflare.js';
-import { OR_MODELS } from '../services/providers/openrouter.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import { notifyApiError } from '../services/admin-notify.js';
@@ -26,12 +25,21 @@ const createChatSchema = z.object({
 
 const wsMessageSchema = z.object({
   chatId: z.string(),
-  mode: z.enum(['chat', 'think']),
+  // id модели из реестра (config/models.ts), 'auto' по умолчанию.
+  model: z.string().optional(),
   prompt: z.string().min(0).max(32000),
+  // max(10) — фронтенд и так режет историю до последних 10 сообщений
+  // (ChatIdPage.tsx), но это клиентское ограничение; без зеркального лимита здесь
+  // любой другой клиент (бот, мини-апп, прямой вызов API) мог прислать сколько угодно
+  // сообщений и раздуть счёт за токены у моделей с большим контекстным окном.
   history: z.array(z.object({
     role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })).default([]),
+    content: z.string().max(8000),
+  })).max(10).default([]),
+  // ── Легаси-поля ──────────────────────────────────────────────────────────
+  // Старые клиенты (открытые вкладки на момент деплоя) шлют это вместо `model`.
+  // Убрать после того, как все клиенты обновятся — см. план в mellow-imagining-dawn.md.
+  mode: z.enum(['chat', 'think']).optional(),
   preferredModel: z.enum(['haiku', 'deepseek']).optional(),
   // Изображение: base64 data URL (макс. ~3МБ после ресайза)
   imageUrl: z.string().max(3145728).optional(),
@@ -42,6 +50,12 @@ const wsMessageSchema = z.object({
   // Язык для блока кода (js, python и т.д.)
   fileLang: z.string().max(32).optional(),
 });
+
+/** Легаси mode/preferredModel → id модели из реестра. Убрать вместе со схемой выше. */
+function resolveLegacyModelId(mode?: 'chat' | 'think', preferredModel?: 'haiku' | 'deepseek'): string {
+  if (mode === 'think' || preferredModel === 'deepseek') return 'deepseek-v3.2';
+  return AUTO_MODEL_ID;
+}
 
 // ─── Плагин ───────────────────────────────────────────────────────────────────
 
@@ -232,10 +246,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      const { chatId, mode, history, imageUrl, fileContent, fileName, fileLang, preferredModel } = parsed;
+      const { chatId, history, imageUrl, fileContent, fileName, fileLang } = parsed;
       const prompt = sanitizeInput(parsed.prompt);
+      const modelId = parsed.model ?? resolveLegacyModelId(parsed.mode, parsed.preferredModel);
 
-      let requestType: RequestType = 'chat_std';
+      let caspersSpent = 0; // фактически списано — для честного refund при ошибке (см. tokens.ts)
 
       try {
         // Проверяем владение чатом + загружаем профиль пользователя
@@ -270,26 +285,30 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
         const hasAttachment = !!(imageUrl || fileContent);
 
-        // Маршрутизируем запрос
-        const { provider, complexity, model, fallbackModels, maxTokens } = route(
-          effectivePrompt || fileName || 'анализ файла',
-          !!fileContent,
-          fastify.log,
-          !!imageUrl,
-          plan,
-          preferredModel,
-          mode,
-        );
-
-        // Определяем тип запроса
-        // sonar (веб-поиск) и режим think считаются про-запросами
-        const isProRequest = mode === 'think' || model === OR_MODELS.sonar;
-        requestType = isProRequest ? 'chat_pro' : 'chat_std';
+        // Разрешаем модель: явный выбор уважается всегда (включая ошибку вместо
+        // молчаливой подмены), 'auto' отдаём диспетчеру — см. ai-router.ts.
+        let spec: ChatModelSpec;
+        let billedCost: number;
+        try {
+          ({ spec, billedCost } = resolveChatModel(modelId, {
+            prompt: effectivePrompt || fileName || 'анализ файла',
+            hasImage: !!imageUrl,
+            hasDocument: !!fileContent,
+            plan,
+            logger: fastify.log,
+          }));
+        } catch (routeErr: any) {
+          send({ type: 'error', code: routeErr.code ?? 'UNKNOWN_MODEL', message: routeErr.message });
+          return;
+        }
 
         // Сбрасываем дневные/недельные/месячные счётчики, если период закончился
         await checkResets(userId);
-        // Проверяем лимиты и списываем ДО вызова ИИ (с возвратом при ошибке)
-        await checkAndDeduct(userId, requestType, 1, !!fileContent);
+        // Проверяем лимиты и списываем ДО вызова ИИ (с возвратом при ошибке).
+        // billedCost, а не spec.cost — при «Авто» это минимум AUTO_MIN_COST,
+        // даже если диспетчер выбрал бесплатную Llama (см. ai-router.ts).
+        const deductResult = await checkAndDeduct(userId, 'chat', billedCost, spec.id);
+        caspersSpent = deductResult.caspersSpent;
 
         // Контекст истории для ключа кэша
         const userHistoryContext = history
@@ -302,11 +321,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // 1) Redis (точный составной ключ)
         const cached = cacheDisabled
           ? { hit: false as const }
-          : await getTextCached(mode, complexity, effectivePrompt, userHistoryContext, responseStyle);
+          : await getTextCached(spec.id, effectivePrompt, userHistoryContext, responseStyle);
 
         // 2) Vector cache (семантический, если Redis не попал)
         const vecCached = (!cacheDisabled && !cached.hit)
-          ? await getVectorCached(mode, effectivePrompt, userHistoryContext, responseStyle)
+          ? await getVectorCached(spec.id, effectivePrompt, userHistoryContext, responseStyle)
           : { hit: false as const };
 
         // Объединяем попадания в кэш
@@ -314,10 +333,19 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         if (cacheHit.hit) {
           const response = cacheHit.response as { content: string };
 
+          // Caspers уже списаны выше (checkAndDeduct на строке 307) и здесь
+          // НЕ возвращаются — по прямому решению Александра: попадание в кэш
+          // платной модели списывается по полной цене, так же как у картинок/
+          // видео/музыки (services/routes/generate.ts — там тот же принцип
+          // с явным комментарием «это наша экономия, не пользователя»).
+          // tokensCost:0 ниже — это про «не было нового обращения к провайдеру»,
+          // а не про фактическое списание Caspers (оно уже отражено в
+          // CasperTransaction из checkAndDeduct) — тот же смысл, что и в media-кэше.
+
           const userContent = prompt || (fileName ? `[Файл: ${fileName}]` : imageUrl ? '[Изображение]' : '');
           await prisma.$transaction([
             prisma.message.create({
-              data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
+              data: { chatId, userId, role: 'user', content: encrypt(userContent), mode: 'chat', tokensCost: 0, mediaUrl: imageUrl ?? null },
             }),
             prisma.message.create({
               data: {
@@ -325,9 +353,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
                 userId,
                 role: 'assistant',
                 content: encrypt(response.content),
-                mode,
-                complexity,
-                provider,
+                mode: 'chat',
+                provider: spec.id,
                 cacheHit: true,
                 tokensCost: 0,
               },
@@ -343,8 +370,13 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Собираем массив сообщений для ИИ
-        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(mode, responseStyle, plan) };
+        // Собираем массив сообщений для ИИ.
+        // Системный промпт различает «обычный» и «глубокий» тон по цене модели —
+        // раньше это решал флаг mode==='think', теперь платность самой выбранной
+        // модели несёт тот же сигнал (см. lib/prompts.ts: ключ 'think' даёт
+        // инструкцию рассуждать пошагово и структурировать ответ).
+        const promptStyleKey = spec.cost > 0 ? 'think' : 'chat';
+        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, plan) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;
@@ -367,23 +399,34 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Сохраняем сообщение пользователя
         const userContent = prompt || (imageUrl ? '[Изображение]' : '');
         await prisma.message.create({
-          data: { chatId, userId, role: 'user', content: encrypt(userContent), mode, tokensCost: 0, mediaUrl: imageUrl ?? null },
+          data: { chatId, userId, role: 'user', content: encrypt(userContent), mode: 'chat', tokensCost: 0, mediaUrl: imageUrl ?? null },
         });
 
         // Стримим от провайдера
         let fullResponse = '';
+        let usedProviderModel = spec.providerModel; // уточняется ниже событием used_model — какая модель реально ответила (могла сработать резервная из fallbackModels)
 
-        // Обычный чат: основной Cloudflare Llama, резерв OpenRouter Llama если CF недоступен
-        // Про/think: OpenRouter с цепочкой резервных моделей
+        // Потолок длины ответа — защита от расходов, а не свойство конкретной модели.
+        // Раньше на платных тарифах max_tokens не передавался вообще (undefined
+        // выпадал из тела запроса — см. streamOpenRouter ниже), то есть ответ был
+        // НИЧЕМ не ограничен: при максимуме схемы (промт 32к симв. + история 10×8к +
+        // файл 65к ≈ вход под завязку) это давало намного больший расход на сообщение,
+        // чем предполагает Caspers-цена модели. 4000 токенов — с большим запасом
+        // хватает на развёрнутый structured-ответ в режиме "think", но ограничивает
+        // аномалии сверху.
+        const maxTokens = plan === 'FREE' ? 400 : 4000;
+
+        // Cloudflare — основной путь для бесплатной модели, резерв — OpenRouter.
+        // Остальные модели — сразу OpenRouter с цепочкой резервных из реестра.
         async function* buildStream() {
-          if (provider !== 'cloudflare') {
-            yield* streamOpenRouter(messages, model, maxTokens, fallbackModels);
+          if (spec.provider !== 'cloudflare') {
+            yield* streamOpenRouter(messages, spec.providerModel, maxTokens, spec.fallbackModels);
             return;
           }
           try {
             yield* streamCloudflare(messages, maxTokens);
           } catch {
-            const cfFallback = fallbackModels?.[0] ?? OR_MODELS.llama;
+            const cfFallback = spec.fallbackModels?.[0] ?? 'meta-llama/llama-3.1-8b-instruct';
             fastify.log.warn(`[chat] Cloudflare down, falling back to ${cfFallback}`);
             yield* streamOpenRouter(messages, cfFallback, maxTokens);
           }
@@ -394,6 +437,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             if (chunk.type === 'token' && chunk.data) {
               fullResponse += chunk.data;
               send({ type: 'token', data: chunk.data });
+            } else if (chunk.type === 'used_model') {
+              usedProviderModel = chunk.model;
             }
           }
         } catch (streamErr: any) {
@@ -404,23 +449,39 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             userName: userInfo?.name,
             operation: 'chat',
             error: streamErr.message ?? String(streamErr),
-            context: `mode=${mode} provider=${provider} model=${model}`,
+            context: `model=${spec.id} provider=${spec.provider}`,
           }).catch(() => {});
 
           // Возвращаем Caspers, если операция была платной
-          await refundCaspers(userId, requestType).catch(() => {});
+          await refundCaspers(userId, caspersSpent, spec.id).catch(() => {});
 
           send({ type: 'error', code: 'SERVER_ERROR', message: 'Ошибка соединения, попробуйте позже' });
           return;
         }
 
-        // Кэшируем ответ (пропускаем, если есть вложение)
-        if (!hasAttachment && fullResponse) {
-          await setTextCached(mode, complexity, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
-          await setVectorCached(mode, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
+        // Сверка биллинга с фактически ответившей моделью: если сработал резерв
+        // из fallbackModels на модель ДЕШЕВЛЕ выбранной (например, Sonar → DeepSeek —
+        // пользователь оплатил веб-поиск, а его не будет), разницу возвращаем. Если
+        // резерв ДОРОЖЕ (DeepSeek → Gemini Flash) — доплату не берём: пользователь
+        // согласился заплатить ровно billedCost за выбранную модель, а не больше
+        // без нового согласия. Для «Авто»/бесплатной Llama (billedCost = AUTO_MIN_COST
+        // либо 0) сверка не находит платную модель по providerModel и не срабатывает.
+        if (usedProviderModel !== spec.providerModel) {
+          const actualSpec = findChatModelByProviderModel(usedProviderModel);
+          if (actualSpec && actualSpec.cost < billedCost) {
+            await refundCaspers(userId, billedCost - actualSpec.cost, spec.id).catch(() => {});
+          }
         }
 
-        // Сохраняем ответ ассистента
+        // Кэшируем ответ (пропускаем, если есть вложение)
+        if (!hasAttachment && fullResponse) {
+          await setTextCached(spec.id, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
+          await setVectorCached(spec.id, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
+        }
+
+        // Сохраняем ответ ассистента. provider хранит РЕАЛЬНО ответившую модель
+        // (usedProviderModel из события used_model), а не просто выбор пользователя —
+        // если сработал резерв из fallbackModels, это будет видно в данных.
         await prisma.$transaction([
           prisma.message.create({
             data: {
@@ -428,9 +489,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
               userId,
               role: 'assistant',
               content: encrypt(fullResponse),
-              mode,
-              complexity,
-              provider,
+              mode: 'chat',
+              provider: usedProviderModel,
               cacheHit: false,
               tokensCost: 0,
             },
@@ -462,7 +522,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // Классификация кода ошибки — см. lib/chat-errors.ts (протестировано отдельно,
         // расхождение этого списка с tokens.ts уже один раз пряталось от пользователя).
         if (userId && shouldRefundCaspers(err.code)) {
-          await refundCaspers(userId, requestType).catch(() => {});
+          await refundCaspers(userId, caspersSpent, modelId).catch(() => {});
         }
 
         // Отправляем пользователю сообщение (никогда не раскрываем детали провайдера/модели)

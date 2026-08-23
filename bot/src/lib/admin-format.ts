@@ -2,12 +2,42 @@
 // чтобы файл с командами не смешивал регистрацию хендлеров с версткой текста.
 import { api } from './admin-api.js';
 
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://ghostlineai.ru';
+
 export const PLAN_ICON: Record<string, string> = {
-  FREE: '🆓', BASIC: '⭐', PRO: '🚀', VIP: '💎', ULTRA: '🔥',
+  FREE: '🆓', START: '🌱', BASIC: '⭐', PRO: '🚀', PRO_PLUS: '🚀', VIP: '💎', ULTRA: '🔥',
 };
 
 export function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// timeZone указан явно (не полагаемся на локаль сервера) — время тех.работ
+// должно быть по МСК независимо от того, где физически стоит контейнер бота.
+export function fmtMsk(iso: string): string {
+  return new Date(iso).toLocaleString('ru', {
+    timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }) + ' МСК';
+}
+
+export function fmtMaintenance(state: { active: boolean; until: string | null; bypassToken?: string | null }): string {
+  if (!state.active) {
+    return '🟢 <b>Тех.работы выключены</b>\n\nСайт и бот работают в обычном режиме.';
+  }
+  const until = state.until
+    ? `до <b>${fmtMsk(state.until)}</b>`
+    : '<b>до отмены</b> (время не задано)';
+  // Ссылка одноразовая на этот запуск тех.работ — при следующем /maintenance
+  // (продлении, изменении времени) сгенерируется новая, старая перестанет работать.
+  const link = state.bypassToken
+    ? `\n\n🔑 Твоя ссылка для проверки (действует, пока идут тех.работы):\n${FRONTEND_URL}/?bypass=${state.bypassToken}`
+    : '';
+  return (
+    '🚧 <b>Тех.работы включены</b>\n\n' +
+    `Сайт и бот сейчас показывают пользователям уведомление о работах ${until}.` +
+    link
+  );
 }
 
 export function fmtUser(u: any): string {

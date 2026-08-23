@@ -122,4 +122,26 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     },
   });
 
+  // ── История списания/начисления Caspers ────────────────────────────────────
+  fastify.get('/payments/caspers/history', {
+    preHandler: [fastify.authenticate],
+    handler: async (request) => {
+      const { userId } = request.user;
+      const query = request.query as { page?: string };
+      const page  = parseInt(query.page ?? '1');
+      const limit = 30;
+      const [transactions, total] = await prisma.$transaction([
+        prisma.casperTransaction.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+          select: { id: true, amount: true, reason: true, createdAt: true },
+        }),
+        prisma.casperTransaction.count({ where: { userId } }),
+      ]);
+      return { transactions, total, page, limit };
+    },
+  });
+
 }

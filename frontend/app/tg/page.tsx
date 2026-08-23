@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { GhostIcon } from '@/components/icons/GhostIcon';
+import { ChatIcon, ImageIcon, VideoIcon, MusicIcon } from '@/components/icons';
 
 // Email администратора задаётся через переменную окружения
 // NEXT_PUBLIC_ADMIN_EMAIL=your@email.com в .env.local
@@ -67,14 +68,14 @@ export default function TelegramMiniAppPage() {
 
         <div className="space-y-3 text-left">
           {[
-            { icon: '💬', label: 'AI-чат', desc: 'Диалоги прямо в Telegram' },
-            { icon: '🖼', label: 'Генерация изображений', desc: 'DALL-E и Stable Diffusion' },
-            { icon: '🎬', label: 'Создание видео', desc: 'Видео по текстовому описанию' },
-            { icon: '🎵', label: 'Генерация музыки', desc: 'Треки в любом стиле' },
+            { Icon: ChatIcon, label: 'AI-чат', desc: 'Диалоги прямо в Telegram' },
+            { Icon: ImageIcon, label: 'Генерация изображений', desc: 'DALL-E и Stable Diffusion' },
+            { Icon: VideoIcon, label: 'Создание видео', desc: 'Видео по текстовому описанию' },
+            { Icon: MusicIcon, label: 'Генерация музыки', desc: 'Треки в любом стиле' },
           ].map((f) => (
             <div key={f.label} className="flex items-center gap-3 px-4 py-3 rounded-xl"
               style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-              <span className="text-xl flex-shrink-0">{f.icon}</span>
+              <f.Icon size={20} className="flex-shrink-0 text-accent" />
               <div>
                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{f.label}</div>
                 <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{f.desc}</div>

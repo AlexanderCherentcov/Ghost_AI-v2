@@ -21,6 +21,10 @@
  *   /restart <svc>  — перезапуск контейнера
  *   /logs [svc] [n] — последние N строк логов
  *   /sys            — CPU / RAM контейнеров
+ *   /maintenance                    — статус тех.работ
+ *   /maintenance off                — выключить
+ *   /maintenance HH:MM              — включить до HH:MM МСК сегодня (или завтра, если время уже прошло)
+ *   /maintenance YYYY-MM-DD HH:MM   — включить до конкретной даты/времени МСК
  */
 
 import { Bot, InlineKeyboard } from 'grammy';
@@ -29,10 +33,10 @@ import { apiErrorMessage } from './lib/error-message.js';
 import { api } from './lib/admin-api.js';
 import { ALL_SERVICES, RESTARTABLE_SERVICES, LOGGABLE_SERVICES, containerLogs, containerRestart, allContainerStatuses, containerStats } from './lib/docker.js';
 import { watchDockerEvents } from './lib/docker-events.js';
-import { esc, fmtUser, fmtUserList, fmtStats, quickStats, fmtHealth, fmtPromoShort, fmtPromoDetail } from './lib/admin-format.js';
+import { esc, fmtUser, fmtUserList, fmtStats, quickStats, fmtHealth, fmtPromoShort, fmtPromoDetail, fmtMaintenance } from './lib/admin-format.js';
 import {
-  mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb,
-  ADMIN_KEYBOARD, KB_START, KB_USERS, KB_STATS, KB_PROMOS, KB_HEALTH, KB_SERVER,
+  mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb, maintenanceKb,
+  ADMIN_KEYBOARD, KB_START, KB_USERS, KB_STATS, KB_PROMOS, KB_HEALTH, KB_SERVER, KB_MAINT,
 } from './lib/admin-keyboards.js';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -341,6 +345,75 @@ async function sendServerMenu(ctx: any): Promise<void> {
   await ctx.reply('🔧 <b>Управление сервером</b>', { parse_mode: 'HTML', reply_markup: serverKb() });
 }
 
+// ─── Тех.работы ──────────────────────────────────────────────────────────────
+// МСК — фиксированный UTC+3 без перехода на летнее время (с 2014 года), поэтому
+// для перевода "часы:минуты по МСК" в UTC достаточно вычесть 3 часа, без
+// библиотек для таймзон.
+const MSK_OFFSET_HOURS = 3;
+
+function mskWallClockToUtc(year: number, month: number, day: number, hour: number, minute: number): Date {
+  return new Date(Date.UTC(year, month - 1, day, hour - MSK_OFFSET_HOURS, minute));
+}
+
+/** "HH:MM" → сегодня по МСК, либо завтра, если это время сегодня уже прошло. */
+function parseMskTimeToday(input: string): Date | null {
+  const m = input.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hour = parseInt(m[1], 10), minute = parseInt(m[2], 10);
+  if (hour > 23 || minute > 59) return null;
+  const nowMsk = new Date(Date.now() + MSK_OFFSET_HOURS * 3_600_000);
+  let target = mskWallClockToUtc(nowMsk.getUTCFullYear(), nowMsk.getUTCMonth() + 1, nowMsk.getUTCDate(), hour, minute);
+  if (target.getTime() <= Date.now()) target = new Date(target.getTime() + 24 * 3_600_000);
+  return target;
+}
+
+/** "YYYY-MM-DD HH:MM" по МСК. */
+function parseMskDateTime(input: string): Date | null {
+  const m = input.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m.map(Number) as unknown as number[];
+  const target = mskWallClockToUtc(y, mo, d, h, mi);
+  return isNaN(target.getTime()) ? null : target;
+}
+
+async function sendMaintenanceMenu(ctx: any, edit = false): Promise<void> {
+  try {
+    const { data } = await api.get('/maintenance');
+    const text = fmtMaintenance(data) +
+      (data.active ? '' : '\n\nВыберите длительность или пришлите точное время:\n<code>/maintenance HH:MM</code> — сегодня по МСК\n<code>/maintenance YYYY-MM-DD HH:MM</code> — конкретная дата');
+    const opts = { parse_mode: 'HTML' as const, reply_markup: maintenanceKb(data.active) };
+    if (edit) await ctx.editMessageText(text, opts);
+    else await ctx.reply(text, opts);
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
+  }
+}
+
+async function setMaintenance(ctx: any, active: boolean, until: Date | null, edit = false): Promise<void> {
+  try {
+    await api.post('/maintenance', { active, until: until ? until.toISOString() : null });
+    await sendMaintenanceMenu(ctx, edit);
+  } catch (err: any) {
+    await ctx.reply(`❌ Ошибка: ${apiErrorMessage(err)}`);
+  }
+}
+
+bot.command('maintenance', async (ctx) => {
+  const arg = (ctx.match ?? '').trim();
+  if (!arg) { await sendMaintenanceMenu(ctx); return; }
+  if (arg.toLowerCase() === 'off') { await setMaintenance(ctx, false, null); return; }
+
+  const until = parseMskDateTime(arg) ?? parseMskTimeToday(arg);
+  if (!until) {
+    await ctx.reply(
+      '❌ Не понял время. Форматы:\n<code>/maintenance HH:MM</code> — сегодня по МСК\n<code>/maintenance YYYY-MM-DD HH:MM</code>\n<code>/maintenance off</code>',
+      { parse_mode: 'HTML' },
+    );
+    return;
+  }
+  await setMaintenance(ctx, true, until);
+});
+
 bot.command('restart', async (ctx) => {
   const svc     = (ctx.match ?? '').trim();
   const allowed = RESTARTABLE_SERVICES;
@@ -445,6 +518,23 @@ bot.callbackQuery('server_menu', async (ctx) => {
   await ctx.editMessageText('🔧 <b>Управление сервером</b>', {
     parse_mode: 'HTML', reply_markup: serverKb(),
   });
+});
+
+bot.callbackQuery('maint_menu', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendMaintenanceMenu(ctx, true);
+});
+
+bot.callbackQuery(/^maint_on:(\d+)$/, async (ctx) => {
+  const minutes = parseInt(ctx.match[1]);
+  await ctx.answerCallbackQuery('Включаю...');
+  const until = minutes > 0 ? new Date(Date.now() + minutes * 60_000) : null;
+  await setMaintenance(ctx, true, until, true);
+});
+
+bot.callbackQuery('maint_off', async (ctx) => {
+  await ctx.answerCallbackQuery('Выключаю...');
+  await setMaintenance(ctx, false, null, true);
 });
 
 bot.callbackQuery('health', async (ctx) => {
@@ -721,6 +811,7 @@ bot.on('message:text', async (ctx) => {
   if (text === KB_PROMOS) { await sendPromosPage(ctx, 1); return; }
   if (text === KB_HEALTH) { await sendHealthMsg(ctx);     return; }
   if (text === KB_SERVER) { await sendServerMenu(ctx);    return; }
+  if (text === KB_MAINT)  { await sendMaintenanceMenu(ctx); return; }
 });
 
 // ─── Error handler ────────────────────────────────────────────────────────────

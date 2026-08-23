@@ -4,7 +4,7 @@
 // Здесь только чистая математика, 1:1 повторяющая расчёт на бэкенде, чтобы сумма
 // на экране совпадала с суммой, которую реально спишет yokassa.ts.
 
-import type { CasperPriceTier } from './api';
+import type { CasperPriceTier, ImageModelOption, VideoModelOption } from './api';
 
 /** Итоговая цена докупки N Caspers по ступенчатым тирам. */
 export function calculateCasperPrice(amount: number, tiers: CasperPriceTier[]): number {
@@ -40,9 +40,42 @@ export function fakeCyclePrice(price: number, cycle: 'monthly' | 'yearly'): numb
 /**
  * Маркетинговая строка про бесплатный тариф — единственное место, где она
  * собирается. Раньше этот текст был захардкожен по всему сайту (лендинг,
- * логин, регистрация, billing) с зашитыми внутрь цифрами 100/5 — при смене
- * приветственного бонуса или дневного лимита пришлось бы искать все копии.
+ * логин, регистрация, billing) с зашитыми внутрь цифрами — при смене
+ * приветственного бонуса пришлось бы искать все копии.
+ * Дневного лимита сообщений больше нет — стандартный чат безлимитный на
+ * всех тарифах, включая FREE.
  */
-export function freeTierTagline(welcomeCaspers: number, dailyMessages: number): string {
-  return `🎁 ${welcomeCaspers} Caspers · ${dailyMessages} сообщений/день · всё остальное за Caspers`;
+export function freeTierTagline(welcomeCaspers: number): string {
+  return `${welcomeCaspers} Caspers · безлимитный чат · всё остальное за Caspers`;
+}
+
+/**
+ * Самая дешёвая модель в каждом домене (image/video берутся из живого /api/plans,
+ * music — фиксированная цена CASPER_COSTS.music_generate, для музыки пока нет
+ * реестра моделей). Используется, чтобы честно посчитать "до скольки
+ * картинок/видео/треков хватит Caspers на тарифе" — не выдумывая цифры руками.
+ * Одно место для лендинга и /billing — раньше эта математика жила бы в двух копиях.
+ */
+export interface CheapestCosts {
+  image: number;
+  video: number;
+  music: number;
+}
+
+export function cheapestCosts(
+  imageModels: ImageModelOption[],
+  videoModels: VideoModelOption[],
+  musicGenerateCost: number,
+): CheapestCosts {
+  return {
+    image: imageModels.length ? Math.min(...imageModels.map((m) => m.cost)) : 0,
+    video: videoModels.length ? Math.min(...videoModels.map((m) => m.cost['4s'])) : 0,
+    music: musicGenerateCost,
+  };
+}
+
+/** "До скольки X хватит N Caspers" — целое число, округление вниз (честный минимум). */
+export function maxGenerations(caspersMonthly: number, unitCost: number): number {
+  if (unitCost <= 0) return 0;
+  return Math.floor(caspersMonthly / unitCost);
 }

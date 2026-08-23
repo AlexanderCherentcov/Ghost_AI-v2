@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
@@ -7,12 +8,13 @@ import { grantCaspers } from '../services/tokens.js';
 import { createPromoCode, deletePromoCode, normalizePromoCode, PromoError } from '../services/promo.js';
 import { checkBotSecret } from '../lib/bot-auth.js';
 import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
+import { getMaintenanceState, setMaintenanceState } from '../lib/maintenance.js';
 
 // ─── Схемы ─────────────────────────────────────────────────────────────────────
 
 const setplanSchema = z.object({
   userId: z.string().min(1),
-  plan:   z.enum(['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA']),
+  plan:   z.enum(['FREE', 'START', 'BASIC', 'PRO', 'PRO_PLUS', 'VIP', 'ULTRA']),
 });
 
 const resetSchema = z.object({
@@ -29,12 +31,17 @@ const banSchema = z.object({
   unban:  z.boolean().optional(),
 });
 
+const maintenanceSchema = z.object({
+  active: z.boolean(),
+  until:  z.string().datetime().nullable().optional(),
+});
+
 const createPromoSchema = z.object({
   code:            z.string().min(3).max(40),
   rewardType:      z.enum(['CASPERS', 'DISCOUNT_PERCENT']),
   casperAmount:    z.number().int().min(1).optional(),
   discountPercent: z.number().int().min(1).max(100).optional(),
-  applicablePlans: z.array(z.enum(['FREE', 'BASIC', 'PRO', 'VIP', 'ULTRA'])).optional(),
+  applicablePlans: z.array(z.enum(['FREE', 'START', 'BASIC', 'PRO', 'PRO_PLUS', 'VIP', 'ULTRA'])).optional(),
   maxUses:         z.number().int().min(1).optional(),
   expiresAt:       z.string().datetime().optional(),
   createdBy:       z.string().optional(),
@@ -406,6 +413,29 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       if (err instanceof PromoError) return reply.code(404).send({ error: err.message });
       throw err;
     }
+  });
+
+  // ── GET /api/admin/maintenance — текущий статус тех.работ ──────────────────
+  fastify.get('/admin/maintenance', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+    return getMaintenanceState();
+  });
+
+  // ── POST /api/admin/maintenance — включить/выключить тех.работы ────────────
+  fastify.post('/admin/maintenance', async (request, reply) => {
+    if (!checkBotSecret(request, reply)) return;
+
+    const { active, until } = maintenanceSchema.parse(request.body);
+    // Новый токен обхода на каждое включение — старая ссылка (если утекла) не
+    // переживает следующий цикл тех.работ. Выключили — токен тоже гасим сразу,
+    // не дожидаясь истечения until.
+    const state = {
+      active,
+      until: active ? (until ?? null) : null,
+      bypassToken: active ? crypto.randomBytes(32).toString('hex') : null,
+    };
+    await setMaintenanceState(state);
+    return reply.send({ ok: true, ...state });
   });
 };
 

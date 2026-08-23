@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { create } from 'zustand';
+import { XIcon, CheckIcon, GhostIcon, WarningIcon } from '@/components/icons';
 
 type ToastType = 'error' | 'success' | 'info' | 'warning';
 
@@ -39,11 +41,11 @@ const COLORS: Record<ToastType, string> = {
   warning: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-300',
 };
 
-const ICONS: Record<ToastType, string> = {
-  error: '✕',
-  success: '✓',
-  info: '👻',
-  warning: '⚠',
+const ICONS: Record<ToastType, ComponentType<{ size?: number; className?: string }>> = {
+  error: XIcon,
+  success: CheckIcon,
+  info: GhostIcon,
+  warning: WarningIcon,
 };
 
 export function ToastProvider() {
@@ -61,7 +63,7 @@ export function ToastProvider() {
             transition={{ duration: 0.2 }}
             className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-sm max-w-[320px] shadow-xl ${COLORS[t.type]}`}
           >
-            <span className="text-base leading-none mt-0.5">{ICONS[t.type]}</span>
+            {(() => { const Icon = ICONS[t.type]; return <Icon size={16} className="flex-shrink-0 mt-0.5" />; })()}
             <p className="flex-1 text-sm leading-snug">{t.message}</p>
             <button
               onClick={() => dismiss(t.id)}

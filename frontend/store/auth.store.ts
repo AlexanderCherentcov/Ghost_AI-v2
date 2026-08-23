@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@/lib/api';
-import { setAccessToken, api } from '@/lib/api';
+import { setAccessToken, setRefreshToken, registerTokenRefreshHandler, api } from '@/lib/api';
 
 interface AuthState {
   user: User | null;
@@ -30,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, accessToken, refreshToken) => {
         setAccessToken(accessToken);
+        setRefreshToken(refreshToken);
         set({ user, accessToken, refreshToken, isLoading: false });
       },
 
@@ -37,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
 
       clearAuth: () => {
         setAccessToken(null);
+        setRefreshToken(null);
         set({ user: null, accessToken: null, refreshToken: null, isLoading: false });
       },
 
@@ -60,8 +62,18 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.isLoading = false;
+          // Мост в lib/api.ts — иначе тихое обновление protухшего access-токена (см.
+          // request() в api.ts) не найдёт refreshToken из localStorage до первого setAuth.
+          setRefreshToken(state.refreshToken);
         }
       },
     },
   ),
 );
+
+// Тихое обновление токена в api.ts меняет access/refresh в обход setAuth (это не логин,
+// а фоновое продление сессии) — без этой подписки новая пара останется только в памяти
+// api.ts и потеряется при следующей перезагрузке страницы, вернув протухший refreshToken.
+registerTokenRefreshHandler((accessToken, refreshToken) => {
+  useAuthStore.setState({ accessToken, refreshToken });
+});

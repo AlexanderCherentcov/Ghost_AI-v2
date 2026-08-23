@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GhostIcon } from '@/components/icons/GhostIcon';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -48,7 +47,7 @@ export function SupportWidget() {
         className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-accent shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 transition-transform"
         aria-label="Поддержка"
       >
-        <GhostIcon size={22} className="text-white" />
+        <img src="/ghostline-logo-icon.png" alt="" className="w-7 h-7 rounded-[7px] object-cover" />
       </button>
 
       {/* Backdrop */}
@@ -78,7 +77,7 @@ export function SupportWidget() {
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <GhostIcon size={18} className="text-accent" />
+                <img src="/ghostline-logo-icon.png" alt="" className="w-[18px] h-[18px] rounded-[5px] object-cover" />
                 <span className="font-medium text-white text-sm">Поддержка</span>
               </div>
               <button

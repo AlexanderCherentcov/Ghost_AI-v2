@@ -1,41 +1,33 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { OR_MODELS } from './providers/openrouter.js';
+import {
+  AUTO_MODEL_ID,
+  AUTO_MIN_COST,
+  CHAT_MODELS,
+  autoEligibleChatModels,
+  findModel,
+  type ChatModelSpec,
+} from '../config/models.js';
 
-export type Complexity = 'simple' | 'complex';
-export type Provider = 'cloudflare' | 'openrouter-haiku' | 'openrouter-deepseek' | 'openrouter-sonar';
-
-export interface RouterResult {
-  provider: Provider;
-  complexity: Complexity;
-  model: string;
-  /** Цепочка резервных моделей — пробуются по очереди, если основная не сработала */
-  fallbackModels?: string[];
-  maxTokens?: number;
-}
-
-const CODE_KEYWORDS = [
-  'напиши код','написать код','код на','функция','алгоритм','скрипт',
-  'исправь ошибку','почему не работает','объясни код','оптимизируй',
-  'рефакторинг','баг','ошибка в коде','напиши функцию','напиши класс',
-  'напиши скрипт','сделай api','напиши запрос','sql запрос',
-  'write code','write function','write class','write script',
-  'fix bug','fix error','debug','debugging','refactor','review code',
-  'function ','algorithm','implement','class ','sql query',
-];
+// ─── Ключевые слова для диспетчера режима «Авто» ──────────────────────────────
+//
+// Используются ТОЛЬКО когда пользователь явно выбрал 'auto' — это внутренняя
+// эвристика экономии Caspers, а не скрытый тариф-детектор. При явном выборе
+// конкретной модели этот файл вообще не участвует в решении.
 
 const COMPLEX_KEYWORDS = [
   'проанализируй','сравни','исследуй','реши задачу','разработай',
   'спроектируй','составь план','напиши статью','напиши эссе',
   'переведи','резюмируй','суммаризируй','что думаешь о',
   'расскажи подробнее','помоги разобраться','найди ошибку',
+  'напиши код','написать код','код на','функция','алгоритм','скрипт',
+  'исправь ошибку','почему не работает','объясни код','оптимизируй',
+  'рефакторинг','баг','ошибка в коде',
   'analyze','compare','research','solve','develop','design',
   'write an essay','write an article','translate','summarize',
-  'explain in detail','help me understand',
+  'explain in detail','help me understand','write code','debug','refactor',
 ];
 
-// Ключевые слова, сигнализирующие, что пользователю нужна свежая информация из интернета
 const SEARCH_KEYWORDS = [
-  // Русский
   'найди','найти','поищи','поиск','погугли','загугли',
   'что сейчас','что сегодня','последние новости','свежие новости',
   'актуально','актуальная','актуальный','актуальные',
@@ -45,7 +37,6 @@ const SEARCH_KEYWORDS = [
   'погода','курс доллара','курс евро','цена биткоин',
   'последняя версия','последний релиз','вышел ли',
   'есть ли информация о','свежая информация',
-  // Английский
   'search for','find information','look up','google it',
   'latest news','current news','recent news',
   'what is happening','right now','today\'s',
@@ -54,100 +45,91 @@ const SEARCH_KEYWORDS = [
   'recent events','is there any news',
 ];
 
-const DOCUMENT_KEYWORDS = [
-  'проанализируй документ','прочитай файл','что в pdf','что в этом файле',
-  'разбери документ','объясни документ','что написано в',
-  'analyze document','read file','explain this document','summarize document',
-  'what does this file','what is in the pdf',
-];
-
-export type RouteCategory = 'chat' | 'code' | 'docs';
-
 export function isSearchQuery(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   return SEARCH_KEYWORDS.some((k) => lower.includes(k));
 }
 
-export function classifyCategory(prompt: string, hasImage = false, hasDocument = false): RouteCategory {
-  if (hasDocument) return 'docs';
+function isComplexQuery(prompt: string): boolean {
   const lower = prompt.toLowerCase();
-  if (CODE_KEYWORDS.some((k) => lower.includes(k))) return 'code';
-  if (DOCUMENT_KEYWORDS.some((k) => lower.includes(k))) return 'docs';
-  return 'chat';
+  if (prompt.split(/\s+/).length > 200) return true;
+  if (/```|^\s*(def |function |class |SELECT |INSERT |UPDATE |DELETE )/m.test(prompt)) return true;
+  return COMPLEX_KEYWORDS.some((k) => lower.includes(k));
 }
 
-export function classifyComplexity(prompt: string, hasImage = false, hasDocument = false): Complexity {
-  if (hasImage || hasDocument) return 'complex';
-  const lower = prompt.toLowerCase();
-  if (prompt.split(/\s+/).length > 200) return 'complex';
-  if (/```|^\s*(def |function |class |SELECT |INSERT |UPDATE |DELETE )/m.test(prompt)) return 'complex';
-  if (CODE_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
-  if (DOCUMENT_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
-  if (COMPLEX_KEYWORDS.some((k) => lower.includes(k))) return 'complex';
-  return 'simple';
+export interface ChatRouteResult {
+  spec: ChatModelSpec;
+  /** true, если модель подобрана диспетчером «Авто», а не выбрана пользователем явно. */
+  viaAuto: boolean;
+  /**
+   * Реальная цена списания — обычно равна spec.cost, НО если «Авто» подобрало
+   * бесплатную Llama, это AUTO_MIN_COST, а не 0: «Авто» — платная функция
+   * экономии, не чёрный ход к бесплатному чату. При явном выборе
+   * «Стандартного чата» (эта же модель, но не через диспетчер) цена честно 0 —
+   * см. resolveChatModel: billedCost === spec.cost всегда, если viaAuto === false.
+   */
+  billedCost: number;
 }
 
-export function route(
-  prompt: string,
-  hasDocument = false,
-  logger?: FastifyBaseLogger,
-  hasImage = false,
-  plan?: string,
-  _preferredModel?: 'haiku' | 'deepseek',  // оставлено для совместимости API, игнорируется — DeepSeek всегда основной
-  mode?: string,
-): RouterResult {
-  const complexity = classifyComplexity(prompt, hasImage, hasDocument);
-  const isPaid = plan !== 'FREE' && plan !== undefined;
+export class VisionNotSupportedError extends Error {
+  code = 'MODEL_NO_VISION';
+  constructor(label: string) {
+    super(`Модель «${label}» не умеет распознавать изображения — выберите другую модель или «Авто».`);
+  }
+}
 
-  // ── Изображениям всегда нужна модель с vision — DeepSeek V3.2 не умеет видеть картинки ──
+export class UnknownModelError extends Error {
+  code = 'UNKNOWN_MODEL';
+  constructor(id: string) {
+    super(`Неизвестная модель: ${id}`);
+  }
+}
+
+/**
+ * Разрешает id модели (включая 'auto') в конкретный ChatModelSpec.
+ * Явный выбор — уважается всегда, включая ошибку вместо молчаливой подмены,
+ * если модель не умеет то, что нужно для конкретного сообщения (см. VisionNotSupportedError).
+ */
+export function resolveChatModel(
+  modelId: string,
+  ctx: { prompt: string; hasImage: boolean; hasDocument: boolean; plan: string; logger?: FastifyBaseLogger },
+): ChatRouteResult {
+  const { prompt, hasImage, hasDocument, plan, logger } = ctx;
+
+  if (modelId !== AUTO_MODEL_ID) {
+    const spec = findModel('chat', modelId);
+    if (!spec) throw new UnknownModelError(modelId);
+    if (hasImage && !spec.capabilities?.vision) throw new VisionNotSupportedError(spec.label);
+    return { spec, viaAuto: false, billedCost: spec.cost };
+  }
+
+  // ── Диспетчер «Авто» ─────────────────────────────────────────────────────
+  const isPaid = plan !== 'FREE';
+
   if (hasImage) {
-    logger?.debug({ plan, model: OR_MODELS.haiku }, '[AIRouter] Image → Gemini Flash (vision)');
-    return {
-      provider: 'openrouter-haiku',
-      complexity: 'complex',
-      model: OR_MODELS.haiku,
-      fallbackModels: [OR_MODELS.gpt4oMini],
-      maxTokens: plan === 'FREE' ? 400 : undefined,
-    };
+    return autoResult(pick('gemini-2.5-flash', logger, 'Авто → картинка нужна vision-модель'));
   }
-
-  // ── Обычный чат (mode === 'chat') → Cloudflare Llama, резерв OpenRouter Llama ──
-  if (mode === 'chat' || (!mode && !hasDocument)) {
-    logger?.debug({ plan, provider: 'cloudflare' }, '[AIRouter] Std chat → Cloudflare Llama');
-    return {
-      provider: 'cloudflare',
-      complexity,
-      model: '@cf/meta/llama-3.1-8b-instruct-fast',
-      fallbackModels: [OR_MODELS.llama],
-      maxTokens: plan === 'FREE' ? 400 : undefined,
-    };
-  }
-
-  // ── Про-чат (mode === 'think') ──────────────────────────────────────────────
-  // Поисковые запросы → Sonar (на всех платных тарифах)
   if (isPaid && !hasDocument && isSearchQuery(prompt)) {
-    logger?.debug({ plan, model: OR_MODELS.sonar }, '[AIRouter] Pro search query → Sonar');
-    return {
-      provider: 'openrouter-sonar',
-      complexity: 'complex',
-      model: OR_MODELS.sonar,
-      fallbackModels: [OR_MODELS.deepseek, OR_MODELS.haiku],
-    };
+    return autoResult(pick('sonar', logger, 'Авто → похоже на поисковый запрос'));
   }
-
-  // Про-чат (включая документы): основная модель DeepSeek V3.2, резерв Gemini Flash → GPT-4o-mini.
-  logger?.debug({ plan, model: OR_MODELS.deepseek }, '[AIRouter] Pro chat → DeepSeek V3.2');
-  return {
-    provider: 'openrouter-deepseek',
-    complexity: 'complex',
-    model: OR_MODELS.deepseek,
-    fallbackModels: [OR_MODELS.haiku, OR_MODELS.gpt4oMini],
-    maxTokens: plan === 'FREE' ? 400 : undefined,
-  };
+  if (hasDocument || isComplexQuery(prompt)) {
+    return autoResult(pick('deepseek-v3.2', logger, 'Авто → сложный запрос/документ'));
+  }
+  return autoResult(pick('llama-3.1-fast', logger, 'Авто → простой запрос, экономим'));
 }
 
-export function selectProvider(complexity: Complexity): { provider: Provider; model: string } {
-  return complexity === 'simple'
-    ? { provider: 'openrouter-haiku', model: OR_MODELS.haiku }
-    : { provider: 'openrouter-deepseek', model: OR_MODELS.deepseek };
+// «Авто» — платная функция сама по себе (см. AUTO_MIN_COST в config/models.ts):
+// даже когда диспетчер выбрал бесплатную Llama, billedCost не опускается до 0.
+function autoResult(spec: ChatModelSpec): ChatRouteResult {
+  return { spec, viaAuto: true, billedCost: Math.max(spec.cost, AUTO_MIN_COST) };
 }
+
+function pick(id: string, logger: FastifyBaseLogger | undefined, why: string): ChatModelSpec {
+  const spec = CHAT_MODELS.find((m) => m.id === id);
+  if (!spec) throw new UnknownModelError(id);
+  logger?.debug({ model: spec.id }, `[AIRouter] ${why}`);
+  return spec;
+}
+
+// autoEligibleChatModels() реэкспортируется отсюда для удобства вызывающего кода
+export { autoEligibleChatModels };

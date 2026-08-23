@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { GhostIcon } from '@/components/icons/GhostIcon';
+import { WarningIcon } from '@/components/icons';
 
 export const metadata = {
   title: 'Условия использования — GhostLine AI',
@@ -96,9 +97,10 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-base font-medium text-white mb-3">5. Правила использования контента и ИИ</h2>
-            <div className="rounded-xl border border-[rgba(123,92,240,0.3)] bg-[rgba(123,92,240,0.06)] px-4 py-3 mb-4">
+            <div className="flex items-start gap-2 rounded-xl border border-[rgba(123,92,240,0.3)] bg-[rgba(123,92,240,0.06)] px-4 py-3 mb-4">
+              <WarningIcon size={16} className="flex-shrink-0 mt-0.5 text-accent" />
               <p className="text-[rgba(255,255,255,0.6)] text-[13px]">
-                ⚠ Контент создаётся нейросетевыми моделями. Результаты могут быть неточными,
+                Контент создаётся нейросетевыми моделями. Результаты могут быть неточными,
                 неполными или не соответствовать ожиданиям. GhostLine AI не несёт ответственности
                 за достоверность, качество или содержание сгенерированных материалов.
               </p>

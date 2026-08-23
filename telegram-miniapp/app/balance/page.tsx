@@ -15,7 +15,6 @@ interface PlanInfo {
   price: number;
   price_yearly: number;
   caspers_monthly: number;
-  pro_free_daily: number;
   badge: string | null;
   popular: boolean;
   features: string[];

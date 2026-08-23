@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import type { UserSession, ChatMsg, Mode } from './session.js';
+import type { UserSession, ChatMsg } from './session.js';
 
 const API_URL = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
 const WS_URL = API_URL.replace(/^http/, 'ws') + '/api/chat/stream';
@@ -27,7 +27,8 @@ export function streamChat(
   session: UserSession,
   params: {
     chatId: string;
-    mode: Extract<Mode, 'chat' | 'think'>;
+    /** Id модели из реестра (backend/src/config/models.ts), 'auto' по умолчанию — тот же формат, что WS-схема сайта. */
+    model: string;
     prompt: string;
     history: ChatMsg[];
     imageUrl?: string;
@@ -62,7 +63,7 @@ export function streamChat(
       ws.send(JSON.stringify({
         jwt: session.accessToken,
         chatId: params.chatId,
-        mode: params.mode,
+        model: params.model,
         prompt: params.prompt,
         history: params.history,
         ...(params.imageUrl ? { imageUrl: params.imageUrl } : {}),

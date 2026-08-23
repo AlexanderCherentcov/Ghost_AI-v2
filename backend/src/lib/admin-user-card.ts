@@ -7,7 +7,7 @@ import { USAGE_COUNTERS_SELECT } from './user-select.js';
 import type { InlineKeyboardMarkup } from './telegram-forum.js';
 
 const PLAN_ICON: Record<string, string> = {
-  FREE: '🆓', BASIC: '⭐', PRO: '🚀', VIP: '💎', ULTRA: '🔥',
+  FREE: '🆓', START: '🌱', BASIC: '⭐', PRO: '🚀', PRO_PLUS: '🚀', VIP: '💎', ULTRA: '🔥',
 };
 
 export function escHtml(s: string): string {

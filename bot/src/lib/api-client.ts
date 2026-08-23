@@ -28,9 +28,7 @@ export async function listChats(session: UserSession): Promise<ChatSummary[]> {
 }
 
 export async function createChat(session: UserSession, mode: Mode): Promise<ChatSummary> {
-  // Chat.mode различает только чаты-генерации в списке; оба текстовых режима сводятся к 'chat'.
-  const chatMode = mode === 'chat' || mode === 'think' ? 'chat' : mode;
-  const { data } = await client(session).post('/chats', { mode: chatMode });
+  const { data } = await client(session).post('/chats', { mode });
   return data;
 }
 
@@ -44,6 +42,59 @@ export async function getChatMessages(session: UserSession, chatId: string, limi
 }
 
 
+// ─── Реестр моделей (GET /plans → models) ────────────────────────────────────
+// Единственный источник правды — backend/src/config/models.ts. Бот не хранит
+// свой список/цены/лейблы, только читает отсюда — так же, как frontend/lib/api.ts.
+
+export interface ModelCapabilities {
+  vision?: boolean;
+  search?: boolean;
+  edit?: boolean;
+  imageToVideo?: boolean;
+  audio?: boolean;
+}
+export interface ChatModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  cost: number;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+}
+export interface ImageModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  cost: number;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+}
+export interface VideoModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+  cost: { '4s': number; '8s': number };
+}
+export interface ModelCatalog {
+  chat: ChatModelOption[];
+  image: ImageModelOption[];
+  video: VideoModelOption[];
+}
+
+let modelsCache: { data: ModelCatalog; fetchedAt: number } | null = null;
+const MODELS_CACHE_TTL_MS = 60_000;
+
+/** /plans не требует авторизации и одинаков для всех пользователей — кэшируем на минуту, чтобы не дёргать бэкенд на каждый тап меню. */
+export async function getModels(): Promise<ModelCatalog> {
+  if (modelsCache && Date.now() - modelsCache.fetchedAt < MODELS_CACHE_TTL_MS) return modelsCache.data;
+  const { data } = await axios.get(`${API_URL}/api/plans`, { proxy: false });
+  const models = data.models as ModelCatalog;
+  modelsCache = { data: models, fetchedAt: Date.now() };
+  return models;
+}
+
 // ─── Задачи генерации ───────────────────────────────────────────────────────
 
 export interface GenJobResult {
@@ -52,8 +103,8 @@ export interface GenJobResult {
   error: string | null;
 }
 
-export async function startVisionJob(session: UserSession, chatId: string, prompt: string, sourceImageUrl?: string): Promise<string> {
-  const { data } = await client(session).post('/generate/vision', { prompt, chatId, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
+export async function startVisionJob(session: UserSession, chatId: string, prompt: string, model: string, sourceImageUrl?: string): Promise<string> {
+  const { data } = await client(session).post('/generate/vision', { prompt, chatId, model, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
   return data.jobId;
 }
 
@@ -85,13 +136,19 @@ export async function generateLyrics(session: UserSession, topic: string, style:
   return data.lyrics as string;
 }
 
+/** Транскрипт пользователя неизвестен заранее — voice.worker.ts пишет его в job.prompt после распознавания речи. */
+export async function startVoiceJob(session: UserSession, chatId: string, audioUrl: string): Promise<string> {
+  const { data } = await client(session).post('/generate/voice', { chatId, audioUrl });
+  return data.jobId;
+}
+
 export async function startReelJob(
   session: UserSession, chatId: string, prompt: string, options: VideoOptions, videoImageUrl?: string,
 ): Promise<string> {
   const { data } = await client(session).post('/generate/reel', {
     prompt,
     chatId,
-    videoModel: options.videoModel,
+    model: options.videoModel,
     videoDuration: options.duration,
     videoAspectRatio: options.aspectRatio,
     videoEnableAudio: options.enableAudio,
@@ -132,6 +189,29 @@ export async function createPlanPayment(session: UserSession, plan: string, bill
 export async function createCasperPayment(session: UserSession, amount: number): Promise<string> {
   const { data } = await client(session).post('/payments/caspers/create', { amount });
   return data.paymentUrl;
+}
+
+// ─── История списания/начисления Caspers (GET /payments/caspers/history) ────
+// Тот же эндпоинт, что и у сайта (frontend/lib/api.ts:casperHistory) — единая
+// история, единая пагинация.
+
+export interface CasperTransaction {
+  id: string;
+  amount: number; // положительное = начисление, отрицательное = списание
+  reason: string; // id модели из реестра либо системный код (topup/welcome_bonus/refund_<reason> и т.п.)
+  createdAt: string;
+}
+
+export interface CasperHistoryPage {
+  transactions: CasperTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export async function getCasperHistory(session: UserSession, page = 1): Promise<CasperHistoryPage> {
+  const { data } = await client(session).get(`/payments/caspers/history?page=${page}`);
+  return data;
 }
 
 export async function pollJob(

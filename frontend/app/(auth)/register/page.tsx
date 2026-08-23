@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { AuthShell, ConsentCheckbox, OAuthButton } from '@/components/auth/AuthShell';
 import { freeTierTagline } from '@/lib/pricing';
 import Link from 'next/link';
 
@@ -52,7 +51,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     api.payments.plans()
-      .then((data) => setTagline(freeTierTagline(data.free.welcome_caspers, data.free.limits.std_messages_daily)))
+      .then((data) => setTagline(freeTierTagline(data.free.welcome_caspers)))
       .catch(() => {});
   }, []);
 
@@ -80,155 +79,52 @@ export default function RegisterPage() {
 
   if (tgLoading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
-        <GhostIcon size={48} className="text-accent animate-float mx-auto" animated />
-        <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
-      </div>
+      <AuthShell>
+        <div className="flex flex-col items-center justify-center gap-4 py-10">
+          <GhostIcon size={48} className="text-accent animate-float" animated />
+          <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
+        </div>
+      </AuthShell>
     );
   }
 
   if (tgError) {
     return (
-      <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <GhostIcon size={48} className="text-accent" />
-        <p className="text-white font-medium">Не удалось войти через Telegram</p>
-        <p className="text-sm text-[rgba(255,255,255,0.4)]">Закройте и откройте приложение заново</p>
-        <button
-          onClick={() => { setTgError(false); setTgLoading(false); window.location.reload(); }}
-          className="mt-2 px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium"
-        >
-          Попробовать снова
-        </button>
-      </div>
+      <AuthShell>
+        <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+          <GhostIcon size={48} className="text-accent" />
+          <p className="text-white font-medium">Не удалось войти через Telegram</p>
+          <p className="text-sm text-[rgba(255,255,255,0.4)]">Закройте и откройте приложение заново</p>
+          <button
+            onClick={() => { setTgError(false); setTgLoading(false); window.location.reload(); }}
+            className="mt-2 px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium"
+          >
+            Попробовать снова
+          </button>
+        </div>
+      </AuthShell>
     );
   }
 
-  const tooltipContent = !consented ? 'Подтвердите пользовательское соглашение' : '';
-
   return (
-    <div className="min-h-screen bg-[var(--bg-void)] flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-[380px]"
-      >
-        <div className="card" style={{ borderRadius: '20px', padding: '32px' }}>
-          <div className="text-center mb-6">
-            <GhostIcon size={48} className="text-accent animate-float mx-auto mb-4" animated />
-            <h1 className="text-xl font-medium text-white mb-1">Создать аккаунт</h1>
-            <p className="text-sm text-[rgba(255,255,255,0.3)] italic">
-              Добро пожаловать в тень.
-            </p>
-          </div>
+    <AuthShell tagline={tagline}>
+      <h1 className="font-display text-[26px] font-bold text-white mb-1.5">Создать аккаунт</h1>
+      <p className="text-sm text-[rgba(255,255,255,0.5)] mb-7">Присоединяйтесь — первые Caspers уже на счету</p>
 
-          {/* Чекбокс согласия — должен быть отмечен, прежде чем кнопки OAuth станут активны */}
-          <label className="flex items-start gap-3 cursor-pointer group mb-1">
-            <div className="mt-0.5 flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={consented}
-                onChange={(e) => setConsented(e.target.checked)}
-                className="sr-only"
-              />
-              <div
-                className="w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all"
-                style={{
-                  borderColor: consented ? 'var(--accent)' : 'var(--border-hover)',
-                  background: consented ? 'var(--accent)' : 'transparent',
-                }}
-              >
-                {consented && (
-                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                    <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-            </div>
-            <span className="text-[12px] text-[rgba(255,255,255,0.35)] leading-relaxed group-hover:text-[rgba(255,255,255,0.5)] transition-colors select-none">
-              Я принимаю{' '}
-              <Link href="/terms" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>условия использования</Link>
-              {' '}и даю согласие на обработку персональных данных в соответствии с{' '}
-              <Link href="/privacy" className="text-accent hover:opacity-80" onClick={(e) => e.stopPropagation()}>политикой конфиденциальности</Link>
-            </span>
-          </label>
+      <ConsentCheckbox consented={consented} onChange={setConsented} />
 
-          <div className="space-y-3 mt-4">
-            <Tooltip content={tooltipContent} side="top">
-              {consented ? (
-                <a
-                  href={`${API_URL}/api/auth/yandex`}
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-                >
-                  <YandexIcon />
-                  Зарегистрироваться через Яндекс
-                </a>
-              ) : (
-                <button
-                  disabled
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                >
-                  <YandexIcon />
-                  Зарегистрироваться через Яндекс
-                </button>
-              )}
-            </Tooltip>
+      <div className="space-y-3 mt-5">
+        <OAuthButton href={`${API_URL}/api/auth/yandex`} enabled={consented} icon={<YandexIcon />} label="Зарегистрироваться через Яндекс" />
+        <OAuthButton href={`${API_URL}/api/auth/google`} enabled={consented} icon={<GoogleIcon />} label="Зарегистрироваться через Google" />
+        <OAuthButton href="https://t.me/GhostSuperAI_bot?start=auth" external enabled={consented} icon={<TelegramIcon />} label="Зарегистрироваться через Telegram" />
+      </div>
 
-            <Tooltip content={tooltipContent} side="top">
-              {consented ? (
-                <a
-                  href={`${API_URL}/api/auth/google`}
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-                >
-                  <GoogleIcon />
-                  Зарегистрироваться через Google
-                </a>
-              ) : (
-                <button
-                  disabled
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                >
-                  <GoogleIcon />
-                  Зарегистрироваться через Google
-                </button>
-              )}
-            </Tooltip>
-
-            <Tooltip content={tooltipContent} side="top">
-              {consented ? (
-                <a
-                  href="https://t.me/GhostSuperAI_bot?start=auth"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border-hover)] bg-transparent text-sm text-[rgba(255,255,255,0.7)] hover:bg-[var(--bg-elevated)] hover:text-white transition-all"
-                >
-                  <TelegramIcon />
-                  Зарегистрироваться через Telegram
-                </a>
-              ) : (
-                <button
-                  disabled
-                  className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-[var(--border)] bg-transparent text-sm text-[rgba(255,255,255,0.2)] cursor-not-allowed"
-                >
-                  <TelegramIcon />
-                  Зарегистрироваться через Telegram
-                </button>
-              )}
-            </Tooltip>
-          </div>
-
-          <p className="text-center text-xs text-[rgba(255,255,255,0.3)] mt-5">
-            Уже есть аккаунт?{' '}
-            <Link href="/login" className="text-accent hover:opacity-80">
-              Войти
-            </Link>
-          </p>
-        </div>
-
-        {tagline && (
-          <p className="text-center text-xs text-[rgba(255,255,255,0.15)] mt-6">{tagline}</p>
-        )}
-      </motion.div>
-    </div>
+      <p className="text-center text-[13.5px] text-[rgba(255,255,255,0.45)] mt-6">
+        Уже есть аккаунт?{' '}
+        <Link href="/login" className="text-[#c4b5fd] hover:opacity-80 font-medium">
+          Войти
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

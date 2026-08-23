@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { checkResets, checkAndDeduct, refundCaspers, resolveVideoRequestType } from '../services/tokens.js';
-import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
+import { checkResets, checkAndDeduct, refundCaspers } from '../services/tokens.js';
+import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
+import { findModel, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID, type VideoDurationChoice } from '../config/models.js';
+import { visionQueue, soundQueue, reelQueue, voiceQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
@@ -18,15 +20,25 @@ const generateSchema = z.object({
   duration: z.number().int().min(5).max(30).optional(),
   size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional(),
   sourceImageUrl: z.string().url().optional(), // для режима редактирования изображения
-  // Опции для видео
-  // motion = Veo 3.1 Fast, cinema = Veo 3.1 Pro, reality = Kling V-2.5
-  videoModel: z.enum(['standard', 'pro', 'motion', 'cinema', 'reality']).optional(),
+  // id модели из реестра (config/models.ts) — для картинок и видео.
+  model: z.string().optional(),
+  // Соотношение сторон для картинок — реально прокидывается только для Gemini-семейства
+  // (image_config.aspect_ratio через OpenRouter chat/completions, подтверждено в доках
+  // openrouter.ai на момент добавления); для остальных моделей поле молча игнорируется
+  // на стороне vision.worker.ts, не выдаём ошибку, чтобы не ломать уже существующие клиенты.
+  imageAspectRatio: z.enum(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']).optional(),
+  // Опции для видео — расширенный набор соотношений/разрешений отражает реальные
+  // возможности конкретных моделей (сверено с доками goapi.ai на момент добавления,
+  // см. per-model таблицу в frontend/lib/video-model-params.ts); конкретная модель
+  // использует только свою часть набора, буду отклонена goapi при явном рассинхроне.
   videoDuration: z.enum(['4s', '8s']).optional(),
-  videoAspectRatio: z.enum(['16:9', '9:16']).optional(),
+  videoAspectRatio: z.enum(['16:9', '9:16', '1:1', '21:9', '9:21', '4:3', '3:4']).optional(),
   videoEnableAudio: z.boolean().optional(),
-  videoResolution: z.enum(['720p', '1080p']).optional(),
+  videoResolution: z.enum(['480p', '720p', '1080p', '768p']).optional(),
   videoImageUrl: z.string().url().optional(), // исходное изображение для image-to-video
   negativePrompt: z.string().max(2500).optional(),
+  // Только Kling — простой пресет камеры (см. buildCameraControl в providers/goapi.ts).
+  videoCameraPreset: z.enum(['static', 'zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'tilt_up', 'tilt_down', 'orbit']).optional(),
   // Опции для музыки
   musicMode: z.enum(['short', 'long', 'quality', 'suno']).optional(),
   musicDuration: z.number().int().min(15).max(60).optional(),
@@ -36,6 +48,8 @@ const generateSchema = z.object({
   sunoStyle: z.string().max(200).optional(),
   sunoTitle: z.string().max(100).optional(),
   sunoInstrumental: z.boolean().optional(),
+  // Голосовой чат: URL записанного голосового сообщения (уже загружен через /upload/audio)
+  audioUrl: z.string().url().optional(),
 });
 
 /**
@@ -76,7 +90,19 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, size, chatId, sourceImageUrl } = generateSchema.parse(request.body);
+      const { prompt, chatId, sourceImageUrl, model, imageAspectRatio } = generateSchema.parse(request.body);
+
+      const modelId = model ?? DEFAULT_IMAGE_MODEL_ID;
+      const spec = findModel('image', modelId);
+      if (!spec) return reply.code(400).send({ error: 'Неизвестная модель изображения', code: 'UNKNOWN_MODEL' });
+
+      const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
+      if (!userPlan || !planAtLeast(userPlan.plan, spec.minPlan)) {
+        return reply.code(403).send({ error: `Модель «${spec.label}» доступна с тарифа ${spec.minPlan}`, code: 'PLAN_RESTRICTED' });
+      }
+      if (sourceImageUrl && !spec.capabilities?.edit) {
+        return reply.code(400).send({ error: `Модель «${spec.label}» не поддерживает редактирование изображений`, code: 'MODEL_NO_EDIT' });
+      }
 
       // Rate limit на пользователя (3 изображения/мин)
       if (!await checkGenRateLimit(userId)) {
@@ -96,20 +122,23 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       await checkResets(userId);
 
       // ── Проверка кэша изображений ──────────────────────────────────────────
-      const promptHash = crypto.createHash('sha256').update(prompt.trim().toLowerCase()).digest('hex');
+      // Ключ кэша включает модель и соотношение сторон — иначе запрос 9:16 мог бы
+      // вернуть закэшированную картинку 16:9 от того же промпта.
+      const mediaCacheMode = `vision:${modelId}:${imageAspectRatio ?? 'default'}`;
+      const promptHash = crypto.createHash('sha256').update(`${modelId}:${imageAspectRatio ?? 'default'}:${prompt.trim().toLowerCase()}`).digest('hex');
 
       const userMadeThis = await prisma.userImageRequest.findUnique({
         where: { userId_promptHash: { userId, promptHash } },
       });
 
       if (!userMadeThis) {
-        // Проверяем общий кэш (сгенерировано любым пользователем)
-        const mediaCached = await getMediaCached('vision', prompt);
+        // Проверяем общий кэш (сгенерировано любым пользователем на этой же модели)
+        const mediaCached = await getMediaCached(mediaCacheMode, prompt);
         if (mediaCached.hit) {
           // Попадание в кэш — Caspers всё равно списываем (это наша экономия, не пользователя)
-          const cacheRequestType = sourceImageUrl ? 'image_edit' : 'image_generate';
+          let deductResult;
           try {
-            await checkAndDeduct(userId, cacheRequestType);
+            deductResult = await checkAndDeduct(userId, 'image', spec.cost, spec.id);
           } catch (err: any) {
             return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_IMAGES' });
           }
@@ -119,21 +148,22 @@ export default async function generateRoutes(fastify: FastifyInstance) {
               data: { chatId, userId, role: 'user', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: null },
             }).catch(() => {});
             await prisma.message.create({
-              data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: mediaCached.url },
+              data: { chatId, userId, role: 'assistant', content: encrypt(prompt), mode: 'vision', tokensCost: 0, mediaUrl: mediaCached.url, provider: modelId },
             }).catch(() => {});
           }
           const job = await prisma.generateJob.create({
             data: { userId, mode: 'vision', prompt, status: 'processing' },
           });
           completeCachedJobAfterDelay(job.id, mediaCached.url, 5_000 + Math.random() * 4_000);
+          void deductResult;
           return reply.code(202).send({ jobId: job.id });
         }
       }
 
       // ── Новая генерация — проверка лимитов и списание ──────────────────────
-      const requestType = sourceImageUrl ? 'image_edit' : 'image_generate';
+      let deductResult;
       try {
-        await checkAndDeduct(userId, requestType);
+        deductResult = await checkAndDeduct(userId, 'image', spec.cost, spec.id);
       } catch (err: any) {
         return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_IMAGES' });
       }
@@ -145,8 +175,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         }).catch((e) => console.error('[generate/vision] Failed to save user message:', e.message));
       }
 
-      const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
-      const effectiveSize = userPlan?.plan === 'FREE' ? '1024x1024' : (size ?? '1024x1024');
+      const effectiveSize = userPlan.plan === 'FREE' ? '1024x1024' : '1024x1024'; // все текущие image-модели квадратные — см. TODO в models.ts про соотношения сторон
 
       const job = await prisma.generateJob.create({
         data: { userId, mode: 'vision', prompt },
@@ -158,10 +187,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         prompt,
         chatId: chatId ?? null,
         size: effectiveSize,
+        modelId,
+        mediaCacheMode,
         ...(sourceImageUrl ? { sourceImageUrl } : {}),
+        ...(imageAspectRatio ? { imageAspectRatio } : {}),
       }).catch(async (err: any) => {
         // Ошибка очереди: возвращаем Caspers и уведомляем админа
-        await refundCaspers(userId, requestType).catch(() => {});
+        await refundCaspers(userId, deductResult.caspersSpent, spec.id).catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
         notifyApiError({
           userId,
@@ -207,9 +239,11 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Проверяем лимиты музыки и списываем
+      // Проверяем лимиты музыки и списываем.
+      // Музыка пока вне реестра моделей (см. план) — фикс. цена из config/plans.ts.
+      let deductResult;
       try {
-        await checkAndDeduct(userId, 'music_generate', 1);
+        deductResult = await checkAndDeduct(userId, 'music', CASPER_COSTS.music_generate, 'music_generate');
       } catch (err: any) {
         return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_MUSIC' });
       }
@@ -252,7 +286,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         sunoTitle: sunoTitle,
         sunoInstrumental: sunoInstrumental,
       }).catch(async (err: any) => {
-        await refundCaspers(userId, 'music_generate').catch(() => {});
+        await refundCaspers(userId, deductResult.caspersSpent, 'music_generate').catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
         notifyApiError({
           userId,
@@ -277,15 +311,41 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
     handler: async (request, reply) => {
       const { userId } = request.user;
-      const { prompt, chatId, videoModel, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt } = generateSchema.parse(request.body);
+      const { prompt, chatId, model, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt, videoCameraPreset } = generateSchema.parse(request.body);
 
-      const effectiveModel = videoModel ?? 'standard';
-      const effectiveDuration = videoDuration ?? '8s';
-      const videoRequestType = resolveVideoRequestType(effectiveModel, effectiveDuration);
+      const modelId = model ?? DEFAULT_VIDEO_MODEL_ID;
+      const spec = findModel('video', modelId);
+      if (!spec) return reply.code(400).send({ error: 'Неизвестная видео-модель', code: 'UNKNOWN_MODEL' });
 
-      // Получаем тариф пользователя — FREE получает Kling, платные — Veo3.1
+      const effectiveDuration: VideoDurationChoice = videoDuration ?? '8s';
+
       const userRecord = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
       const userPlan = userRecord?.plan ?? 'FREE';
+
+      // Явный лок вместо молчаливой подмены модели: если план не дотягивает —
+      // говорим прямо, а не тихо генерируем на Kling по цене выбранной модели.
+      if (!planAtLeast(userPlan, spec.minPlan)) {
+        return reply.code(403).send({ error: `Модель «${spec.label}» доступна с тарифа ${spec.minPlan}`, code: 'PLAN_RESTRICTED' });
+      }
+      if (videoImageUrl && !spec.capabilities?.imageToVideo) {
+        return reply.code(400).send({ error: `Модель «${spec.label}» не поддерживает image-to-video`, code: 'MODEL_NO_IMG2VIDEO' });
+      }
+      // SkyReels/Framepack у провайдера вообще не имеют text-to-video режима —
+      // без этой проверки запрос без картинки долетел бы до GoAPI и упал там
+      // с невнятной 4xx вместо понятного сообщения пользователю здесь.
+      if (!videoImageUrl && spec.capabilities?.imageRequired) {
+        return reply.code(400).send({ error: `Модель «${spec.label}» работает только по фото — прикрепите изображение`, code: 'MODEL_IMAGE_REQUIRED' });
+      }
+      // Caspers-цена не зависит от разрешения (см. models.ts) — она посчитана под
+      // конкретный набор resolutions в ui-параметрах модели. Список в UI можно обойти
+      // прямым запросом к API, поэтому здесь та же проверка, что уже стоит для imageUrl —
+      // без нее подмена resolution на более дорогое по факту у провайдера продаёт видео
+      // ниже себестоимости.
+      if (videoResolution && spec.ui.resolutions.length > 0 && !spec.ui.resolutions.includes(videoResolution)) {
+        return reply.code(400).send({ error: `Модель «${spec.label}» не поддерживает разрешение ${videoResolution}`, code: 'MODEL_UNSUPPORTED_RESOLUTION' });
+      }
+
+      const cost = spec.cost(effectiveDuration);
 
       // Сбрасываем счётчики, если период закончился
       await checkResets(userId);
@@ -305,11 +365,12 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Проверка кэша только для text-to-video (image-to-video кэш не использует)
+      const mediaCacheMode = `reel:${modelId}:${effectiveDuration}`;
       if (!videoImageUrl) {
-        const mediaCached = await getMediaCached('reel', prompt);
+        const mediaCached = await getMediaCached(mediaCacheMode, prompt);
         if (mediaCached.hit) {
           try {
-            await checkAndDeduct(userId, videoRequestType);
+            await checkAndDeduct(userId, 'video', cost, spec.id);
           } catch (err: any) {
             return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
           }
@@ -325,8 +386,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Проверяем лимиты и списываем
+      let deductResult;
       try {
-        await checkAndDeduct(userId, videoRequestType);
+        deductResult = await checkAndDeduct(userId, 'video', cost, spec.id);
       } catch (err: any) {
         return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
       }
@@ -346,24 +408,93 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         jobId: job.id,
         userId,
         prompt,
-        userPlan,
         chatId: chatId ?? null,
-        videoModel: effectiveModel,
+        modelId,
+        mediaCacheMode,
         duration: effectiveDuration,
         aspectRatio: videoAspectRatio ?? '16:9',
-        enableAudio: videoEnableAudio ?? false,
+        // GoAPI берёт за звук отдельно (у Kling/Veo — 2x надбавка) — наша Caspers-цена
+        // это не учитывает, поэтому доверять клиентскому videoEnableAudio нельзя: включаем
+        // звук только там, где модель реально заявлена как поддерживающая его в реестре.
+        enableAudio: spec.capabilities?.audio ? (videoEnableAudio ?? false) : false,
         resolution: videoResolution ?? '720p',
         imageUrl: videoImageUrl ?? null,
         negativePrompt,
+        cameraPreset: videoCameraPreset,
       }).catch(async (err: any) => {
-        await refundCaspers(userId, videoRequestType).catch(() => {});
+        await refundCaspers(userId, deductResult.caspersSpent, spec.id).catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
         notifyApiError({
           userId,
           userName: userInfo?.name,
           operation: 'video_gen',
           error: err.message,
-          context: `model=${effectiveModel} duration=${effectiveDuration}`,
+          context: `model=${modelId} duration=${effectiveDuration}`,
+        }).catch(() => {});
+        throw err;
+      });
+
+      await prisma.generateJob.update({
+        where: { id: job.id },
+        data: { bullJobId: bullJob.id },
+      });
+
+      return reply.code(202).send({ jobId: job.id });
+    },
+  });
+
+  // ── Voice (голосовой чат) ─────────────────────────────────────────────────
+  // ⚠️ Цена voice_exchange в CASPER_COSTS — заглушка, см. комментарий в config/plans.ts.
+  fastify.post('/generate/voice', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { userId } = request.user;
+      const { chatId, audioUrl } = generateSchema.parse(request.body);
+
+      if (!audioUrl) return reply.code(400).send({ error: 'audioUrl обязателен', code: 'INVALID_REQUEST' });
+
+      // Сбрасываем счётчики, если период закончился
+      await checkResets(userId);
+
+      // Rate limit — тот же лимит, что у картинок (3/мин)
+      if (!await checkGenRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      // Блокировка задачи: отклоняем, если уже выполняется голосовая задача
+      const activeJob = await prisma.generateJob.findFirst({
+        where: { userId, mode: 'voice', status: { in: ['pending', 'processing'] } },
+        select: { id: true },
+      });
+      if (activeJob) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
+      }
+
+      let deductResult;
+      try {
+        deductResult = await checkAndDeduct(userId, 'voice', CASPER_COSTS.voice_exchange, 'voice_exchange');
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VOICE' });
+      }
+
+      // prompt пока пуст — заполнится транскриптом в voice.worker.ts после распознавания речи
+      const job = await prisma.generateJob.create({
+        data: { userId, mode: 'voice', prompt: '' },
+      });
+
+      const bullJob = await voiceQueue.add('generate-voice', {
+        jobId: job.id,
+        userId,
+        chatId: chatId ?? null,
+        audioUrl,
+      }).catch(async (err: any) => {
+        await refundCaspers(userId, deductResult.caspersSpent, 'voice_exchange').catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'voice_gen',
+          error: err.message,
         }).catch(() => {});
         throw err;
       });
@@ -438,9 +569,12 @@ Return ONLY the lyrics text, nothing else.`;
 
       await checkResets(userId);
 
-      // Списываем как стандартное 4-секундное видео
+      // Списываем как стандартное 4-секундное видео (используем цену Kling 4s из реестра,
+      // чтобы не заводить отдельную магическую константу).
+      const lipsyncCost = findModel('video', 'kling-v2.5')!.cost('4s');
+      let deductResult;
       try {
-        await checkAndDeduct(userId, 'video_std_4s', 1);
+        deductResult = await checkAndDeduct(userId, 'video', lipsyncCost, 'lipsync');
       } catch (err: any) {
         return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VIDEOS' });
       }
@@ -449,7 +583,7 @@ Return ONLY the lyrics text, nothing else.`;
       try {
         resultUrl = await generateLipSync(videoUrl, audioUrl);
       } catch (err: any) {
-        await refundCaspers(userId, 'video_std_4s').catch(() => {});
+        await refundCaspers(userId, deductResult.caspersSpent, 'lipsync').catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
         notifyApiError({
           userId,

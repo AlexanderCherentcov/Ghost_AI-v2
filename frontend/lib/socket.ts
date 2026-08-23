@@ -20,7 +20,8 @@ export interface WSChunk {
 
 export interface WSMessage {
   chatId: string;
-  mode: 'chat' | 'think';
+  // id модели из реестра (backend/src/config/models.ts), 'auto' по умолчанию.
+  model: string;
   prompt: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   // TODO: перенести в WS-хендшейк
@@ -29,7 +30,6 @@ export interface WSMessage {
   fileContent?: string; // извлечённый текст документа
   fileName?: string;    // исходное имя файла
   fileLang?: string;    // язык для code-fence (js, python, …)
-  preferredModel?: 'haiku' | 'deepseek';
 }
 
 let ws: WebSocket | null = null;

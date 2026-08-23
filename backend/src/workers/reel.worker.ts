@@ -1,19 +1,19 @@
 import { Worker, type Job } from 'bullmq';
-import { createWriteStream, mkdirSync, unlinkSync } from 'node:fs';
+import { createWriteStream, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
-import { generateVideoVeo3, generateVideoKling, type VeoDuration, type VeoResolution } from '../services/providers/goapi.js';
-
-type VideoModelInput = 'standard' | 'pro' | 'motion' | 'cinema' | 'reality';
+import { generateVideoVeo3, generateVideoKling, generateVideoGeneric, type VideoAspectRatio, type VideoResolution } from '../services/providers/goapi.js';
+import { generateVideoSora, type SoraModel } from '../services/providers/openai-video.js';
+import { findModel, type VideoDurationChoice } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 
 // ── Video сохраняем на наш сервер — GoAPI хранит файлы только 3 дня ───────────
-async function saveVideoToDisk(url: string): Promise<string> {
+async function saveVideoUrlToDisk(url: string): Promise<string> {
   const dir = path.join(process.cwd(), 'uploads', 'videos');
   mkdirSync(dir, { recursive: true });
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.mp4`;
@@ -33,19 +33,30 @@ async function saveVideoToDisk(url: string): Promise<string> {
   return filename;
 }
 
+/** Sora отдаёт готовые байты сразу (нет промежуточного внешнего URL от GoAPI) — пишем напрямую. */
+function saveVideoBufferToDisk(buffer: Buffer): string {
+  const dir = path.join(process.cwd(), 'uploads', 'videos');
+  mkdirSync(dir, { recursive: true });
+  const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.mp4`;
+  writeFileSync(path.join(dir, filename), buffer);
+  return filename;
+}
+
 interface ReelJob {
   jobId: string;
   userId: string;
   prompt: string;
-  userPlan?: string;
   chatId: string | null;
-  videoModel?: VideoModelInput;
-  duration?: VeoDuration;
-  aspectRatio?: '16:9' | '9:16';
-  enableAudio?: boolean;
-  resolution?: VeoResolution;
+  modelId: string;
+  mediaCacheMode: string;
+  duration: VideoDurationChoice;
+  aspectRatio: VideoAspectRatio;
+  enableAudio: boolean;
+  resolution: VideoResolution;
   imageUrl?: string | null;
   negativePrompt?: string;
+  /** Только Kling — простой пресет камеры, см. buildCameraControl в providers/goapi.ts. */
+  cameraPreset?: string;
 }
 
 export function startReelWorker() {
@@ -53,14 +64,8 @@ export function startReelWorker() {
     'reel',
     async (job: Job<ReelJob>) => {
       const {
-        jobId, userId, prompt, userPlan = 'FREE', chatId,
-        videoModel = 'standard',
-        duration = '8s',
-        aspectRatio = '16:9',
-        enableAudio = false,
-        resolution = '720p',
-        imageUrl,
-        negativePrompt,
+        jobId, userId, prompt, chatId, modelId, mediaCacheMode,
+        duration, aspectRatio, enableAudio, resolution, imageUrl, negativePrompt, cameraPreset,
       } = job.data;
 
       await prisma.generateJob.update({
@@ -68,33 +73,47 @@ export function startReelWorker() {
         data: { status: 'processing' },
       });
 
+      const spec = findModel('video', modelId);
+      if (!spec) throw new Error(`[ReelWorker] Unknown video model: ${modelId}`);
+
       const genMode = imageUrl ? 'img2video' : 'txt2video';
-      const isFree = userPlan === 'FREE';
+      console.info(`[ReelWorker] ${spec.id} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
 
-      // Определяем итоговый движок:
-      // - FREE-тариф всегда → Kling (независимо от выбора)
-      // - reality → Kling
-      // - motion/standard → Veo3.1 Fast
-      // - cinema/pro → Veo3.1 Pro
-      const useKling = isFree || videoModel === 'reality';
-      const veoModel: 'standard' | 'pro' =
-        (videoModel === 'pro' || videoModel === 'cinema') ? 'pro' : 'standard';
+      // Sora — прямой провайдер OpenAI, отдаёт готовые байты, а не URL у GoAPI.
+      // Локальный путь сразу окончательный, фонового докачивания не требуется.
+      if (spec.provider === 'openai-direct') {
+        const soraModel = spec.providerModel as SoraModel | undefined;
+        if (soraModel !== 'sora-2' && soraModel !== 'sora-2-pro') {
+          throw new Error(`[ReelWorker] ${spec.id}: providerModel не задан или не Sora`);
+        }
+        // Sora реально поддерживает только 16:9/9:16 (см. openai-video.ts) — наш общий
+        // тип соотношений шире (для других моделей), сужаем здесь с безопасным дефолтом.
+        const soraAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
+        const buffer = await generateVideoSora(soraModel, prompt, { duration, aspectRatio: soraAspectRatio });
+        const filename = saveVideoBufferToDisk(buffer);
+        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+        const localUrl = `${API_BASE}/videos/${filename}`;
 
+        await finalizeJob(jobId, chatId, userId, prompt, spec.id, localUrl, mediaCacheMode, !imageUrl);
+        return { mediaUrl: localUrl };
+      }
+
+      // ── GoAPI (Kling / Veo3.1 / Seedance / Hailuo / Wan) ────────────────────
       let externalUrl: string;
-
-      if (useKling) {
+      if (spec.goapiModel === 'kling') {
         const klingDuration = duration === '4s' ? 5 : 10;
-        console.info(`[ReelWorker] ${isFree ? 'FREE' : 'Reality'} → Kling V-2.5 | ${genMode} | ${klingDuration}s | audio=${enableAudio}`);
         externalUrl = await generateVideoKling(prompt, {
           duration: klingDuration,
           aspectRatio,
           enableAudio,
           imageUrl: imageUrl ?? undefined,
           negativePrompt: negativePrompt || undefined,
+          cameraPreset: cameraPreset || undefined,
+          mode: spec.klingMode,
+          version: spec.klingVersion,
         });
-      } else {
-        // Платный тариф → Veo3.1 (Fast для motion/standard, Pro для cinema/pro)
-        console.info(`[ReelWorker] Veo3.1 ${veoModel} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
+      } else if (spec.goapiModel === 'veo3.1') {
+        const veoModel: 'standard' | 'pro' = spec.goapiTaskType === 'veo3.1-video' ? 'pro' : 'standard';
         externalUrl = await generateVideoVeo3(prompt, {
           model: veoModel,
           duration,
@@ -104,51 +123,28 @@ export function startReelWorker() {
           imageUrl: imageUrl ?? undefined,
           negativePrompt: negativePrompt || undefined,
         });
-      }
-
-      // ── Сразу помечаем done с внешним URL ──────────────────────────────────
-      await prisma.generateJob.update({
-        where: { id: jobId },
-        data: { status: 'done', mediaUrl: externalUrl },
-      });
-
-      // ── Сохраняем сообщение в историю чата ─────────────────────────────────
-      let messageId: string | undefined;
-      if (chatId) {
-        const msg = await prisma.message.create({
-          data: {
-            chatId, userId, role: 'assistant',
-            content: encrypt(prompt), mode: 'reel',
-            tokensCost: 0, mediaUrl: externalUrl,
-          },
-        }).catch((e) => {
-          console.error('[ReelWorker] Failed to save assistant message:', e.message);
-          return null;
+      } else {
+        externalUrl = await generateVideoGeneric(spec.goapiModel, {
+          prompt, duration, aspectRatio, enableAudio, resolution,
+          imageUrl: imageUrl ?? undefined,
+          negativePrompt,
         });
-        messageId = msg?.id;
       }
 
-      // ── Кешируем только text-to-video (image-to-video зависит от картинки) ─
-      if (!imageUrl) setMediaCached('reel', prompt, externalUrl).catch(() => {});
+      // Сразу помечаем done с внешним URL — не ждём фоновой докачки, чтобы
+      // пользователь увидел результат как можно раньше.
+      const messageId = await finalizeJob(jobId, chatId, userId, prompt, spec.id, externalUrl, mediaCacheMode, !imageUrl);
 
-      // ── Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!) ───────
-      saveVideoToDisk(externalUrl).then(async (filename) => {
+      // Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!)
+      saveVideoUrlToDisk(externalUrl).then(async (filename) => {
         const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
         const localUrl = `${API_BASE}/videos/${filename}`;
 
-        await prisma.generateJob.update({
-          where: { id: jobId },
-          data: { mediaUrl: localUrl },
-        }).catch(() => {});
-
+        await prisma.generateJob.update({ where: { id: jobId }, data: { mediaUrl: localUrl } }).catch(() => {});
         if (messageId) {
-          await prisma.message.update({
-            where: { id: messageId },
-            data: { mediaUrl: localUrl },
-          }).catch(() => {});
+          await prisma.message.update({ where: { id: messageId }, data: { mediaUrl: localUrl } }).catch(() => {});
         }
-
-        setMediaCached('reel', prompt, localUrl).catch(() => {});
+        if (!imageUrl) setMediaCached(mediaCacheMode, prompt, localUrl).catch(() => {});
         console.info(`[ReelWorker] Video saved to disk: ${filename}`);
       }).catch((err: any) => {
         console.warn('[ReelWorker] Background disk save failed:', err.message);
@@ -156,10 +152,7 @@ export function startReelWorker() {
 
       return { mediaUrl: externalUrl };
     },
-    {
-      connection: bullmqConnection,
-      concurrency: 2,
-    }
+    { connection: bullmqConnection, concurrency: 2 },
   );
 
   worker.on('failed', async (job, err) => {
@@ -176,6 +169,40 @@ export function startReelWorker() {
     console.info(`[ReelWorker] Job ${job.id} completed`);
   });
 
-  console.info('[ReelWorker] Started (FREE→Kling, Paid→Veo3.1 Standard/Pro)');
+  console.info('[ReelWorker] Started');
   return worker;
+}
+
+async function finalizeJob(
+  jobId: string,
+  chatId: string | null,
+  userId: string,
+  prompt: string,
+  modelId: string,
+  mediaUrl: string,
+  mediaCacheMode: string,
+  cacheable: boolean,
+): Promise<string | undefined> {
+  await prisma.generateJob.update({
+    where: { id: jobId },
+    data: { status: 'done', mediaUrl },
+  });
+
+  let messageId: string | undefined;
+  if (chatId) {
+    const msg = await prisma.message.create({
+      data: {
+        chatId, userId, role: 'assistant',
+        content: encrypt(prompt), mode: 'reel',
+        tokensCost: 0, mediaUrl, provider: modelId,
+      },
+    }).catch((e) => {
+      console.error('[ReelWorker] Failed to save assistant message:', e.message);
+      return null;
+    });
+    messageId = msg?.id;
+  }
+
+  if (cacheable) setMediaCached(mediaCacheMode, prompt, mediaUrl).catch(() => {});
+  return messageId;
 }

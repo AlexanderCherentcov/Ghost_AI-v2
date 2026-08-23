@@ -15,11 +15,13 @@ export const KB_STATS    = '📊 Статистика';
 export const KB_PROMOS   = '🎟 Промокоды';
 export const KB_HEALTH   = '🏥 Здоровье';
 export const KB_SERVER   = '🔧 Сервер';
+export const KB_MAINT    = '🚧 Тех.работы';
 
 export const ADMIN_KEYBOARD = new Keyboard()
   .text(KB_START).text(KB_STATS).row()
   .text(KB_USERS).text(KB_PROMOS).row()
-  .text(KB_HEALTH).text(KB_SERVER)
+  .text(KB_HEALTH).text(KB_SERVER).row()
+  .text(KB_MAINT)
   .resized()
   .persistent();
 
@@ -31,7 +33,27 @@ export function mainKb(): InlineKeyboard {
     .text('🎟 Промокоды', 'pl:1')
     .text('🏥 Здоровье', 'health')
     .row()
-    .text('🔧 Сервер', 'server_menu');
+    .text('🔧 Сервер', 'server_menu')
+    .text('🚧 Тех.работы', 'maint_menu');
+}
+
+// ─── Тех.работы ──────────────────────────────────────────────────────────────
+// until — ISO-строка окончания или null ("до отмены"), нужна только когда
+// работы уже активны (кнопка "выключить" + быстрая смена времени).
+export function maintenanceKb(active: boolean): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  if (active) {
+    kb.text('🟢 Выключить', 'maint_off').row();
+  } else {
+    kb.text('+30 мин', 'maint_on:30')
+      .text('+1 час', 'maint_on:60')
+      .text('+2 часа', 'maint_on:120')
+      .row()
+      .text('+4 часа', 'maint_on:240')
+      .text('До отмены', 'maint_on:0')
+      .row();
+  }
+  return kb.text('⬅ Меню', 'menu');
 }
 
 export function promoListKb(data: any, page: number): InlineKeyboard {

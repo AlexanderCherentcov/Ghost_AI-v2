@@ -1,19 +1,20 @@
 import { Bot, InlineKeyboard, Keyboard, webhookCallback, type Context } from 'grammy';
 import axios from 'axios';
 import {
-  ensureSession, type Mode, type UserSession,
-  type VideoModel, type VideoOptions, type MusicOptions,
-  DEFAULT_VIDEO_OPTIONS, DEFAULT_MUSIC_OPTIONS,
+  ensureSession, type Mode, type UserSession, type VideoOptions, type MusicOptions,
+  DEFAULT_VIDEO_OPTIONS, DEFAULT_MUSIC_OPTIONS, FALLBACK_CHAT_MODEL_ID,
 } from './lib/session.js';
 import {
   listChats, createChat, deleteChat, getChatMessages,
-  startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
-  getMe, createPlanPayment, createCasperPayment,
+  startVisionJob, startSoundJob, startReelJob, startVoiceJob, pollJob, generateLyrics,
+  getMe, createPlanPayment, createCasperPayment, getModels, getCasperHistory,
+  type ChatModelOption, type ImageModelOption, type VideoModelOption,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
-import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-files.js';
-import { PLAN_KEYS } from './lib/plan-keys.js';
+import { uploadTelegramImage, uploadTelegramAudio, extractTelegramDocument } from './lib/telegram-files.js';
+import { PLAN_KEYS, planAtLeast } from './lib/plan-keys.js';
 import { apiErrorMessage } from './lib/error-message.js';
+import { formatTransactionReason } from './lib/casper-history.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
@@ -40,6 +41,43 @@ const api = axios.create({
   headers: { 'x-bot-secret': process.env.BOT_SECRET ?? '' },
   timeout: 15_000,
   proxy: false,
+});
+
+// ─── Гейт: технические работы ─────────────────────────────────────────────────
+// Статус читаем из того же публичного /api/maintenance, что и сайт (единый
+// источник, см. backend/src/lib/maintenance.ts). Кэшируем на 15с в памяти —
+// без этого каждое сообщение от каждого пользователя дёргало бы backend.
+let maintenanceCache: { active: boolean; until: string | null; fetchedAt: number } | null = null;
+const MAINTENANCE_CACHE_MS = 15_000;
+
+async function getMaintenanceStatus(): Promise<{ active: boolean; until: string | null }> {
+  if (maintenanceCache && Date.now() - maintenanceCache.fetchedAt < MAINTENANCE_CACHE_MS) {
+    return maintenanceCache;
+  }
+  try {
+    const { data } = await api.get('/maintenance');
+    maintenanceCache = { active: !!data.active, until: data.until ?? null, fetchedAt: Date.now() };
+  } catch {
+    // Бэкенд недоступен — не блокируем бота дополнительным сообщением поверх
+    // и без того сломанного API, обычные хендлеры сами упадут понятной ошибкой.
+    maintenanceCache = { active: false, until: null, fetchedAt: Date.now() };
+  }
+  return maintenanceCache;
+}
+
+function maintenanceText(until: string | null): string {
+  const untilText = until
+    ? `до ${new Date(until).toLocaleString('ru', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} МСК`
+    : 'в ближайшее время';
+  return `🚧 <b>GhostLine на технических работах</b>\n\nМы скоро вернёмся (${untilText}). Попробуйте написать чуть позже — спасибо за терпение!`;
+}
+
+bot.use(async (ctx, next) => {
+  if (ctx.from && ADMIN_IDS.has(String(ctx.from.id))) return next();
+  const status = await getMaintenanceStatus();
+  if (!status.active) return next();
+  if (ctx.callbackQuery) await ctx.answerCallbackQuery().catch(() => {});
+  await ctx.reply(maintenanceText(status.until), { parse_mode: 'HTML' }).catch(() => {});
 });
 
 // ─── Гейт: согласие с условиями использования / политикой конфиденциальности ──
@@ -131,28 +169,31 @@ function checkAuthRateLimit(userId: number): boolean {
 // Ключи планов должны совпадать с PLAN_KEYS из backend/src/config/plans.ts —
 // TRIAL/STANDARD/TEAM были переименованы в апреле 2026 (миграция 20260429_caspers_system) и здесь мёртвые.
 const PLAN_LABELS: Record<string, string> = {
-  FREE:  '🆓 Бесплатный',
-  BASIC: '⚡ Basic',
-  PRO:   '🚀 Pro',
-  VIP:   '👑 VIP',
-  ULTRA: '💎 Ultra',
+  FREE:     '🆓 Бесплатный',
+  START:    '🌱 Старт',
+  BASIC:    '⚡ Basic',
+  PRO:      '🚀 Pro',
+  PRO_PLUS: '🚀 Pro+',
+  VIP:      '👑 VIP',
+  ULTRA:    '💎 Ultra',
 };
 
-// Метки режимов — единственное место, где они заданы. "Про чат" — то же самое,
-// что "Про чат" на сайте (глубокое рассуждение, тарификация chat_pro), не путать
-// с выбором модели Стандарт/Про внутри обычного чата на сайте — это тот же биллинг.
+// Метки режимов — единственное место, где они заданы. Раньше здесь были отдельные
+// "💬 Чат" / "🧠 Про чат" — "Про" было жёстко зашитым выбором DeepSeek. Теперь
+// глубина/цена ответа определяется РЕАЛЬНОЙ выбранной моделью (session.chatModel,
+// см. sendChatModelSettings) — единый режим "Чат", как на сайте.
 const MODE_LABELS: Record<Mode, string> = {
-  chat: '💬 Чат', think: '🧠 Про чат', vision: '🎨 Картинка', sound: '🎵 Музыка', reel: '🎬 Видео',
+  chat: '💬 Чат', vision: '🎨 Картинка', sound: '🎵 Музыка', reel: '🎬 Видео',
 };
 
 /**
- * К какому "виду чата" backend'а относится режим — chat/think делят один и тот
- * же Chat.mode='chat' (переключение стандарт↔про не начинает новый чат ни на
- * сайте, ни здесь), у vision/sound/reel — свои отдельные виды. Используется,
- * чтобы понять, нужно ли при смене режима искать/создавать другой активный чат.
+ * Чаты, созданные до перехода на выбор моделей, могли иметь Chat.mode === 'think'
+ * (старая кнопка "Про чат"). Новые чаты никогда не создаются с этим значением —
+ * функция только нормализует старые записи при поиске "чата этого вида" для
+ * продолжения диалога, чтобы история про-чата не терялась в новом пустом чате.
  */
-function chatBucket(mode: Mode): string {
-  return mode === 'chat' || mode === 'think' ? 'chat' : mode;
+function chatBucket(mode: string): string {
+  return mode === 'think' ? 'chat' : mode;
 }
 
 // ─── Постоянное нижнее меню ──────────────────────────────────────────────────
@@ -167,7 +208,7 @@ const KB_HELP    = '❓ Помощь';
 const KB_SUPPORT = '🆘 Поддержка';
 
 const MAIN_KEYBOARD = new Keyboard()
-  .text(MODE_LABELS.chat).text(MODE_LABELS.think).row()
+  .text(MODE_LABELS.chat).row()
   .text(MODE_LABELS.vision).text(MODE_LABELS.sound).text(MODE_LABELS.reel).row()
   .text(KB_CHATS).text(KB_PLANS).row()
   .text(KB_BALANCE).text(KB_HELP).text(KB_SUPPORT)
@@ -302,6 +343,7 @@ bot.command('start', async (ctx) => {
 // ─── /help ─────────────────────────────────────────────────────────────────────
 
 async function sendHelp(ctx: Context): Promise<void> {
+  const costs = await fetchCasperCosts();
   await ctx.reply(
     `👻 *GhostLine AI — Помощь*\n\n` +
     `*Нижнее меню* — самый быстрый способ: тапни режим или раздел, ничего вводить не нужно.\n\n` +
@@ -311,20 +353,20 @@ async function sendHelp(ctx: Context): Promise<void> {
     `/newchat — новый чат (выбор режима)\n` +
     `/chats — список чатов, переключение, удаление\n` +
     `/mode — сменить режим текущего диалога\n` +
-    `/settings — настройки видео (модель, разрешение, длительность...) или музыки (название, стиль, вокал/инструментал)\n` +
+    `/settings — настройки текущего режима: модель чата/картинки, параметры видео (модель, разрешение, длительность...) или музыки (название, стиль, вокал/инструментал)\n` +
     `/balance — баланс Caspers, лимиты и цены на все операции\n` +
+    `/history — история начислений и списаний Caspers\n` +
     `/plans — тарифы, оплата сразу через ЮKassa\n` +
     `/caspers <количество> — докупить Caspers\n` +
     `/promo <код> — активировать промокод на Caspers\n\n` +
     `*Режимы работы:*\n` +
-    `💬 Чат — текстовый диалог\n` +
-    `🧠 Про чат — глубокое рассуждение\n` +
+    `💬 Чат — текстовый диалог (модель выбирается в /settings, по умолчанию «Авто»)\n` +
     `🎨 Картинка — генерация изображений\n` +
     `🎵 Музыка — генерация музыки\n` +
     `🎬 Видео — генерация видео\n\n` +
     `После каждого сообщения и генерации показываю остаток Caspers.\n\n` +
     `🆘 Поддержка — кнопка в нижнем меню, если что-то не работает или есть вопрос по оплате.\n\n` +
-    `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю, а вот видео и голосовые пока нет.`,
+    `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю. Пришли голосовое — отвечу голосом (${costs.voice_exchange ?? '?'} Caspers за обмен), видео пока не понимаю.`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -437,17 +479,21 @@ async function buyCaspers(ctx: Context, amount: number): Promise<void> {
 
 // ─── /balance — баланс Caspers и лимиты ────────────────────────────────────────
 
-/** Сколько что стоит в Caspers — с бэкенда (GET /plans → casper_costs), не зашито в коде. */
+/** Сколько что стоит в Caspers — считаем диапазон по реальному реестру моделей (GET /plans → models), не по устаревшим фикс. ключам. */
 async function casperPriceList(): Promise<string> {
   try {
-    const { data } = await api.get('/plans');
-    const c = data.casper_costs ?? {};
+    const [models, costs] = await Promise.all([getModels(), fetchCasperCosts()]);
+    const chatCosts = models.chat.filter((m) => m.id !== 'auto').map((m) => m.cost);
+    const imageCosts = models.image.map((m) => m.cost);
+    const videoCosts = models.video.flatMap((m) => [m.cost['4s'], m.cost['8s']]);
+    const range = (arr: number[]) => arr.length ? (Math.min(...arr) === Math.max(...arr) ? `${arr[0]}` : `${Math.min(...arr)}–${Math.max(...arr)}`) : '?';
     return (
       `\n\n💰 <b>Цены в Caspers:</b>\n` +
-      `🧠 Про чат — ${c.chat_pro} / сообщ.\n` +
-      `🎨 Картинка — ${c.image_generate} / шт\n` +
-      `🎵 Музыка — ${c.music_generate} / трек\n` +
-      `🎬 Видео — ${c.video_std_4s}–${c.video_pro_8s} (зависит от модели и длительности)`
+      `💬 Чат — ${range(chatCosts)} / сообщ. (зависит от модели, «Авто» бесплатнее)\n` +
+      `🎨 Картинка — ${range(imageCosts)} / шт (зависит от модели)\n` +
+      `🎵 Музыка — ${costs.music_generate ?? '?'} / трек\n` +
+      `🎬 Видео — ${range(videoCosts)} (зависит от модели и длительности)\n` +
+      `🎙 Голосовое сообщение — ${costs.voice_exchange ?? '?'} / обмен`
     );
   } catch {
     return '';
@@ -467,7 +513,7 @@ async function sendBalance(ctx: Context): Promise<void> {
       `📦 Тариф: <b>${planLabel}</b>\n` +
       `👻 Caspers: <b>${me.caspers_balance.toLocaleString('ru')}</b>` +
       (isFree ? '' : ` (+${me.caspers_monthly.toLocaleString('ru')}/мес)`) +
-      `\n\n📊 <b>Сегодня:</b>\n💬 Сообщений: ${me.std_messages_today}\n🧠 Про чат: ${me.pro_messages_today}`;
+      `\n\n📊 <b>Сегодня:</b>\n💬 Бесплатных сообщений: ${me.std_messages_today}\n💎 Платных моделей: ${me.pro_messages_today}`;
 
     if (isFree) {
       text +=
@@ -479,12 +525,75 @@ async function sendBalance(ctx: Context): Promise<void> {
 
     await ctx.reply(text, {
       parse_mode: 'HTML',
-      reply_markup: new InlineKeyboard().text('📦 Тарифы', 'show_plans').text('👻 Докупить Caspers', 'show_caspers'),
+      reply_markup: new InlineKeyboard()
+        .text('📦 Тарифы', 'show_plans').text('👻 Докупить Caspers', 'show_caspers').row()
+        .text('📜 История операций', 'hist:open'),
     });
   } catch {
     await ctx.reply('❌ Не удалось загрузить баланс. Попробуй /start');
   }
 }
+
+// ─── /history — история начислений/списаний Caspers ────────────────────────
+// Тот же эндпоинт и та же логика меток, что и у сайта (см. frontend/lib/casper-history.ts,
+// components/settings/CasperHistorySection.tsx) — единая история, свой рендер под Telegram.
+
+async function sendCasperHistory(ctx: Context, session: UserSession, page: number, edit: boolean): Promise<void> {
+  try {
+    const [hist, models] = await Promise.all([getCasperHistory(session, page), getModels()]);
+
+    if (hist.transactions.length === 0) {
+      const text = '📜 <b>История Caspers</b>\n\nПока пусто — здесь появится история операций.';
+      if (edit) await editMessageOrIgnore(ctx, text, { parse_mode: 'HTML' });
+      else await ctx.reply(text, { parse_mode: 'HTML' });
+      return;
+    }
+
+    const lines = hist.transactions.map((tx) => {
+      const label = formatTransactionReason(tx.reason, models);
+      const sign = tx.amount > 0 ? '+' : '';
+      const date = new Date(tx.createdAt).toLocaleString('ru', {
+        timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
+      return `<b>${sign}${tx.amount}👻</b> · ${label}\n<i>${date} МСК</i>`;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(hist.total / hist.limit));
+    const text = `📜 <b>История Caspers</b> (стр. ${page}/${totalPages})\n\n${lines.join('\n\n')}`;
+
+    const kb = new InlineKeyboard();
+    if (page > 1) kb.text('◀ Назад', `hist:page:${page - 1}`);
+    if (page < totalPages) kb.text('Вперёд ▶', `hist:page:${page + 1}`);
+    const extra = { parse_mode: 'HTML' as const, ...(page > 1 || page < totalPages ? { reply_markup: kb } : {}) };
+
+    if (edit) await editMessageOrIgnore(ctx, text, extra);
+    else await ctx.reply(text, extra);
+  } catch {
+    const text = '❌ Не удалось загрузить историю. Попробуй позже.';
+    if (edit) await editMessageOrIgnore(ctx, text, {});
+    else await ctx.reply(text);
+  }
+}
+
+bot.command('history', async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  await sendCasperHistory(ctx, session, 1, false);
+});
+
+// Открытие из /balance — отдельным сообщением, не затирая сообщение с балансом.
+bot.callbackQuery('hist:open', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendCasperHistory(ctx, await ensureSession(ctx.from), 1, false);
+});
+
+// Листание внутри уже открытой истории — редактируем то же сообщение.
+bot.callbackQuery(/^hist:page:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendCasperHistory(ctx, await ensureSession(ctx.from), Number(ctx.match[1]), true);
+});
 
 bot.command('balance', sendBalance);
 bot.callbackQuery('show_caspers', async (ctx) => {
@@ -571,24 +680,10 @@ async function casperSpendNote(session: UserSession, before: number | null): Pro
     : `👻 Остаток: ${after} Caspers`;
 }
 
-// ─── Настройки видео/музыки — паритет с VideoSettingsMenu/MusicWidget на сайте ──
-// Опции живут в сессии (session.videoOptions/musicOptions) и применяются к
-// следующей генерации, пока пользователь их не поменяет — как state виджета на сайте.
-
-// Фирменные названия моделей — 1:1 с models[] в frontend/components/chat/VideoSettingsMenu.tsx.
-// Реальный провайдер (Veo/Kling) уходит в sub — так же, как на сайте, а не в основной ярлык.
-const VIDEO_MODEL_LABELS: Record<VideoModel, { emoji: string; label: string; sub: string }> = {
-  motion:  { emoji: '⚡', label: 'GhostLine Motion',  sub: 'Быстро · Veo 3.1 Fast' },
-  cinema:  { emoji: '🎬', label: 'GhostLine Cinema',  sub: 'Высокое качество · Veo 3.1 Pro' },
-  reality: { emoji: '🎥', label: 'GhostLine Reality', sub: 'Реализм · Kling V-2.5' },
-};
-
-/** Та же формула, что backend/src/services/tokens.ts:resolveVideoRequestType — только cinema тарифицируется как pro. */
-function videoCasperCost(costs: Record<string, number>, o: VideoOptions): number {
-  const isPro = o.videoModel === 'cinema';
-  if (isPro) return o.duration === '4s' ? costs.video_pro_4s : costs.video_pro_8s;
-  return o.duration === '4s' ? costs.video_std_4s : costs.video_std_8s;
-}
+// ─── Настройки чата/видео/музыки/картинок — паритет с ModelPill/VideoWidget/
+// ImageWidget на сайте. Опции живут в сессии (session.chatModel/imageModel/
+// videoOptions/musicOptions) и применяются к следующему сообщению/генерации,
+// пока пользователь их не поменяет — как state виджетов на сайте.
 
 async function fetchCasperCosts(): Promise<Record<string, number>> {
   try {
@@ -613,43 +708,175 @@ async function editMessageOrIgnore(ctx: Context, text: string, extra: object): P
   }
 }
 
-/** Показывает кнопку настроек под подтверждением смены режима — только для reel/sound. */
+/** Показывает кнопку настроек под подтверждением смены режима — для каждого режима своё меню. */
 function modeSwitchKb(mode: Mode): InlineKeyboard | undefined {
-  if (mode === 'reel')  return new InlineKeyboard().text('⚙️ Настройки видео', 'vs:open');
-  if (mode === 'sound') return new InlineKeyboard().text('⚙️ Настройки музыки', 'ms:open');
+  if (mode === 'chat')   return new InlineKeyboard().text('🧩 Модель', 'cm:open');
+  if (mode === 'vision') return new InlineKeyboard().text('🖼 Модель', 'ims:open');
+  if (mode === 'reel')   return new InlineKeyboard().text('⚙️ Настройки видео', 'vs:open');
+  if (mode === 'sound')  return new InlineKeyboard().text('⚙️ Настройки музыки', 'ms:open');
   return undefined;
 }
 
-async function sendVideoSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
-  const o = session.videoOptions;
-  const costs = await fetchCasperCosts();
-  const cost = videoCasperCost(costs, o);
+// ─── Выбор модели чата (аналог ModelPill на сайте) ───────────────────────────
+
+async function sendChatModelSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
+  const { plan } = await getUserPlan(ctx.from!.id);
+  let models: ChatModelOption[];
+  try {
+    models = (await getModels()).chat;
+  } catch {
+    await ctx.reply('❌ Не удалось загрузить список моделей. Попробуй позже.');
+    return;
+  }
 
   const kb = new InlineKeyboard();
-  (['motion', 'cinema', 'reality'] as VideoModel[]).forEach((m) => {
-    const { emoji, label } = VIDEO_MODEL_LABELS[m];
-    kb.text(`${o.videoModel === m ? '✅ ' : ''}${emoji} ${label}`, `vs:model:${m}`).row();
-  });
+  for (const m of models) {
+    const locked = m.id !== 'auto' && !planAtLeast(plan, m.minPlan);
+    const mark = session.chatModel === m.id ? '✅ ' : '';
+    const priceTag = m.id === 'auto' ? '✨' : locked ? `🔒${m.minPlan}` : m.cost > 0 ? `${m.cost}👻` : '';
+    kb.text(`${mark}${m.label}${priceTag ? ` · ${priceTag}` : ''}`, `cm:model:${m.id}`).row();
+  }
+  kb.text('✅ Готово', 'cm:close');
+
+  const current = models.find((m) => m.id === session.chatModel);
+  const text =
+    `🧩 <b>Модель чата</b>\n\n` +
+    `Сейчас: <b>${current?.label ?? 'Авто'}</b>${current?.blurb ? ` — ${current.blurb}` : ''}\n\n` +
+    `«Авто» сама подбирает модель под сложность запроса и экономит Caspers. Выбранная явно модель — это всегда именно она, без подмены.`;
+
+  const extra = { parse_mode: 'HTML' as const, reply_markup: kb };
+  if (edit) await editMessageOrIgnore(ctx, text, extra);
+  else await ctx.reply(text, extra);
+}
+
+bot.callbackQuery('cm:open', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendChatModelSettings(ctx, await ensureSession(ctx.from), true);
+});
+
+bot.callbackQuery(/^cm:model:(.+)$/, async (ctx) => {
+  if (!ctx.from) return;
+  const modelId = ctx.match[1];
+  const session = await ensureSession(ctx.from);
+  const { plan } = await getUserPlan(ctx.from.id);
+  const models = (await getModels()).chat;
+  const spec = models.find((m) => m.id === modelId);
+  if (spec && spec.id !== 'auto' && !planAtLeast(plan, spec.minPlan)) {
+    await ctx.answerCallbackQuery({ text: `Модель «${spec.label}» доступна с тарифа ${spec.minPlan}`, show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery();
+  session.chatModel = modelId;
+  await sendChatModelSettings(ctx, session, true);
+});
+
+bot.callbackQuery('cm:close', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.deleteMessage().catch(() => {});
+});
+
+// ─── Выбор модели картинок (аналог ImageWidget на сайте) ─────────────────────
+
+async function sendImageModelSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
+  const { plan } = await getUserPlan(ctx.from!.id);
+  let models: ImageModelOption[];
+  try {
+    models = (await getModels()).image;
+  } catch {
+    await ctx.reply('❌ Не удалось загрузить список моделей. Попробуй позже.');
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  for (const m of models) {
+    const locked = !planAtLeast(plan, m.minPlan);
+    const mark = session.imageModel === m.id ? '✅ ' : '';
+    const priceTag = locked ? `🔒${m.minPlan}` : `${m.cost}👻`;
+    kb.text(`${mark}${m.label} · ${priceTag}`, `ims:model:${m.id}`).row();
+  }
+  kb.text('✅ Готово', 'ims:close');
+
+  const current = models.find((m) => m.id === session.imageModel);
+  const text =
+    `🖼 <b>Модель изображений</b>\n\n` +
+    `Сейчас: <b>${current?.label ?? '—'}</b>${current?.blurb ? ` — ${current.blurb}` : ''}\n` +
+    (current ? `\n💰 Стоимость следующей генерации: <b>${current.cost}</b> Caspers` : '');
+
+  const extra = { parse_mode: 'HTML' as const, reply_markup: kb };
+  if (edit) await editMessageOrIgnore(ctx, text, extra);
+  else await ctx.reply(text, extra);
+}
+
+bot.callbackQuery('ims:open', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  if (!ctx.from) return;
+  await sendImageModelSettings(ctx, await ensureSession(ctx.from), true);
+});
+
+bot.callbackQuery(/^ims:model:(.+)$/, async (ctx) => {
+  if (!ctx.from) return;
+  const modelId = ctx.match[1];
+  const session = await ensureSession(ctx.from);
+  const { plan } = await getUserPlan(ctx.from.id);
+  const models = (await getModels()).image;
+  const spec = models.find((m) => m.id === modelId);
+  if (spec && !planAtLeast(plan, spec.minPlan)) {
+    await ctx.answerCallbackQuery({ text: `Модель «${spec.label}» доступна с тарифа ${spec.minPlan}`, show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery();
+  session.imageModel = modelId;
+  await sendImageModelSettings(ctx, session, true);
+});
+
+bot.callbackQuery('ims:close', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.deleteMessage().catch(() => {});
+});
+
+// ─── Настройки видео (аналог VideoWidget на сайте) ───────────────────────────
+
+async function sendVideoSettings(ctx: Context, session: UserSession, edit: boolean): Promise<void> {
+  const o = session.videoOptions;
+  const { plan } = await getUserPlan(ctx.from!.id);
+  let videoModels: VideoModelOption[];
+  try {
+    videoModels = (await getModels()).video;
+  } catch {
+    await ctx.reply('❌ Не удалось загрузить список моделей. Попробуй позже.');
+    return;
+  }
+  const spec = videoModels.find((m) => m.id === o.videoModel);
+  const cost = spec?.cost[o.duration];
+
+  const kb = new InlineKeyboard();
+  for (const m of videoModels) {
+    const locked = !planAtLeast(plan, m.minPlan);
+    const mark = o.videoModel === m.id ? '✅ ' : '';
+    const priceTag = locked ? `🔒${m.minPlan}` : `${m.cost[o.duration]}👻`;
+    kb.text(`${mark}${m.label} · ${priceTag}`, `vs:model:${m.id}`).row();
+  }
   kb.text(`${o.resolution === '720p' ? '✅ ' : ''}720p`, 'vs:res:720p')
     .text(`${o.resolution === '1080p' ? '✅ ' : ''}1080p`, 'vs:res:1080p').row();
   kb.text(`${o.duration === '4s' ? '✅ ' : ''}4с`, 'vs:dur:4s')
     .text(`${o.duration === '8s' ? '✅ ' : ''}8с`, 'vs:dur:8s').row();
   kb.text(`${o.aspectRatio === '16:9' ? '✅ ' : ''}16:9`, 'vs:ar:16:9')
     .text(`${o.aspectRatio === '9:16' ? '✅ ' : ''}9:16`, 'vs:ar:9:16').row();
-  kb.text(o.enableAudio ? '🔊 Звук: вкл' : '🔇 Звук: выкл', 'vs:audio:toggle').row();
+  if (spec?.capabilities.audio) {
+    kb.text(o.enableAudio ? '🔊 Звук: вкл' : '🔇 Звук: выкл', 'vs:audio:toggle').row();
+  }
   kb.text(o.negativePrompt ? '✏️ Исключить: изменить' : '✏️ Исключить из видео...', 'vs:negprompt');
   if (o.negativePrompt) kb.text('🗑 Очистить', 'vs:negprompt:clear');
   kb.row().text('↩️ Сбросить всё', 'vs:reset').text('✅ Готово', 'vs:close');
 
   const text =
     `🎬 <b>Настройки видео</b>\n\n` +
-    `Модель: <b>${VIDEO_MODEL_LABELS[o.videoModel].emoji} ${VIDEO_MODEL_LABELS[o.videoModel].label}</b> ` +
-    `<i>(${VIDEO_MODEL_LABELS[o.videoModel].sub})</i>\n` +
+    `Модель: <b>${spec?.label ?? '—'}</b>${spec?.blurb ? ` <i>(${spec.blurb})</i>` : ''}\n` +
     `Разрешение: <b>${o.resolution}</b> · Длительность: <b>${o.duration}</b>\n` +
-    `Формат: <b>${o.aspectRatio}</b> · Звук: <b>${o.enableAudio ? 'вкл' : 'выкл'}</b>\n` +
+    `Формат: <b>${o.aspectRatio}</b>` + (spec?.capabilities.audio ? ` · Звук: <b>${o.enableAudio ? 'вкл' : 'выкл'}</b>` : '') + `\n` +
     (o.negativePrompt ? `Исключить: <i>${o.negativePrompt.slice(0, 200)}</i>\n` : '') +
-    `\n💰 Стоимость следующей генерации: <b>${cost || '?'}</b> Caspers\n\n` +
-    `На FREE-тарифе видео всегда идёт через Kling, независимо от выбора модели.`;
+    `\n💰 Стоимость следующей генерации: <b>${cost ?? '?'}</b> Caspers`;
 
   const extra = { parse_mode: 'HTML' as const, reply_markup: kb };
   if (edit) await editMessageOrIgnore(ctx, text, extra);
@@ -690,9 +917,10 @@ async function sendMusicSettings(ctx: Context, session: UserSession, edit: boole
 bot.command('settings', async (ctx) => {
   if (!ctx.from) return;
   const session = await ensureSession(ctx.from);
-  if (session.mode === 'reel')  { await sendVideoSettings(ctx, session, false); return; }
-  if (session.mode === 'sound') { await sendMusicSettings(ctx, session, false); return; }
-  await ctx.reply('⚙️ Настройки есть только для режимов 🎬 Видео и 🎵 Музыка. Переключись через /mode.');
+  if (session.mode === 'chat')   { await sendChatModelSettings(ctx, session, false); return; }
+  if (session.mode === 'vision') { await sendImageModelSettings(ctx, session, false); return; }
+  if (session.mode === 'reel')   { await sendVideoSettings(ctx, session, false); return; }
+  if (session.mode === 'sound')  { await sendMusicSettings(ctx, session, false); return; }
 });
 
 // Сброс awaitingInput на любом другом тапе/команде уже сделан глобальным
@@ -704,11 +932,19 @@ bot.callbackQuery('vs:open', async (ctx) => {
   await sendVideoSettings(ctx, await ensureSession(ctx.from), true);
 });
 
-bot.callbackQuery(/^vs:model:(motion|cinema|reality)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
+bot.callbackQuery(/^vs:model:(.+)$/, async (ctx) => {
   if (!ctx.from) return;
+  const modelId = ctx.match[1];
   const session = await ensureSession(ctx.from);
-  session.videoOptions.videoModel = ctx.match[1] as VideoModel;
+  const { plan } = await getUserPlan(ctx.from.id);
+  const videoModels = (await getModels()).video;
+  const spec = videoModels.find((m) => m.id === modelId);
+  if (spec && !planAtLeast(plan, spec.minPlan)) {
+    await ctx.answerCallbackQuery({ text: `Модель «${spec.label}» доступна с тарифа ${spec.minPlan}`, show_alert: true });
+    return;
+  }
+  await ctx.answerCallbackQuery();
+  session.videoOptions.videoModel = modelId;
   await sendVideoSettings(ctx, session, true);
 });
 
@@ -864,13 +1100,13 @@ bot.command('mode', async (ctx) => {
   await ctx.reply('Выбери режим для следующих сообщений:', { reply_markup: modeKb('mode') });
 });
 
-bot.callbackQuery(/^mode:(chat|think|vision|sound|reel)$/, async (ctx) => {
+bot.callbackQuery(/^mode:(chat|vision|sound|reel)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   try {
     const session = await ensureSession(ctx.from);
     const newMode = ctx.match[1] as Mode;
-    if (chatBucket(newMode) !== chatBucket(session.mode)) {
+    if (newMode !== session.mode) {
       session.activeChatId = null;
       session.history = [];
     }
@@ -887,7 +1123,7 @@ bot.command('newchat', async (ctx) => {
   await ctx.reply('Новый чат в каком режиме?', { reply_markup: modeKb('newchat') });
 });
 
-bot.callbackQuery(/^newchat:(chat|think|vision|sound|reel)$/, async (ctx) => {
+bot.callbackQuery(/^newchat:(chat|vision|sound|reel)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   if (!ctx.from) return;
   const mode = ctx.match[1] as Mode;
@@ -1008,7 +1244,7 @@ async function handleTextChat(ctx: Context, session: UserSession, prompt: string
   try {
     const result = await streamChat(
       session,
-      { chatId: session.activeChatId!, mode: session.mode as 'chat' | 'think', prompt, history: session.history, ...attachment },
+      { chatId: session.activeChatId!, model: session.chatModel, prompt, history: session.history, ...attachment },
       (partial) => {
         const now = Date.now();
         if (now - lastEdit < EDIT_INTERVAL_MS) return;
@@ -1051,7 +1287,7 @@ async function handleGeneration(ctx: Context, session: UserSession, prompt: stri
   const balanceBefore = await getCasperBalance(session);
 
   try {
-    const jobId = mode === 'vision' ? await startVisionJob(session, session.activeChatId!, prompt, sourceImageUrl)
+    const jobId = mode === 'vision' ? await startVisionJob(session, session.activeChatId!, prompt, session.imageModel, sourceImageUrl)
       : mode === 'sound' ? await startSoundJob(session, session.activeChatId!, prompt, session.musicOptions)
       : await startReelJob(session, session.activeChatId!, prompt, session.videoOptions, sourceImageUrl);
     const result = await pollJob(session, jobId, { timeoutMs: GEN_TIMEOUT_MS[mode] });
@@ -1151,7 +1387,7 @@ async function sessionWithActiveChat(ctx: Context): Promise<UserSession | null> 
       // хранится под одним userId.
       const bucket = chatBucket(session.mode);
       const chats = await listChats(session);
-      const existing = chats.find((c) => chatBucket(c.mode as Mode) === bucket);
+      const existing = chats.find((c) => chatBucket(c.mode) === bucket);
       if (existing) {
         session.activeChatId = existing.id;
         const messages = await getChatMessages(session, existing.id, 20);
@@ -1223,7 +1459,7 @@ bot.on('message:text', async (ctx) => {
   const kbMode = KB_MODE_MAP[text];
   if (kbMode) {
     earlySession.awaitingInput = null;
-    if (chatBucket(kbMode) !== chatBucket(earlySession.mode)) {
+    if (kbMode !== earlySession.mode) {
       earlySession.activeChatId = null;
       earlySession.history = [];
     }
@@ -1256,14 +1492,14 @@ bot.on('message:text', async (ctx) => {
   const session = await sessionWithActiveChat(ctx);
   if (!session) return;
 
-  if (session.mode === 'chat' || session.mode === 'think') {
+  if (session.mode === 'chat') {
     await handleTextChat(ctx, session, text);
   } else {
     await handleGeneration(ctx, session, text);
   }
 });
 
-// ─── Фото: мультимодальный вопрос (chat/think), исходник для правки (vision/reel) ────
+// ─── Фото: мультимодальный вопрос (chat), исходник для правки (vision/reel) ────
 
 bot.on('message:photo', async (ctx) => {
   const session = await sessionWithActiveChat(ctx);
@@ -1272,6 +1508,34 @@ bot.on('message:photo', async (ctx) => {
   if (session.mode === 'sound') {
     await ctx.reply('🎵 В режиме музыки фото не используется. Просто опиши, какой трек нужен.');
     return;
+  }
+
+  // Проверяем возможности выбранной модели ДО загрузки фото — тот же принцип, что и
+  // на сайте (InputBar.tsx): не тратим время пользователя на загрузку, если бэкенд
+  // всё равно отклонит (VisionNotSupportedError/MODEL_NO_EDIT/MODEL_NO_IMG2VIDEO —
+  // ai-router.ts/routes/generate.ts). 'auto' в chat пропускаем — диспетчер сам
+  // подберёт vision-модель при картинке, см. ai-router.ts.
+  const models = await getModels();
+  if (session.mode === 'chat' && session.chatModel !== 'auto') {
+    const spec = models.chat.find((m) => m.id === session.chatModel);
+    if (spec && !spec.capabilities.vision) {
+      await ctx.reply(`❌ Модель «${spec.label}» не распознаёт изображения — переключись на «Авто» или другую модель через /settings.`);
+      return;
+    }
+  }
+  if (session.mode === 'vision') {
+    const spec = models.image.find((m) => m.id === session.imageModel);
+    if (spec && !spec.capabilities.edit) {
+      await ctx.reply(`❌ Модель «${spec.label}» не поддерживает редактирование по фото — выбери другую через /settings.`);
+      return;
+    }
+  }
+  if (session.mode === 'reel') {
+    const spec = models.video.find((m) => m.id === session.videoOptions.videoModel);
+    if (spec && !spec.capabilities.imageToVideo) {
+      await ctx.reply(`❌ Модель «${spec.label}» не поддерживает добавление фото — выбери другую через /settings.`);
+      return;
+    }
   }
 
   const notice = await ctx.reply('📎 Загружаю фото...');
@@ -1287,7 +1551,7 @@ bot.on('message:photo', async (ctx) => {
 
   const caption = (ctx.message.caption ?? '').trim();
 
-  if (session.mode === 'chat' || session.mode === 'think') {
+  if (session.mode === 'chat') {
     await handleTextChat(ctx, session, caption || 'Опиши что изображено на фото.', { imageUrl });
   } else {
     // vision → правим это изображение; reel → анимируем его (image-to-video)
@@ -1295,14 +1559,14 @@ bot.on('message:photo', async (ctx) => {
   }
 });
 
-// ─── Документ: извлечь текст и использовать как контекст чата (только chat/think) ──────
+// ─── Документ: извлечь текст и использовать как контекст чата (только chat) ──────
 
 bot.on('message:document', async (ctx) => {
   const session = await sessionWithActiveChat(ctx);
   if (!session) return;
 
-  if (session.mode !== 'chat' && session.mode !== 'think') {
-    await ctx.reply('📎 Файлы работают только в режиме Чат или Про чат. Переключись кнопкой в меню снизу или через /mode.');
+  if (session.mode !== 'chat') {
+    await ctx.reply('📎 Файлы работают только в режиме Чат. Переключись кнопкой в меню снизу или через /mode.');
     return;
   }
 
@@ -1325,10 +1589,55 @@ bot.on('message:document', async (ctx) => {
   });
 });
 
-// Видеофайлы, голосовые и аудио пока не подключены к AI-движку бота
-// (транскрипции и понимания видео здесь нет).
-bot.on(['message:video', 'message:audio', 'message:voice'], async (ctx) => {
-  await ctx.reply('👻 Видео, аудио и голосовые пока не понимаю — пришли текстом или файлом/фото.');
+// ─── Голосовые сообщения — работают независимо от текущего режима ───────────
+// Запись войса — однозначное намерение ("хочу голосовой ответ"), поэтому не
+// требуем переключения в режим "Голос" через /mode, как на сайте. Ответ всегда
+// уходит в тот же чат, что и обычный текстовый диалог (bucket 'chat') — голос
+// и текст делят одну историю, как и на сайте (Message.mode='voice' внутри
+// того же Chat, а не отдельный вид чата).
+
+/** Chat-бакет пользователя, не трогая session.mode/activeChatId — голосовое сообщение
+ * не должно молча переключать текущий режим (картинка/видео/музыка), в котором пользователь мог быть. */
+async function resolveChatBucketId(session: UserSession): Promise<string> {
+  const chats = await listChats(session);
+  const existing = chats.find((c) => chatBucket(c.mode) === 'chat');
+  if (existing) return existing.id;
+  const chat = await createChat(session, 'chat');
+  return chat.id;
+}
+
+bot.on('message:voice', async (ctx) => {
+  if (!ctx.from) return;
+  const session = await ensureSession(ctx.from);
+  const notice = await ctx.reply('🎙️ Слушаю...');
+  const balanceBefore = await getCasperBalance(session);
+
+  try {
+    const chatId = await resolveChatBucketId(session);
+    const audioUrl = await uploadTelegramAudio(session, ctx.message.voice.file_id);
+    const jobId = await startVoiceJob(session, chatId, audioUrl);
+    const result = await pollJob(session, jobId, { timeoutMs: 2 * 60_000 });
+
+    if (result.status !== 'done' || !result.mediaUrl) {
+      await editOrSend(ctx, notice.message_id, `❌ ${result.error ?? 'Не удалось обработать голосовое сообщение'}`);
+      return;
+    }
+
+    await ctx.api.deleteMessage(ctx.chat!.id, notice.message_id).catch(() => {});
+    await ctx.replyWithAudio(result.mediaUrl);
+
+    const spendNote = await casperSpendNote(session, balanceBefore);
+    if (spendNote) await ctx.reply(spendNote);
+  } catch (err: any) {
+    const msg = apiErrorMessage(err, 'Ошибка обработки голосового сообщения');
+    await editOrSend(ctx, notice.message_id, `❌ ${msg}`);
+  }
+});
+
+// Видеофайлы и аудио-документы пока не подключены к AI-движку бота
+// (транскрипции и понимания видео здесь нет; голосовые — см. message:voice выше).
+bot.on(['message:video', 'message:audio'], async (ctx) => {
+  await ctx.reply('👻 Видео и аудиофайлы пока не понимаю — пришли текстом, голосовым или фото.');
 });
 
 // ─── Запуск бота ──────────────────────────────────────────────────────────────────

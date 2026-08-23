@@ -12,8 +12,10 @@ datasource db {
 
 enum Plan {
   FREE
+  START
   BASIC
   PRO
+  PRO_PLUS
   VIP
   ULTRA
 }

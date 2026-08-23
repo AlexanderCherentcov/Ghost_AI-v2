@@ -3,6 +3,7 @@
 import type { CSSProperties } from 'react';
 
 export { GhostIcon } from './GhostIcon';
+export { AppleIcon, AndroidIcon, WindowsIcon } from './PlatformIcons';
 
 // ─── Общая база ──────────────────────────────────────────────────────────────
 
@@ -104,6 +105,25 @@ export function PlusIcon({ size = 20, className = '', style }: IconProps) {
     <svg {...base(size, className, style)}>
       <line x1="10" y1="4" x2="10" y2="16" />
       <line x1="4" y1="10" x2="16" y2="10" />
+    </svg>
+  );
+}
+
+// ─── Moon / Тёмная тема ─────────────────────────────────────────────────────
+export function MoonIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} style={style}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
+// ─── Sun / Светлая тема ─────────────────────────────────────────────────────
+export function SunIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
     </svg>
   );
 }
@@ -276,6 +296,17 @@ export function VideoIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
+export function MicIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <rect x="7" y="2" width="6" height="10" rx="3" />
+      <path d="M4 9a6 6 0 0 0 12 0" />
+      <path d="M10 15v3" />
+      <path d="M7 18h6" />
+    </svg>
+  );
+}
+
 // ─── Arrow down / Стрелка вниз ────────────────────────────────────────────────
 export function ArrowDownIcon({ size = 20, className = '', style }: IconProps) {
   return (
@@ -305,6 +336,77 @@ export function DownloadIcon({ size = 20, className = '', style }: IconProps) {
       <line x1="10" y1="3.5" x2="10" y2="13.5" />
       <path d="M5.5 10L10 14.5 14.5 10" />
       <line x1="3.5" y1="17" x2="16.5" y2="17" />
+    </svg>
+  );
+}
+
+// ─── Bolt / Молния ───────────────────────────────────────────────────────────
+/** Залитая молния — для быстрых действий (кэш, быстрый промт, недоступная функция) */
+export function BoltIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <path d="M11 2L4.5 11.5H9L8 18l7.5-10H11l1-6z" fill="currentColor" stroke="none" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ─── Mute / Динамик выключен ──────────────────────────────────────────────────
+/** Динамик с перечёркивающими линиями вместо звуковых волн — пара к SoundIcon */
+export function MuteIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <path d="M3.5 7.5h2.8L10.5 5v10L6.3 12.5H3.5a.5.5 0 01-.5-.5V8a.5.5 0 01.5-.5z" strokeLinejoin="round" />
+      <line x1="13" y1="7.5" x2="17.5" y2="12.5" />
+      <line x1="17.5" y1="7.5" x2="13" y2="12.5" />
+    </svg>
+  );
+}
+
+// ─── Warning / Предупреждение ─────────────────────────────────────────────────
+/** Треугольник с восклицательным знаком */
+export function WarningIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <path d="M10 3L18 17H2L10 3z" strokeLinejoin="round" />
+      <line x1="10" y1="8" x2="10" y2="12" />
+      <circle cx="10" cy="14.5" r=".8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+// ─── Document / Документ ─────────────────────────────────────────────────────
+/** Лист с загнутым уголком и строками текста — обобщённая иконка документа (pdf/doc/md и т.п.) */
+export function DocumentIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <path d="M6 2.5h6l3.5 3.5V17a.5.5 0 01-.5.5h-9A.5.5 0 015 17V3a.5.5 0 01.5-.5z" strokeLinejoin="round" />
+      <path d="M12 2.5V6a.5.5 0 00.5.5H16" />
+      <line x1="7.5" y1="10" x2="12.5" y2="10" />
+      <line x1="7.5" y1="13" x2="12.5" y2="13" />
+    </svg>
+  );
+}
+
+// ─── Table / Таблица ──────────────────────────────────────────────────────────
+/** Сетка таблицы — обобщённая иконка для xls/csv и т.п. */
+export function TableIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <rect x="2.5" y="3.5" width="15" height="13" rx="1.5" />
+      <line x1="2.5" y1="8" x2="17.5" y2="8" />
+      <line x1="2.5" y1="12.5" x2="17.5" y2="12.5" />
+      <line x1="8.5" y1="3.5" x2="8.5" y2="16.5" />
+    </svg>
+  );
+}
+
+// ─── Code / Код ───────────────────────────────────────────────────────────────
+/** Угловые скобки `</>` — обобщённая иконка для файлов кода (js/py/json/html/sql и т.п.) */
+export function CodeIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <path d="M7 6L2.5 10 7 14" />
+      <path d="M13 6l4.5 4-4.5 4" />
     </svg>
   );
 }

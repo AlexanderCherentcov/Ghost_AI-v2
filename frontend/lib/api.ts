@@ -1,6 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 let accessToken: string | null = null;
+let refreshTokenValue: string | null = null;
+// auth.store.ts подписывается сюда, чтобы после тихого обновления токена (см. request()
+// ниже) новая пара тоже осела в persisted Zustand-сторе — иначе после reload юзер снова
+// получит протухший refreshToken из localStorage. Регистрация через колбэк, а не прямой
+// импорт стора — auth.store.ts уже импортирует этот модуль, обратный импорт дал бы цикл.
+let onTokensRefreshed: ((accessToken: string, refreshToken: string) => void) | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -8,6 +14,48 @@ export function setAccessToken(token: string | null) {
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+export function setRefreshToken(token: string | null) {
+  refreshTokenValue = token;
+}
+
+export function getRefreshToken(): string | null {
+  return refreshTokenValue;
+}
+
+export function registerTokenRefreshHandler(fn: (accessToken: string, refreshToken: string) => void) {
+  onTokensRefreshed = fn;
+}
+
+// accessToken живёт всего 15 минут (backend/src/routes/auth.ts) — без этого пользователя,
+// оставившего вкладку открытой активно печатать дольше 15 минут, начинают сыпаться 401 на
+// каждый запрос без единого способа восстановиться, кроме ручного перелогина. Общий promise
+// не даёт параллельным запросам, поймавшим 401 одновременно, устроить N обращений к /auth/refresh.
+let refreshPromise: Promise<void> | null = null;
+
+async function refreshAccessToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+  const rt = refreshTokenValue;
+  if (!rt) throw new Error('No refresh token');
+  refreshPromise = (async () => {
+    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Refresh failed');
+    const tokens = await res.json() as { accessToken: string; refreshToken: string };
+    accessToken = tokens.accessToken;
+    refreshTokenValue = tokens.refreshToken;
+    onTokensRefreshed?.(tokens.accessToken, tokens.refreshToken);
+  })();
+  try {
+    await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
 }
 
 async function request<T>(
@@ -48,6 +96,21 @@ async function request<T>(
       return request<T>(path, options, true);
     }
     throw err;
+  }
+
+  // Протухший access-токен — тихо обновляем и повторяем запрос один раз. /auth/refresh
+  // и /auth/me не трогаем: первый сам не может истечь по 401-логике (это сам обмен
+  // токена), второй участвует в начальном /auth/refresh→/me и не должен плодить
+  // рекурсию, если протух и refresh-токен тоже — тогда просто выйдет обычная 401-ошибка.
+  if (res.status === 401 && !_isRetry && path !== '/auth/refresh' && refreshTokenValue) {
+    try {
+      await refreshAccessToken();
+      return request<T>(path, options, true);
+    } catch {
+      // Refresh-токен тоже мёртв — сбрасываем сессию, дальше отработает обычная 401 ниже
+      accessToken = null;
+      refreshTokenValue = null;
+    }
   }
 
   if (!res.ok) {
@@ -112,6 +175,7 @@ export const api = {
         body: JSON.stringify(data),
       }),
     history: (page = 1) => request<PaymentsResponse>(`/payments?page=${page}`),
+    casperHistory: (page = 1) => request<CasperHistoryResponse>(`/payments/caspers/history?page=${page}`),
     status: (yokassaId: string) =>
       request<{ status: string; plan: string | null }>(
         `/payments/status/${yokassaId}`
@@ -141,6 +205,24 @@ export const api = {
       const headers: Record<string, string> = {};
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
       const res = await fetch(`${API_URL}/api/upload/image`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
+      }
+      return res.json();
+    },
+    /** Загрузить голосовое сообщение. Возвращает публичный URL для распознавания в /generate/voice. */
+    audio: async (file: File | Blob): Promise<{ url: string; fileName: string }> => {
+      const form = new FormData();
+      form.append('file', file, file instanceof File ? file.name : 'voice.webm');
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const res = await fetch(`${API_URL}/api/upload/audio`, {
         method: 'POST',
         headers,
         credentials: 'include',
@@ -187,7 +269,7 @@ export const api = {
   },
 
   generate: {
-    vision: (data: { prompt: string; size?: string; chatId?: string; sourceImageUrl?: string }) =>
+    vision: (data: { prompt: string; chatId?: string; sourceImageUrl?: string; model?: string; imageAspectRatio?: string }) =>
       request<{ jobId: string }>('/generate/vision', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -197,8 +279,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    reel: (data: { prompt: string; chatId?: string; videoModel?: 'standard' | 'pro' | 'motion' | 'cinema' | 'reality'; videoDuration?: '4s' | '8s'; videoAspectRatio?: '16:9' | '9:16'; videoEnableAudio?: boolean; videoResolution?: '720p' | '1080p'; videoImageUrl?: string; negativePrompt?: string }) =>
+    // id модели из реестра (backend/src/config/models.ts), напр. 'kling-v2.5' / 'veo-3.1-pro' / 'sora-2'.
+    reel: (data: { prompt: string; chatId?: string; model?: string; videoDuration?: '4s' | '8s'; videoAspectRatio?: string; videoEnableAudio?: boolean; videoResolution?: string; videoImageUrl?: string; negativePrompt?: string; videoCameraPreset?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    voice: (data: { chatId?: string; audioUrl: string }) =>
+      request<{ jobId: string }>('/generate/voice', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -220,7 +308,7 @@ export interface User {
   email: string | null;
   avatarUrl: string | null;
   birthDate: string | null;
-  plan: 'FREE' | 'BASIC' | 'PRO' | 'VIP' | 'ULTRA';
+  plan: 'FREE' | 'START' | 'BASIC' | 'PRO' | 'PRO_PLUS' | 'VIP' | 'ULTRA';
   planExpiresAt: string | null;
   billing: 'MONTHLY' | 'YEARLY';
   // Caspers
@@ -291,19 +379,32 @@ export interface PaymentsResponse {
   page: number;
 }
 
+export interface CasperTransaction {
+  id: string;
+  amount: number; // положительное = начисление, отрицательное = списание
+  reason: string; // id модели из реестра ('gemini-2.5-flash' и т.п.) либо системный код ('topup', 'welcome_bonus', 'refund_<reason>' и т.п.)
+  createdAt: string;
+}
+
+export interface CasperHistoryResponse {
+  transactions: CasperTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface PlanInfo {
   key: string;
   label: string;
+  description: string;
   price: number;
   price_yearly: number;
   caspers_monthly: number;
-  pro_free_daily: number;
   badge: string | null;
   popular: boolean;
   features: string[];
 }
 export interface FreeLimits {
-  std_messages_daily: number;
   images_weekly: number;
   music_weekly: number;
   videos_monthly: number;
@@ -312,9 +413,65 @@ export interface CasperPriceTier {
   max: number;
   price: number;
 }
+
+export interface ModelCapabilities {
+  vision?: boolean;
+  search?: boolean;
+  edit?: boolean;
+  imageToVideo?: boolean;
+  audio?: boolean;
+  /** Модель работает только по фото (SkyReels, Framepack) — чистого text-to-video у неё нет. */
+  imageRequired?: boolean;
+}
+export interface ChatModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  cost: number;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+}
+export interface ImageModelUiParams {
+  aspectRatios: string[];
+}
+export interface VideoModelUiParams {
+  durationLabels: { '4s': string; '8s': string } | null;
+  aspectRatios: string[];
+  resolutions: string[];
+  supportsNegativePrompt: boolean;
+  cameraPresets: string[];
+}
+export interface ImageModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  cost: number;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+  /** Единый источник реальных настраиваемых параметров — см. backend/src/config/models.ts. */
+  ui?: ImageModelUiParams;
+  previewImageUrl?: string;
+}
+export interface VideoModelOption {
+  id: string;
+  label: string;
+  blurb?: string;
+  minPlan: string;
+  capabilities: ModelCapabilities;
+  cost: { '4s': number; '8s': number };
+  /** Единый источник реальных настраиваемых параметров — см. backend/src/config/models.ts. */
+  ui: VideoModelUiParams;
+  previewVideoUrl?: string;
+}
+
 export interface PlansResponse {
   plans: PlanInfo[];
   free: PlanInfo & { limits: FreeLimits; welcome_caspers: number };
   casper_costs: Record<string, number>;
   casper_price_tiers: CasperPriceTier[];
+  models: {
+    chat: ChatModelOption[];
+    image: ImageModelOption[];
+    video: VideoModelOption[];
+  };
 }

@@ -7,12 +7,58 @@ import { useAuthStore } from '@/store/auth.store';
 import { ToastProvider } from '@/components/ui/Toast';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { api, setAccessToken, getAccessToken } from '@/lib/api';
+import { MaintenancePage } from '@/components/MaintenancePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 60_000, retry: 1 },
   },
 });
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const MAINTENANCE_POLL_MS = 30_000;
+
+// Проверяем ДО авторизации и до рендера остального приложения — во время
+// тех.работ бэкенд может быть в процессе рестарта/миграции, и обычные вызовы
+// (refresh, /me) всё равно будут падать. /api/maintenance — единственный
+// эндпоинт, который должен пережить это состояние (не трогает БД/Prisma).
+function MaintenanceGate({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<{ active: boolean; until: string | null; bypass: boolean } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // Разовая ссылка вида /?bypass=СЕКРЕТ — секрет уходит на бэкенд ОДИН раз,
+    // тот ставит httpOnly cookie на сутки (см. routes/maintenance.ts) и
+    // дальше обход держится по cookie, без секрета в адресной строке.
+    const bypassParam = new URLSearchParams(window.location.search).get('bypass');
+    if (bypassParam) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('bypass');
+      window.history.replaceState({}, '', url.toString());
+    }
+
+    const check = () => {
+      const url = bypassParam
+        ? `${API_URL}/api/maintenance?bypass=${encodeURIComponent(bypassParam)}`
+        : `${API_URL}/api/maintenance`;
+      fetch(url, { credentials: 'include' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled) setState({ active: !!data.active, until: data.until ?? null, bypass: !!data.bypass });
+        })
+        .catch(() => { if (!cancelled) setState((s) => s ?? { active: false, until: null, bypass: false }); });
+    };
+    check();
+    const timer = setInterval(check, MAINTENANCE_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
+  // Пока не пришёл первый ответ — ничего не решаем, просто рендерим приложение
+  // как обычно (не блокируем стартовую загрузку ожиданием этого запроса).
+  if (state?.active && !state.bypass) return <MaintenancePage until={state.until} />;
+  return <>{children}</>;
+}
 
 function AuthInit({ children }: { children: React.ReactNode }) {
   // Ждём, пока Zustand persist гидрируется из localStorage (только на клиенте)
@@ -70,10 +116,20 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // Регистрация только в проде — на Turbopack dev-сервере service worker может
+  // отдавать закешированные ответы поверх HMR, добавляя лишний слой отладки без пользы.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') return;
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthInit>{children}</AuthInit>
+        <MaintenanceGate>
+          <AuthInit>{children}</AuthInit>
+        </MaintenanceGate>
         <ToastProvider />
       </TooltipProvider>
     </QueryClientProvider>

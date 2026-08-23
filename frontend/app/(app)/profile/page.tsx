@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
-import { UserIcon } from '@/components/icons';
+import { UserIcon, MoonIcon, SunIcon } from '@/components/icons';
 import { formatDate, cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -142,20 +142,21 @@ export default function ProfilePage() {
               <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Тема</p>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { key: 'dark' as Theme,  label: '🌙 Тёмная' },
-                  { key: 'light' as Theme, label: '☀️ Светлая' },
-                ] as const).map(({ key, label }) => (
+                  { key: 'dark' as Theme,  label: 'Тёмная',  Icon: MoonIcon },
+                  { key: 'light' as Theme, label: 'Светлая', Icon: SunIcon },
+                ] as const).map(({ key, label, Icon }) => (
                   <button
                     key={key}
                     onClick={() => { setTheme(key); applyTheme(key); }}
                     className={cn(
-                      'py-2.5 rounded-xl text-sm border transition-all',
+                      'flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm border transition-all',
                       theme === key
                         ? 'border-accent bg-[var(--accent-dim)] text-accent'
                         : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                     )}
                     style={theme !== key ? { color: 'var(--text-secondary)' } : {}}
                   >
+                    <Icon size={15} />
                     {label}
                   </button>
                 ))}

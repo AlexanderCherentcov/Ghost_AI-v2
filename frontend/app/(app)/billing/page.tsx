@@ -5,8 +5,8 @@ import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/components/ui/Toast';
 import { api, type PlansResponse } from '@/lib/api';
-import { calculateCasperPrice, pricePerCasper, fakeCyclePrice, freeTierTagline } from '@/lib/pricing';
-import { CheckIcon } from '@/components/icons';
+import { calculateCasperPrice, pricePerCasper, fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations } from '@/lib/pricing';
+import { CheckIcon, CasperCoin } from '@/components/icons';
 import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
 import { cn, formatNumber } from '@/lib/utils';
 
@@ -25,6 +25,9 @@ export default function BillingPage() {
   }, []);
   const plans = plansData?.plans ?? [];
   const casperTiers = plansData?.casper_price_tiers ?? [];
+  const cheapest = plansData
+    ? cheapestCosts(plansData.models.image, plansData.models.video, plansData.casper_costs.music_generate ?? 5)
+    : null;
 
   // ── Промокод на скидку (применяется при оплате тарифа) ────────────────────
   const [promoCode, setPromoCode] = useState('');
@@ -150,12 +153,11 @@ export default function BillingPage() {
               </div>
               {plan === 'FREE' && plansData && (
                 <div className="text-right">
-                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">
-                    🎁 {plansData.free.welcome_caspers} Caspers при регистрации
+                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1 flex items-center justify-end gap-1">
+                    <CasperCoin size={12} />
+                    {plansData.free.welcome_caspers} Caspers при регистрации
                   </p>
-                  <p className="text-xs text-[rgba(255,255,255,0.4)]">
-                    {plansData.free.limits.std_messages_daily} сообщений/день
-                  </p>
+                  <p className="text-xs text-[rgba(255,255,255,0.4)]">Безлимитный чат</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">Остальное — за Caspers</p>
                 </div>
               )}
@@ -238,8 +240,8 @@ export default function BillingPage() {
             <p className="text-sm text-[rgba(255,255,255,0.4)]">Загрузка тарифов...</p>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {plans.map(({ key, label: name, price, price_yearly, caspers_monthly: caspers, badge, features }) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {plans.map(({ key, label: name, description, price, price_yearly, caspers_monthly: caspers, badge, features }) => {
               const basePrice = billingCycle === 'yearly' ? price_yearly : price;
               const discountPercent = promoDiscounts[key];
               const realPrice = discountPercent
@@ -276,6 +278,7 @@ export default function BillingPage() {
                       </span>
                     )}
                   </div>
+                  <p className="text-xs mb-2 leading-relaxed text-[rgba(255,255,255,0.4)]">{description}</p>
 
                   {/* Цена с фейковой скидкой */}
                   <div className="mb-1">
@@ -294,13 +297,21 @@ export default function BillingPage() {
                   </div>
                   {discountPercent && (
                     <p className="text-[11px] text-green-400 mb-1">
-                      🎟 Промокод: −{discountPercent}%
+                      Промокод: −{discountPercent}%
                     </p>
                   )}
 
                   <p className="text-[11px] text-accent mb-3">
                     {formatNumber(caspers)} Caspers/мес
                   </p>
+
+                  {cheapest && (
+                    <ul className="text-[11px] mb-3 space-y-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      <li>+ До {formatNumber(maxGenerations(caspers, cheapest.image))} изображений</li>
+                      <li>+ До {formatNumber(maxGenerations(caspers, cheapest.video))} видео</li>
+                      <li>+ До {formatNumber(maxGenerations(caspers, cheapest.music))} треков</li>
+                    </ul>
+                  )}
 
                   <PlanFeatureList
                     features={features}
@@ -334,7 +345,7 @@ export default function BillingPage() {
               <span className="font-medium text-white text-sm">Бесплатный план</span>
               {plansData && (
                 <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
-                  {freeTierTagline(plansData.free.welcome_caspers, plansData.free.limits.std_messages_daily)}
+                  {freeTierTagline(plansData.free.welcome_caspers)}
                 </span>
               )}
             </div>

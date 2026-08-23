@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { MusicIcon, MicIcon, SparkleIcon } from '@/components/icons';
 import type { VideoOptions, MusicOptions } from './types';
 import type { CasperCosts } from './costs';
 import { getCostDisplay } from './costs';
@@ -36,8 +37,9 @@ export function MusicWidget({
       </div>
 
       <div className="px-4 py-3 flex flex-col gap-2.5">
-        {/* Название + Стиль */}
-        <div className="flex gap-2">
+        {/* Название + Стиль — на узком экране (<640px) складываем в столбец вместо
+            двух сжатых flex-1 полей в ряд, иначе плейсхолдеры визуально слипаются. */}
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={options.title}
             onChange={(e) => onChange({ ...options, title: e.target.value })}
@@ -70,13 +72,16 @@ export function MusicWidget({
           )}
           style={!options.instrumental ? { color: 'var(--text-secondary)' } : {}}
         >
-          {options.instrumental ? '🎹 Инструментал' : '🎤 С вокалом'}
+          {options.instrumental ? <MusicIcon size={12} /> : <MicIcon size={12} />}
+          {options.instrumental ? 'Инструментал' : 'С вокалом'}
         </button>
 
         {/* Область текста песни */}
         {!options.instrumental && (
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
+            {/* flex-wrap — на узком экране подпись + кнопка "Сгенерировать текст" вместе
+               не помещаются в одну строку без переноса. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Текст песни (необязательно)</span>
               <Tooltip
                 content="Введите название трека для генерации"
@@ -94,7 +99,10 @@ export function MusicWidget({
                       : 'border-[rgba(123,92,240,0.4)] text-accent hover:bg-[rgba(123,92,240,0.1)]'
                   )}
                 >
-                  {generatingLyrics ? '✨ Генерирую...' : '✨ Сгенерировать текст'}
+                  <span className="inline-flex items-center gap-1">
+                    <SparkleIcon size={11} />
+                    {generatingLyrics ? 'Генерирую...' : 'Сгенерировать текст'}
+                  </span>
                 </button>
               </Tooltip>
             </div>

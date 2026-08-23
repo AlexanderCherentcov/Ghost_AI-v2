@@ -5,27 +5,31 @@
 // не загрузился, не источник правды.
 
 import type { ChatMode, VideoOptions } from './types';
+import type { ChatModelOption, ImageModelOption, VideoModelOption } from '@/lib/api';
 
 export type CasperCosts = Record<string, number>;
 
 export const DEFAULT_CASPER_COSTS: CasperCosts = {
-  chat_pro: 1,
-  image_generate: 10,
-  image_edit: 10,
-  video_std_4s: 25,
-  video_std_8s: 40,
-  video_pro_4s: 50,
-  video_pro_8s: 90,
   music_generate: 5,
+  voice_exchange: 8,
 };
 
-export function calcCaspers(mode: ChatMode, videoOpts: VideoOptions, costs: CasperCosts): number {
+// Цена картинок/видео теперь зависит от выбранной модели (реестр backend/src/config/models.ts),
+// а не от фиксированных ключей image_generate/video_std_4s — costs (CasperCosts) остаётся
+// источником цены только для музыки, у которой пока нет реестра моделей.
+export function calcCaspers(
+  mode: ChatMode,
+  videoOpts: VideoOptions,
+  costs: CasperCosts,
+  imageModel?: ImageModelOption,
+  videoModels?: VideoModelOption[],
+): number {
   if (mode === 'music') return costs.music_generate;
-  if (mode === 'images') return costs.image_generate;
+  if (mode === 'voice') return costs.voice_exchange;
+  if (mode === 'images') return imageModel?.cost ?? 0;
   if (mode === 'video') {
-    const isPro = videoOpts.videoModel === 'cinema';
-    if (isPro) return videoOpts.duration === '4s' ? costs.video_pro_4s : costs.video_pro_8s;
-    return videoOpts.duration === '4s' ? costs.video_std_4s : costs.video_std_8s;
+    const spec = videoModels?.find((m) => m.id === videoOpts.videoModel);
+    return spec ? spec.cost[videoOpts.duration] : 0;
   }
   return 0;
 }
@@ -50,30 +54,33 @@ export function getCostDisplay(
   userImages?: number,
   userMusic?: number,
   userVideos?: number,
-  preferredModel?: 'haiku' | 'deepseek' | undefined,
-  userProFreeRemaining?: number,
+  selectedChatModel?: ChatModelOption,
+  imageModel?: ImageModelOption,
+  videoModels?: VideoModelOption[],
 ): CostDisplay {
   if (mode === 'chat') {
-    if (preferredModel !== 'deepseek') return null;
-    if (!userPlan) return null; // ещё загружается
-    if (userPlan === 'ULTRA') return { type: 'free', label: 'безлимит' };
-    if (userProFreeRemaining !== undefined && userProFreeRemaining > 0) {
-      return { type: 'free', label: `${userProFreeRemaining} сегодня` };
-    }
-    if (!userProFreeRemaining && userPlan === 'FREE') return null; // FREE не может пользоваться pro
-    return { type: 'caspers', amount: costs.chat_pro };
+    if (!selectedChatModel || selectedChatModel.cost === 0) return null; // 'auto' и бесплатные модели — без бейджа
+    // Платные модели чата списывают Caspers на всех тарифах одинаково, без
+    // бесплатной дневной квоты (убрана по прямому решению Александра — модели,
+    // за которые платим мы, оплачиваются всеми, без исключений даже на ULTRA).
+    return { type: 'caspers', amount: selectedChatModel.cost };
   }
 
   if (mode === 'images') {
-    return { type: 'caspers', amount: costs.image_generate };
+    if (!imageModel) return null; // список моделей ещё не загрузился
+    return { type: 'caspers', amount: imageModel.cost };
   }
 
   if (mode === 'music') {
     return { type: 'caspers', amount: costs.music_generate };
   }
 
+  if (mode === 'voice') {
+    return { type: 'caspers', amount: costs.voice_exchange };
+  }
+
   if (mode === 'video') {
-    return { type: 'caspers', amount: calcCaspers('video', videoOpts, costs) };
+    return { type: 'caspers', amount: calcCaspers('video', videoOpts, costs, imageModel, videoModels) };
   }
 
   return null;

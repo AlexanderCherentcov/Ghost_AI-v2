@@ -20,6 +20,8 @@ const config: Config = {
         'accent-dim':   'rgba(123,92,240,0.12)',
         'accent-glow':  'rgba(123,92,240,0.15)',
         'accent-border':'rgba(123,92,240,0.25)',
+        'accent-teal':  '#2dd4bf',
+        'accent-gold':  '#f2b544',
         'text-pri':     'rgba(255,255,255,0.90)',
         'text-sec':     'rgba(255,255,255,0.45)',
         'text-muted':   'rgba(255,255,255,0.20)',
@@ -30,6 +32,7 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         'display': ['64px', { lineHeight: '1.05', letterSpacing: '-0.04em' }],

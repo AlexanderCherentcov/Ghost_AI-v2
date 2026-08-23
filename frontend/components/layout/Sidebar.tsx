@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GhostIcon } from '@/components/icons/GhostIcon';
 import {
   PlusIcon, SettingsIcon, TrashIcon, EditIcon,
 } from '@/components/icons';
@@ -46,25 +45,12 @@ export function Sidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  // Дневной лимит FREE-тарифа — с бэкенда (GET /plans), не захардкожен
-  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
-  useEffect(() => {
-    api.payments.plans().then((data) => setDailyLimit(data.free.limits.std_messages_daily)).catch(() => {});
-  }, []);
-
-  const plan = user?.plan ?? 'FREE';
-  const stdToday = user?.std_messages_today ?? 0;
   const caspersBalance = user?.caspers_balance ?? 0;
 
-  // FREE-тариф: показываем прогресс стандартных сообщений; платный: баланс Caspers
-  const showMsgProgress = plan === 'FREE' && dailyLimit !== null;
-  const tokenPercent = showMsgProgress
-    ? Math.min((stdToday / dailyLimit!) * 100, 100)
-    : 0; // не используется для платных тарифов
-
-  const balanceLabel = showMsgProgress
-    ? `${stdToday}/${dailyLimit} сегодня`
-    : `${formatNumber(caspersBalance)} Caspers`;
+  // Стандартный чат безлимитный на всех тарифах (включая FREE) — платный счётчик
+  // здесь всегда про Caspers, дневного лимита сообщений больше нет ни у кого.
+  const tokenPercent = 0; // не используется для платных тарифов
+  const balanceLabel = `${formatNumber(caspersBalance)} Caspers`;
 
   const grouped = groupChats(chats);
 
@@ -115,7 +101,7 @@ export function Sidebar() {
     if (!items.length) return null;
     return (
       <div className="mb-3">
-        <p className="text-[11px] uppercase tracking-wider px-3 mb-1" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-[11px] font-bold uppercase tracking-wider px-3 mb-1.5" style={{ color: 'var(--text-muted)' }}>
           {label}
         </p>
         {items.map((chat) => (
@@ -123,12 +109,11 @@ export function Sidebar() {
             key={chat.id}
             className={cn(
               'group flex items-center gap-2 px-3 rounded-xl text-sm transition-all relative',
-              activeChat?.id === chat.id
-                ? 'bg-[var(--bg-elevated)] border-l-2 border-accent'
-                : 'hover:bg-[var(--bg-elevated)]'
+              activeChat?.id !== chat.id && 'hover:bg-[var(--bg-elevated)]'
             )}
             style={{
               color: 'var(--text-primary)',
+              background: activeChat?.id === chat.id ? 'rgba(123,92,240,.14)' : undefined,
             }}
           >
             {/* Кликабельная область заголовка */}
@@ -184,14 +169,21 @@ export function Sidebar() {
     <motion.aside
       animate={{ width: sidebarOpen ? 260 : 60 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="flex flex-col h-screen bg-[var(--bg-surface)] border-r border-[var(--border)] flex-shrink-0 overflow-hidden"
-      style={{ position: 'fixed', top: 0, left: 0, zIndex: 40 }}
+      className="flex flex-col h-screen border-r flex-shrink-0 overflow-hidden"
+      style={{ position: 'fixed', top: 0, left: 0, zIndex: 40, background: 'var(--panel-glass-sidebar)', borderColor: 'var(--panel-glass-border)', WebkitBackdropFilter: 'blur(14px)', backdropFilter: 'blur(14px)' }}
     >
       {/* Лого + переключатель — две разные раскладки, чтобы избежать обрезки при переполнении */}
       {sidebarOpen ? (
         <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
-          <GhostIcon size={24} className="text-accent flex-shrink-0" />
-          <span className="text-base font-medium tracking-tight truncate flex-1" style={{ color: 'var(--text-primary)' }}>GhostLine</span>
+          <Link href="/chat" className="flex items-center gap-3 min-w-0 flex-1">
+            <img
+              src="/ghostline-logo-icon.png"
+              alt="GhostLine"
+              className="w-7 h-7 rounded-[7px] object-cover flex-shrink-0"
+              style={{ filter: 'drop-shadow(0 0 8px rgba(123,92,240,.5))' }}
+            />
+            <span className="font-display text-base font-bold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>GhostLine</span>
+          </Link>
           <button
             onClick={toggleSidebar}
             className="transition-colors flex-shrink-0 hover:opacity-100 opacity-40"
@@ -206,7 +198,14 @@ export function Sidebar() {
         </div>
       ) : (
         <div className="flex flex-col items-center pt-4 pb-3 gap-3">
-          <GhostIcon size={22} className="text-accent" />
+          <Link href="/chat">
+            <img
+              src="/ghostline-logo-icon.png"
+              alt="GhostLine"
+              className="w-[22px] h-[22px] rounded-[6px] object-cover"
+              style={{ filter: 'drop-shadow(0 0 8px rgba(123,92,240,.5))' }}
+            />
+          </Link>
           <button
             onClick={toggleSidebar}
             className="transition-colors hover:opacity-100 opacity-40"
@@ -226,10 +225,14 @@ export function Sidebar() {
         <button
           onClick={handleNewChat}
           className={cn(
-            'w-full flex items-center rounded-xl border border-[var(--border)] text-sm hover:bg-[var(--bg-elevated)] transition-all',
-            sidebarOpen ? 'gap-2 px-4 py-2.5 justify-start' : 'justify-center p-2.5'
+            'w-full flex items-center border font-semibold transition-all',
+            sidebarOpen ? 'gap-2 justify-start' : 'justify-center p-2.5 rounded-xl'
           )}
-          style={{ color: 'var(--text-secondary)' }}
+          style={
+            sidebarOpen
+              ? { color: '#e3ddfa', borderColor: 'var(--accent-border)', background: 'var(--accent-dim)', padding: '11px 14px', borderRadius: '11px', fontSize: '13.5px' }
+              : { color: '#e3ddfa', borderColor: 'var(--accent-border)', background: 'var(--accent-dim)' }
+          }
           aria-label="Новый чат"
         >
           <PlusIcon size={16} className="flex-shrink-0" />
@@ -238,7 +241,7 @@ export function Sidebar() {
       </div>
 
       {/* Разделитель */}
-      <div className="mx-3 border-t border-[var(--border)] mb-4" />
+      <div className="mx-3 border-t mb-4" style={{ borderColor: 'var(--panel-glass-border)' }} />
 
       {/* История чатов — скрыта в свёрнутом виде */}
       {sidebarOpen && (
@@ -256,12 +259,15 @@ export function Sidebar() {
       )}
       {!sidebarOpen && <div className="flex-1" />}
 
-      {/* Низ */}
-      <div className="p-3 border-t border-[var(--border)]">
-        {/* Полоса токенов — только в развёрнутом виде */}
-        {sidebarOpen && (
-          <div className="mb-3 space-y-2">
-            <div>
+      {/* Низ: единая glass-панель — баланс/прогресс + юзер-карточка */}
+      <div className="p-3">
+        <div
+          className="rounded-[11px]"
+          style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}
+        >
+          {/* Полоса токенов — только в развёрнутом виде */}
+          {sidebarOpen && (
+            <div className="px-3 pt-2.5 pb-2 border-b" style={{ borderColor: 'var(--panel-glass-border)' }}>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                   <CasperCoin size={14} />
@@ -280,36 +286,35 @@ export function Sidebar() {
                 />
               </div>
             </div>
-
-          </div>
-        )}
-
-        {/* Информация о пользователе */}
-        <div className={cn('flex items-center', sidebarOpen ? 'gap-3' : 'justify-center')}>
-          {user?.avatarUrl ? (
-            <img src={user.avatarUrl} alt={user.name ?? 'User'} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs text-accent font-medium">{user?.name?.[0]?.toUpperCase() ?? 'G'}</span>
-            </div>
           )}
-          {sidebarOpen && (
-            <>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{user?.name ?? 'Ghost'}</p>
-                <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{user?.plan ?? 'FREE'}</p>
+
+          {/* Информация о пользователе */}
+          <div className={cn('flex items-center p-2.5', sidebarOpen ? 'gap-3' : 'justify-center')}>
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name ?? 'User'} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-teal))' }}>
+                <span className="text-xs text-white font-medium">{user?.name?.[0]?.toUpperCase() ?? 'G'}</span>
               </div>
-              <Link
-                href="/settings"
-                className="transition-colors opacity-40 hover:opacity-100 flex-shrink-0"
-                style={{ color: 'var(--text-primary)' }}
-                title="Настройки"
-                aria-label="Открыть настройки"
-              >
-                <SettingsIcon size={16} />
-              </Link>
-            </>
-          )}
+            )}
+            {sidebarOpen && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user?.name ?? 'Ghost'}</p>
+                  <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{user?.plan ?? 'FREE'}</p>
+                </div>
+                <Link
+                  href="/settings"
+                  className="transition-colors opacity-40 hover:opacity-100 flex-shrink-0"
+                  style={{ color: 'var(--text-primary)' }}
+                  title="Настройки"
+                  aria-label="Открыть настройки"
+                >
+                  <SettingsIcon size={16} />
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </motion.aside>

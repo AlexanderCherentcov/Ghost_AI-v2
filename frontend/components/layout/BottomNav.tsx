@@ -59,10 +59,14 @@ export function BottomNav() {
 
   return (
     <nav
-      className="flex-shrink-0 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center lg:hidden"
+      className="flex-shrink-0 border-t flex items-center lg:hidden"
       style={{
         height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        background: 'var(--panel-glass-sidebar)',
+        borderColor: 'var(--panel-glass-border)',
+        WebkitBackdropFilter: 'blur(14px)',
+        backdropFilter: 'blur(14px)',
       }}
     >
       {ITEMS.map(({ href, label, Icon }) => {

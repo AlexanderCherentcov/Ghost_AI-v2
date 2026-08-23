@@ -42,29 +42,30 @@ export function isShortPrompt(prompt: string): boolean {
  *   "да" после "как сварить яйцо?"  ≠  "да" после "хочешь кофе?"
  */
 function textKey(
-  mode: string,
-  complexity: string,
+  modelId: string,
   prompt: string,
   historyContext: string[],  // только user-сообщения из истории
   responseStyle?: string | null
 ): string {
   const ctx     = historyContext.slice(-2).map(normalize);
   const combined = [...ctx, normalize(prompt)].join('\n↓\n');
-  // Включаем стиль в ключ — ответы для разных стилей не взаимозаменяемы
+  // Включаем стиль в ключ — ответы для разных стилей не взаимозаменяемы.
+  // modelId вместо старой пары (mode, complexity) — ответы разных моделей
+  // не взаимозаменяемы точно так же, а «сложность» как отдельное понятие
+  // исчезла вместе со скрытым авто-роутингом.
   const styleTag = responseStyle ?? 'ghost';
-  return `ghost:t:${sha256(`${VER}:${mode}:${complexity}:${styleTag}:${combined}`)}`;
+  return `ghost:t:${sha256(`${VER}:${modelId}:${styleTag}:${combined}`)}`;
 }
 
 export async function getTextCached(
-  mode: string,
-  complexity: string,
+  modelId: string,
   prompt: string,
   historyContext: string[] = [],
   responseStyle?: string | null
 ): Promise<{ hit: true; response: object } | { hit: false }> {
   if (isShortPrompt(prompt)) return { hit: false };  // коротыши → мимо
   try {
-    const raw = await redis.get(textKey(mode, complexity, prompt, historyContext, responseStyle));
+    const raw = await redis.get(textKey(modelId, prompt, historyContext, responseStyle));
     return raw ? { hit: true, response: JSON.parse(raw) } : { hit: false };
   } catch {
     return { hit: false }; // Redis недоступен → miss (fail-open)
@@ -72,8 +73,7 @@ export async function getTextCached(
 }
 
 export async function setTextCached(
-  mode: string,
-  complexity: string,
+  modelId: string,
   prompt: string,
   response: object,
   historyContext: string[] = [],
@@ -82,7 +82,7 @@ export async function setTextCached(
   if (isShortPrompt(prompt)) return;
   try {
     await redis.set(
-      textKey(mode, complexity, prompt, historyContext, responseStyle),
+      textKey(modelId, prompt, historyContext, responseStyle),
       JSON.stringify(response),
       'EX',
       TTL_TEXT
@@ -128,11 +128,3 @@ export async function setMediaCached(
     // Redis недоступен → пропускаем (fail-open)
   }
 }
-
-// ─── Обратная совместимость ────────────────────────────────────────────────────
-// Обратная совместимость — перенаправляем на текстовый кэш без контекста
-export const getCached = (mode: string, complexity: string, prompt: string) =>
-  getTextCached(mode, complexity, prompt, []);
-
-export const setCached = (mode: string, complexity: string, prompt: string, response: object) =>
-  setTextCached(mode, complexity, prompt, response, []);

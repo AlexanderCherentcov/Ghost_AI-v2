@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Chat, Message } from '@/lib/api';
 
 interface ChatState {
@@ -7,8 +8,9 @@ interface ChatState {
   messages: Message[];
   isStreaming: boolean;
   streamContent: string;
-  mode: 'chat' | 'vision' | 'sound' | 'reel' | 'think';
-  preferredModel: 'haiku' | 'deepseek' | undefined;
+  // id модели чата из реестра (config/models.ts на бэкенде), 'auto' по умолчанию.
+  // Персистится в localStorage — выбор пользователя переживает перезагрузку страницы.
+  model: string;
 
   setChats: (chats: Chat[]) => void;
   addChat: (chat: Chat) => void;
@@ -23,59 +25,65 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   clearStream: () => void;
 
-  setMode: (mode: ChatState['mode']) => void;
-  setPreferredModel: (model: 'haiku' | 'deepseek' | undefined) => void;
+  setModel: (model: string) => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  chats: [],
-  activeChat: null,
-  messages: [],
-  isStreaming: false,
-  streamContent: '',
-  mode: 'chat',
-  preferredModel: undefined,
-
-  setChats: (chats) => set({ chats }),
-
-  addChat: (chat) =>
-    set((s) => ({ chats: [chat, ...s.chats], activeChat: chat })),
-
-  updateChat: (chatId, data) =>
-    set((s) => ({
-      chats: s.chats.map((c) => (c.id === chatId ? { ...c, ...data } : c)),
-      activeChat: s.activeChat?.id === chatId ? { ...s.activeChat, ...data } : s.activeChat,
-    })),
-
-  removeChat: (chatId) =>
-    set((s) => ({
-      chats: s.chats.filter((c) => c.id !== chatId),
-      activeChat: s.activeChat?.id === chatId ? null : s.activeChat,
-    })),
-
-  // [M-14] НЕ сбрасываем messages здесь — избегаем гонки при быстром переключении чатов.
-  // За вызов setMessages([]) отвечает компонент страницы (ChatIdPage) — после того,
-  // как подтвердится, что сообщения нового чата загружены.
-  setActiveChat: (chat) => set({ activeChat: chat }),
-
-  setMessages: (messages) => set({ messages }),
-
-  addMessage: (message) =>
-    set((s) => ({ messages: [...s.messages, message] })),
-
-  appendStreamToken: (token) =>
-    set((s) => ({ streamContent: s.streamContent + token })),
-
-  commitStream: (message) =>
-    set((s) => ({
-      messages: [...s.messages, message],
-      streamContent: '',
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      chats: [],
+      activeChat: null,
+      messages: [],
       isStreaming: false,
-    })),
+      streamContent: '',
+      model: 'auto',
 
-  setStreaming: (isStreaming) => set({ isStreaming }),
-  clearStream: () => set({ streamContent: '', isStreaming: false }),
+      setChats: (chats) => set({ chats }),
 
-  setMode: (mode) => set({ mode }),
-  setPreferredModel: (preferredModel) => set({ preferredModel }),
-}));
+      addChat: (chat) =>
+        set((s) => ({ chats: [chat, ...s.chats], activeChat: chat })),
+
+      updateChat: (chatId, data) =>
+        set((s) => ({
+          chats: s.chats.map((c) => (c.id === chatId ? { ...c, ...data } : c)),
+          activeChat: s.activeChat?.id === chatId ? { ...s.activeChat, ...data } : s.activeChat,
+        })),
+
+      removeChat: (chatId) =>
+        set((s) => ({
+          chats: s.chats.filter((c) => c.id !== chatId),
+          activeChat: s.activeChat?.id === chatId ? null : s.activeChat,
+        })),
+
+      // [M-14] НЕ сбрасываем messages здесь — избегаем гонки при быстром переключении чатов.
+      // За вызов setMessages([]) отвечает компонент страницы (ChatIdPage) — после того,
+      // как подтвердится, что сообщения нового чата загружены.
+      setActiveChat: (chat) => set({ activeChat: chat }),
+
+      setMessages: (messages) => set({ messages }),
+
+      addMessage: (message) =>
+        set((s) => ({ messages: [...s.messages, message] })),
+
+      appendStreamToken: (token) =>
+        set((s) => ({ streamContent: s.streamContent + token })),
+
+      commitStream: (message) =>
+        set((s) => ({
+          messages: [...s.messages, message],
+          streamContent: '',
+          isStreaming: false,
+        })),
+
+      setStreaming: (isStreaming) => set({ isStreaming }),
+      clearStream: () => set({ streamContent: '', isStreaming: false }),
+
+      setModel: (model) => set({ model }),
+    }),
+    {
+      name: 'ghost-chat-prefs',
+      // Персистим только выбор модели — chats/messages/streaming живут за пределами localStorage.
+      partialize: (s) => ({ model: s.model }),
+    }
+  )
+);

@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MoonIcon, SunIcon } from '@/components/icons';
+import { CasperHistorySection } from '@/components/settings/CasperHistorySection';
 
 type Theme = 'dark' | 'light';
 type FontSize = 'small' | 'medium' | 'large';
@@ -67,7 +70,7 @@ function SupportInlineForm({ userEmail }: { userEmail: string | null }) {
   return (
     <div className="space-y-3">
       {userEmail && (
-        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Ответ придёт на {userEmail}</p>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Ответ придёт на {userEmail}</p>
       )}
       <textarea
         placeholder="Опишите вашу проблему или вопрос..."
@@ -127,22 +130,22 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
-      <div className="px-4 sm:px-6 py-5 border-b border-[var(--border)]">
-        <h1 className="text-xl font-medium" style={{ color: 'var(--text-primary)' }}>Настройки</h1>
+      <div className="px-4 sm:px-6 py-5 border-b border-[var(--panel-glass-border)]">
+        <h1 className="font-display text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Настройки</h1>
       </div>
 
-      <div className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <div className="flex-1 max-w-[900px] mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Стиль ответов */}
-        <div className="card">
-          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Стиль ответов</h2>
+        <div className="rounded-[18px] py-7 px-[30px]" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+          <h2 className="font-display font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Стиль ответов</h2>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Как GhostLine отвечает на вопросы</p>
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-2.5 mb-4">
             {STYLES.map(({ id, label }) => (
               <button
                 key={id}
                 onClick={() => setStyle(id)}
                 className={cn(
-                  'px-3 py-1.5 rounded-xl text-sm border transition-all',
+                  'px-[18px] py-[9px] rounded-[10px] text-[13.5px] font-semibold border transition-all',
                   style === id
                     ? 'border-accent bg-[var(--accent-dim)] text-accent'
                     : 'border-[var(--border)] hover:border-[var(--border-hover)]'
@@ -171,30 +174,31 @@ export default function SettingsPage() {
         </div>
 
         {/* Appearance */}
-        <div className="card">
-          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Внешний вид</h2>
+        <div className="rounded-[18px] py-7 px-[30px]" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+          <h2 className="font-display font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Внешний вид</h2>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Тема и размер шрифта</p>
 
           <div className="space-y-4">
             {/* Theme */}
             <div>
-              <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Тема</p>
-              <div className="flex gap-2">
+              <p className="text-xs mb-2 uppercase tracking-wider font-bold" style={{ color: 'var(--text-muted)' }}>Тема</p>
+              <div className="flex gap-3">
                 {([
-                  { key: 'dark' as Theme,  label: '🌙 Тёмная' },
-                  { key: 'light' as Theme, label: '☀️ Светлая' },
-                ] as const).map(({ key, label }) => (
+                  { key: 'dark' as Theme,  label: 'Тёмная',  Icon: MoonIcon },
+                  { key: 'light' as Theme, label: 'Светлая', Icon: SunIcon },
+                ] as const).map(({ key, label, Icon }) => (
                   <button
                     key={key}
                     onClick={() => { setTheme(key); applyTheme(key); }}
                     className={cn(
-                      'flex-1 py-2.5 rounded-xl text-sm border transition-all focus-visible:ring-2 focus-visible:ring-accent',
+                      'flex-1 flex items-center justify-center gap-2 py-[14px] rounded-xl text-sm font-semibold border transition-all focus-visible:ring-2 focus-visible:ring-accent',
                       theme === key
                         ? 'border-accent bg-[var(--accent-dim)] text-accent'
                         : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                     )}
                     style={theme !== key ? { color: 'var(--text-secondary)' } : {}}
                   >
+                    <Icon size={16} />
                     {label}
                   </button>
                 ))}
@@ -203,26 +207,26 @@ export default function SettingsPage() {
 
             {/* Размер шрифта */}
             <div>
-              <p className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Размер шрифта</p>
-              <div className="flex gap-2">
+              <p className="text-xs mb-2 uppercase tracking-wider font-bold" style={{ color: 'var(--text-muted)' }}>Размер шрифта</p>
+              <div className="flex gap-3">
                 {([
-                  { key: 'small' as FontSize,  label: 'A', desc: 'Мелкий' },
-                  { key: 'medium' as FontSize, label: 'A', desc: 'Средний' },
-                  { key: 'large' as FontSize,  label: 'A', desc: 'Крупный' },
-                ] as const).map(({ key, label, desc }, i) => (
+                  { key: 'small' as FontSize,  label: 'A', desc: 'Мелкий',  preview: 15 },
+                  { key: 'medium' as FontSize, label: 'A', desc: 'Средний', preview: 18 },
+                  { key: 'large' as FontSize,  label: 'A', desc: 'Крупный', preview: 21 },
+                ] as const).map(({ key, label, desc, preview }) => (
                   <button
                     key={key}
                     onClick={() => { setFontSize(key); applyFontSize(key); }}
                     className={cn(
-                      'flex-1 py-2 flex flex-col items-center rounded-xl border transition-all focus-visible:ring-2 focus-visible:ring-accent',
+                      'flex-1 p-4 flex flex-col items-center gap-1 rounded-xl border transition-all focus-visible:ring-2 focus-visible:ring-accent',
                       fontSize === key
                         ? 'border-accent bg-[var(--accent-dim)] text-accent'
                         : 'border-[var(--border)] hover:border-[var(--border-hover)]'
                     )}
                     style={fontSize !== key ? { color: 'var(--text-secondary)' } : {}}
                   >
-                    <span style={{ fontSize: 12 + i * 3 }}>{label}</span>
-                    <span className="text-[10px] mt-0.5 opacity-60">{desc}</span>
+                    <span style={{ fontSize: preview }}>{label}</span>
+                    <span className="text-xs">{desc}</span>
                   </button>
                 ))}
               </div>
@@ -230,34 +234,49 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Установка как приложение (PWA) */}
+        <div className="rounded-[18px] py-7 px-[30px] flex items-center justify-between gap-4 flex-wrap" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+          <div>
+            <h2 className="font-display font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Установить как приложение</h2>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>iPhone, Android, Windows и Mac — без App Store и Google Play</p>
+          </div>
+          <Link href="/install" className="btn btn-primary h-10 px-5 text-sm shrink-0">
+            Инструкция
+          </Link>
+        </div>
+
         {/* Account */}
-        <div className="card">
-          <h2 className="font-medium mb-4" style={{ color: 'var(--text-primary)' }}>Аккаунт</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 border-b border-[var(--border)]">
+        <div className="rounded-[18px] py-7 px-[30px]" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+          <h2 className="font-display font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Аккаунт</h2>
+          <div>
+            <div className="flex items-center justify-between py-3 border-b border-[var(--border)]">
               <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Email</span>
-              <span className="text-sm truncate ml-3 max-w-[60%] text-right" style={{ color: 'var(--text-primary)' }}>{user?.email ?? 'Не указан'}</span>
+              <span className="text-sm font-semibold truncate ml-3 max-w-[60%] text-right" style={{ color: 'var(--text-primary)' }}>{user?.email ?? 'Не указан'}</span>
             </div>
-            <div className="flex items-center justify-between py-2 border-b border-[var(--border)]">
+            <div className="flex items-center justify-between py-3">
               <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Тариф</span>
-              <span className="text-sm text-accent">{user?.plan ?? 'FREE'}</span>
+              <span className="text-sm font-bold text-accent">{user?.plan ?? 'FREE'}</span>
             </div>
           </div>
         </div>
 
+        {/* История списания Caspers */}
+        <CasperHistorySection />
+
         {/* Support */}
-        <div className="card">
-          <h2 className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>Поддержка</h2>
+        <div className="rounded-[18px] py-7 px-[30px]" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+          <h2 className="font-display font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Поддержка</h2>
           <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Напишите нам — ответим на ваш email</p>
           <SupportInlineForm userEmail={user?.email ?? null} />
         </div>
 
         {/* Опасная зона */}
-        <div className="card border-red-500/20">
-          <h2 className="font-medium text-red-400 mb-4">Выход</h2>
+        <div className="rounded-[18px] py-7 px-[30px]" style={{ background: 'var(--panel-glass)', border: '1px solid rgba(148,163,184,.14)' }}>
+          <h2 className="font-display font-semibold text-red-400 mb-4">Выход</h2>
           <button
             onClick={handleLogout}
-            className="btn btn-ghost h-10 px-5 text-sm border-red-500/30 text-red-400 hover:bg-red-500/10 w-full sm:w-auto"
+            className="btn btn-ghost h-10 px-5 text-sm w-full sm:w-auto"
+            style={{ borderColor: 'rgba(148,163,184,.25)', color: 'var(--text-primary)' }}
           >
             Выйти из аккаунта
           </button>

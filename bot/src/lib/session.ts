@@ -11,22 +11,29 @@ const http = axios.create({ proxy: false });
 // JWT живёт 15 минут (см. backend), обновляем за минуту до истечения — с запасом.
 const SESSION_TOKEN_TTL_MS = 14 * 60 * 1000;
 
-export type Mode = 'chat' | 'think' | 'vision' | 'sound' | 'reel';
+// 'think' убран — раньше это была отдельная кнопка "🧠 Про чат", по факту всегда
+// жёстко выбиравшая DeepSeek. Теперь платность/глубина ответа определяется РЕАЛЬНОЙ
+// выбранной моделью (session.chatModel), а не отдельным полем режима — как на сайте.
+export type Mode = 'chat' | 'vision' | 'sound' | 'reel';
 
 export interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
 }
 
-// Модели видео: motion = Veo 3.1 Fast, cinema = Veo 3.1 Pro, reality = Kling V-2.5.
-// Значения и дефолты 1:1 с frontend/components/chat/InputBar.tsx — тот же /generate/reel.
-export type VideoModel = 'motion' | 'cinema' | 'reality';
+// Id модели из реестра backend/src/config/models.ts — единственный источник правды.
+// Дефолты ниже совпадают с DEFAULT_VIDEO_MODEL_ID/DEFAULT_IMAGE_MODEL_ID/AUTO_MODEL_ID
+// там же; используются только пока GET /plans не загрузился (см. lib/api-client.ts:getModels).
+export const FALLBACK_CHAT_MODEL_ID = 'auto';
+export const FALLBACK_VIDEO_MODEL_ID = 'kling-v2.5';
+export const FALLBACK_IMAGE_MODEL_ID = 'gemini-flash-image';
+
 export type VideoResolution = '720p' | '1080p';
 export type VideoDuration = '4s' | '8s';
 export type VideoAspectRatio = '16:9' | '9:16';
 
 export interface VideoOptions {
-  videoModel: VideoModel;
+  videoModel: string;
   resolution: VideoResolution;
   duration: VideoDuration;
   aspectRatio: VideoAspectRatio;
@@ -35,7 +42,7 @@ export interface VideoOptions {
 }
 
 export const DEFAULT_VIDEO_OPTIONS: VideoOptions = {
-  videoModel: 'motion',
+  videoModel: FALLBACK_VIDEO_MODEL_ID,
   resolution: '720p',
   duration: '8s',
   aspectRatio: '16:9',
@@ -70,6 +77,10 @@ export interface UserSession {
   mode: Mode;
   /** Недавняя история активного чата, синхронизирована, чтобы у /chat/stream был контекст. */
   history: ChatMsg[];
+  /** Id выбранной модели чата из реестра ('auto' по умолчанию) — аналог ModelPill на сайте. */
+  chatModel: string;
+  /** Id выбранной модели изображений из реестра — аналог пикера в ImageWidget на сайте. */
+  imageModel: string;
   videoOptions: VideoOptions;
   musicOptions: MusicOptions;
   awaitingInput: AwaitingInput;
@@ -110,6 +121,8 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       activeChatId: null,
       mode: 'chat',
       history: [],
+      chatModel: FALLBACK_CHAT_MODEL_ID,
+      imageModel: FALLBACK_IMAGE_MODEL_ID,
       videoOptions: { ...DEFAULT_VIDEO_OPTIONS },
       musicOptions: { ...DEFAULT_MUSIC_OPTIONS },
       awaitingInput: null,

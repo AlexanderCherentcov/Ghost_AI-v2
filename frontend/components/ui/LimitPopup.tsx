@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { ComponentType } from 'react';
+import { ChatIcon, ThinkIcon, AttachIcon, VisionIcon, VideoIcon, MusicIcon, BoltIcon } from '@/components/icons';
 
 export type LimitType =
-  | 'LIMIT_MESSAGES_DAILY'
   | 'LIMIT_MESSAGES'
   | 'LIMIT_PRO_MESSAGES'
   | 'LIMIT_FILES'
@@ -17,77 +18,70 @@ export type LimitType =
   | null;
 
 const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
-  icon: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
   title: string;
   desc: string;
   btn1: string;
   btn2: string;
 }> = {
-  LIMIT_MESSAGES_DAILY: {
-    icon: '💬',
-    title: 'Дневной лимит исчерпан',
-    desc: 'Вы использовали все сообщения сегодня. Лимит обновится завтра.',
-    btn1: 'Перейти на платный тариф',
-    btn2: 'Закрыть',
-  },
   LIMIT_MESSAGES: {
-    icon: '💬',
+    icon: ChatIcon,
     title: 'Сообщения закончились',
     desc: 'Лимит сообщений на этот месяц исчерпан.',
     btn1: 'Перейти на следующий тариф',
     btn2: 'Закрыть',
   },
   LIMIT_PRO_MESSAGES: {
-    icon: '🧠',
+    icon: ThinkIcon,
     title: 'Недостаточно Caspers',
     desc: 'Бесплатная квота Про чата на сегодня закончилась, а на балансе не хватает Caspers.',
     btn1: 'Пополнить / перейти на тариф',
     btn2: 'Закрыть',
   },
   LIMIT_FILES: {
-    icon: '📎',
+    icon: AttachIcon,
     title: 'Лимит файлов исчерпан',
     desc: 'Вы использовали все запросы с файлами. Обычный чат работает.',
     btn1: 'Перейти на следующий тариф',
     btn2: 'Закрыть',
   },
   LIMIT_IMAGES: {
-    icon: '🖼️',
+    icon: VisionIcon,
     title: 'Недостаточно Caspers',
     desc: 'Для генерации изображений нужны Caspers. Пополните баланс или перейдите на тариф.',
     btn1: 'Перейти на тариф',
     btn2: 'Закрыть',
   },
   LIMIT_VIDEOS: {
-    icon: '🎬',
+    icon: VideoIcon,
     title: 'Недостаточно Caspers',
     desc: 'Для генерации видео нужны Caspers. Пополните баланс или перейдите на тариф.',
     btn1: 'Перейти на тариф',
     btn2: 'Закрыть',
   },
   LIMIT_VIDEOS_UNAVAILABLE: {
-    icon: '🎬',
+    icon: VideoIcon,
     title: 'Видео недоступно',
     desc: 'Генерация видео доступна на платных тарифах.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },
   LIMIT_MUSIC: {
-    icon: '🎵',
+    icon: MusicIcon,
     title: 'Недостаточно Caspers',
     desc: 'Для генерации музыки нужны Caspers. Пополните баланс или перейдите на тариф.',
     btn1: 'Перейти на тариф',
     btn2: 'Закрыть',
   },
   LIMIT_MUSIC_UNAVAILABLE: {
-    icon: '🎵',
+    icon: MusicIcon,
     title: 'Музыка недоступна',
     desc: 'Генерация музыки доступна на платных тарифах.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },
   FREE_LOCKED: {
-    icon: '⚡',
+    icon: BoltIcon,
     title: 'Функция недоступна',
     desc: 'Картинки, файлы и видео доступны с платного тарифа.',
     btn1: 'Посмотреть тарифы',
@@ -124,7 +118,7 @@ export function LimitPopup({ type, onClose }: Props) {
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(360px,90vw)] bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6 shadow-2xl"
           >
-            <div className="text-2xl mb-3">{cfg.icon}</div>
+            <cfg.icon size={28} className="mb-3 text-accent" />
             <h3 className="text-white font-medium text-base mb-1">{cfg.title}</h3>
             <p className="text-[rgba(255,255,255,0.45)] text-sm mb-5">{cfg.desc}</p>
             <div className="flex flex-col gap-2">

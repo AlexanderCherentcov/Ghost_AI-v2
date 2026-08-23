@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PLAN_KEYS, PLANS, FREE_LIMITS, FREE_WELCOME_CASPERS, CASPER_PRICE_TIERS, calculateCasperPrice } from './plans.js';
+import { PLAN_KEYS, PLANS, FREE_WELCOME_CASPERS, CASPER_PRICE_TIERS, calculateCasperPrice } from './plans.js';
 
 describe('calculateCasperPrice', () => {
   it('возвращает 0 для нуля и отрицательных значений', () => {
@@ -60,15 +60,10 @@ describe('PLANS — целостность конфигурации', () => {
     }
   });
 
-  it('ULTRA — единственный план с безлимитным Про чатом (pro_free_daily = -1)', () => {
-    const unlimited = PLAN_KEYS.filter((k) => PLANS[k].pro_free_daily === -1);
-    expect(unlimited).toEqual(['ULTRA']);
-  });
-
   it('текст фич FREE-плана берёт числа из FREE_WELCOME_CASPERS/FREE_LIMITS, а не задублирован как отдельные цифры', () => {
     // Регрессия: routes/auth.ts когда-то держал свою копию 100 — если кто-то поменяет
     // сумму бонуса только в auth.ts (или только в тексте фичи), этот тест упадёт.
     expect(PLANS.FREE.features[0]).toBe(`${FREE_WELCOME_CASPERS} Caspers при регистрации`);
-    expect(PLANS.FREE.features[1]).toBe(`Стандартный чат: ${FREE_LIMITS.std_messages_daily} сообщений/день`);
+    expect(PLANS.FREE.features[1]).toBe('Стандартный чат: без ограничений');
   });
 });

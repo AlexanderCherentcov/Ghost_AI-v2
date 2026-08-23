@@ -11,10 +11,11 @@ import { InputBar, type ChatMode, type VideoOptions, type MusicMode } from '@/co
 import { useToast } from '@/components/ui/Toast';
 import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
-import {
-  IMAGE_VERBS, REF_KEYWORDS,
-  isOnlyImageIntent, isImageRequest, isImageEditRequest, isPromptComposeRequest, extractImagePrompt,
-} from '@/lib/image-intent';
+import { REF_KEYWORDS, isImageEditRequest, extractImagePrompt } from '@/lib/image-intent';
+
+// Совпадает с DEFAULT_VIDEO_MODEL_ID в backend/src/config/models.ts — используется,
+// только когда видео запускается без явно выбранной модели (старая сессия в sessionStorage).
+const DEFAULT_VIDEO_MODEL_ID = 'kling-v2.5';
 
 async function resizeImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -59,8 +60,8 @@ export default function ChatConversationPage() {
   const { show: showToast } = useToast();
   const {
     messages, setMessages, addMessage, appendStreamToken,
-    commitStream, setStreaming, isStreaming, mode,
-    setActiveChat, chats, preferredModel, setPreferredModel,
+    commitStream, setStreaming, isStreaming,
+    setActiveChat, chats, model, setModel,
   } = useChatStore();
 
   const [limitType, setLimitType] = useState<LimitType>(null);
@@ -68,6 +69,7 @@ export default function ChatConversationPage() {
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
+  const [generatingVoice, setGeneratingVoice] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
@@ -162,7 +164,7 @@ export default function ChatConversationPage() {
               useChatStore.getState().setMessages(
                 useChatStore.getState().messages.map((m) =>
                   m.id === placeholderId
-                    ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null }
+                    ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null }
                     : m
                 )
               );
@@ -188,6 +190,8 @@ export default function ChatConversationPage() {
 
     const initialPrompt      = sessionStorage.getItem('initialPrompt');
     const initialImagePrompt = sessionStorage.getItem('initialImagePrompt');
+    const initialImageModel = sessionStorage.getItem('initialImageModel') ?? undefined;
+    const initialImageAspectRatio = sessionStorage.getItem('initialImageAspectRatio') ?? undefined;
     const initialVideoPrompt = sessionStorage.getItem('initialVideoPrompt');
     const initialVideoOptionsRaw = sessionStorage.getItem('initialVideoOptions');
     let initialVideoOptions: VideoOptions | undefined;
@@ -207,23 +211,31 @@ export default function ChatConversationPage() {
     const initialFileLang    = sessionStorage.getItem('initialFileLang');
     const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
+    const initialVoiceAudioUrl  = sessionStorage.getItem('initialVoiceAudioUrl');
+    const initialVoiceAudioType = sessionStorage.getItem('initialVoiceAudioType') ?? 'audio/webm';
 
-    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl || initialVoiceAudioUrl;
     if (!hasAny) return;
 
     autoSentChatRef.current = id; // помечаем чат как автоотправленный до начала асинхронной работы
-    ['initialPrompt','initialImagePrompt','initialVideoPrompt','initialVideoOptions','initialMusicPrompt','initialMusicMode','initialMusicDuration',
+    ['initialPrompt','initialImagePrompt','initialImageModel','initialImageAspectRatio','initialVideoPrompt','initialVideoOptions','initialMusicPrompt','initialMusicMode','initialMusicDuration',
      'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
+     'initialVoiceAudioUrl','initialVoiceAudioType',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
-      if (initialVideoPrompt) {
+      if (initialVoiceAudioUrl) {
+        const res = await fetch(initialVoiceAudioUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: initialVoiceAudioType });
+        handleGenerateVoice(file);
+      } else if (initialVideoPrompt) {
         handleGenerateVideo(initialVideoPrompt, initialVideoOptions);
       } else if (initialMusicPrompt) {
         handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
       } else if (initialImagePrompt) {
-        handleGenerateImage(initialImagePrompt);
+        handleGenerateImage(initialImagePrompt, undefined, initialImageModel, initialImageAspectRatio);
       } else if (initialImageUrl) {
         const res = await fetch(initialImageUrl);
         const blob = await res.blob();
@@ -254,7 +266,7 @@ export default function ChatConversationPage() {
   }, []);
 
   // ── Встроенная генерация изображений ──────────────────────────────────────────
-  const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string) => {
+  const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string, model?: string, imageAspectRatio?: string) => {
     if (!accessToken || !messagesReady) return;
     setGeneratingImage(true);
 
@@ -282,7 +294,7 @@ export default function ChatConversationPage() {
     });
 
     try {
-      const { jobId } = await api.generate.vision({ prompt, size: '1024x1024', chatId: id, ...(sourceImageUrl ? { sourceImageUrl } : {}) });
+      const { jobId } = await api.generate.vision({ prompt, chatId: id, ...(sourceImageUrl ? { sourceImageUrl } : {}), ...(model ? { model } : {}), ...(imageAspectRatio ? { imageAspectRatio } : {}) });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'vision', prompt }));
 
       const poll = async (): Promise<void> => {
@@ -303,7 +315,7 @@ export default function ChatConversationPage() {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
-              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null }
+              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null }
               : m
           ));
         } else {
@@ -316,7 +328,7 @@ export default function ChatConversationPage() {
     } catch (err: any) {
       useChatStore.getState().setMessages(
         useChatStore.getState().messages.map((m) =>
-          m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации', mediaUrl: null } : m
+          m.id === placeholderId ? { ...m, content: 'Ошибка генерации', mediaUrl: null } : m
         )
       );
       showToast(err.message ?? 'Ошибка генерации изображения', 'error');
@@ -360,13 +372,14 @@ export default function ChatConversationPage() {
       const { jobId } = await api.generate.reel({
         prompt,
         chatId: id,
-        videoModel: options?.videoModel,
+        model: options?.videoModel ?? DEFAULT_VIDEO_MODEL_ID,
         videoDuration: options?.duration,
         videoAspectRatio: options?.aspectRatio,
         videoEnableAudio: options?.enableAudio,
         videoResolution: options?.resolution,
         videoImageUrl: options?.imageUrl || undefined,
         negativePrompt: options?.negativePrompt || undefined,
+        videoCameraPreset: options?.cameraPreset,
       });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'reel', prompt }));
 
@@ -386,7 +399,7 @@ export default function ChatConversationPage() {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
-              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null }
+              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null }
               : m
           ));
         } else {
@@ -399,7 +412,7 @@ export default function ChatConversationPage() {
     } catch (err: any) {
       const current = useChatStore.getState().messages;
       useChatStore.getState().setMessages(current.map((m) =>
-        m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации видео', mediaUrl: null } : m
+        m.id === placeholderId ? { ...m, content: 'Ошибка генерации видео', mediaUrl: null } : m
       ));
       if (err.code === 'LIMIT_VIDEOS') {
         setLimitType('LIMIT_VIDEOS');
@@ -414,6 +427,92 @@ export default function ChatConversationPage() {
       setGeneratingVideo(false);
     }
   }, [accessToken, messagesReady, triggerAutoTitle]);
+
+  // ── Голосовой чат ────────────────────────────────────────────────────────────
+  // В отличие от картинок/видео транскрипт пользователя неизвестен заранее — его
+  // возвращает бэкенд (voice.worker.ts пишет его в GenerateJob.prompt после
+  // распознавания речи), поэтому плейсхолдер сообщения пользователя стартует
+  // пустым (с локальным blob-URL для мгновенного проигрывания своей записи) и
+  // заполняется текстом только когда джоба завершится.
+  const handleGenerateVoice = useCallback(async (file: File) => {
+    if (!accessToken || !messagesReady) return;
+
+    const localUrl = URL.createObjectURL(file);
+    const userPlaceholderId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    addMessage({
+      id: userPlaceholderId,
+      role: 'user',
+      content: '',
+      mode: 'voice',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: localUrl,
+      createdAt: new Date().toISOString(),
+    });
+
+    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    addMessage({
+      id: placeholderId,
+      role: 'assistant',
+      content: '',
+      mode: 'voice',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: '__loading__',
+      createdAt: new Date().toISOString(),
+    });
+
+    setGeneratingVoice(true);
+    try {
+      const { url: audioUrl } = await api.upload.audio(file);
+      // Локальный blob-URL не переживёт перезагрузку страницы — меняем на настоящий сразу после загрузки
+      useChatStore.getState().setMessages(
+        useChatStore.getState().messages.map((m) => (m.id === userPlaceholderId ? { ...m, mediaUrl: audioUrl } : m))
+      );
+
+      const { jobId } = await api.generate.voice({ chatId: id, audioUrl });
+      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'voice', prompt: '' }));
+
+      const poll = async (): Promise<void> => {
+        if (!mountedRef.current) return;
+        const job = await api.generate.status(jobId);
+        if (!mountedRef.current) return;
+        if (job.status === 'done' && job.mediaUrl) {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) => {
+            if (m.id === userPlaceholderId) return { ...m, content: job.prompt || m.content };
+            if (m.id === placeholderId) return { ...m, mediaUrl: job.mediaUrl };
+            return m;
+          }));
+          if (job.prompt) triggerAutoTitle(job.prompt);
+        } else if (job.status === 'failed') {
+          const current = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(current.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось обработать голосовое сообщение'}`, mediaUrl: null }
+              : m
+          ));
+        } else {
+          await new Promise((r) => setTimeout(r, 1500));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      useChatStore.getState().setMessages(
+        useChatStore.getState().messages.map((m) =>
+          m.id === placeholderId ? { ...m, content: 'Ошибка обработки голосового сообщения', mediaUrl: null } : m
+        )
+      );
+      showToast(err.message ?? 'Ошибка обработки голосового сообщения', 'error');
+      throw err; // VoiceWidget сам покажет короткую ошибку рядом с микрофоном и сбросит состояние записи
+    } finally {
+      URL.revokeObjectURL(localUrl);
+      localStorage.removeItem(`pending_gen_${id}`);
+      setGeneratingVoice(false);
+    }
+  }, [accessToken, messagesReady, id, triggerAutoTitle, showToast]);
 
   // ── Генерация музыки ───────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
@@ -464,7 +563,7 @@ export default function ChatConversationPage() {
           const current = useChatStore.getState().messages;
           useChatStore.getState().setMessages(current.map((m) =>
             m.id === placeholderId
-              ? { ...m, content: `❌ Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null }
+              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null }
               : m
           ));
         } else {
@@ -477,7 +576,7 @@ export default function ChatConversationPage() {
     } catch (err: any) {
       useChatStore.getState().setMessages(
         useChatStore.getState().messages.map((m) =>
-          m.id === placeholderId ? { ...m, content: '❌ Ошибка генерации музыки', mediaUrl: null } : m
+          m.id === placeholderId ? { ...m, content: 'Ошибка генерации музыки', mediaUrl: null } : m
         )
       );
       if (err.code === 'LIMIT_MUSIC') {
@@ -524,28 +623,26 @@ export default function ChatConversationPage() {
     if (dispatchTimerRef.current) clearTimeout(dispatchTimerRef.current);
   }, []);
 
-  // "⚡ Использовать промт" — заполняет InputBar промтом.
+  // "Использовать промт" — заполняет InputBar промтом.
   // Переключает на нужный режим, чтобы появились виджеты (модель, длительность и т.п.)
   // и пользователь мог настроить параметры перед отправкой.
   const handleUsePrompt = useCallback((prompt: string, messageMode?: string) => {
+    // Переключаем вкладку только когда домен ИЗВЕСТЕН по факту (сообщение реально
+    // сгенерировано в этом режиме) — не угадываем по тексту, если AI просто
+    // написал промт в обычном чате. В этом случае просто подставляем текст,
+    // пользователь сам выберет вкладку.
     if (messageMode === 'reel') {
       handleSetChatMode('video');
     } else if (messageMode === 'sound') {
       handleSetChatMode('music');
     } else if (messageMode === 'vision') {
       handleSetChatMode('images');
-    } else {
-      // Промт из режима чата (пользователь попросил AI написать промт для генерации) —
-      // по ключевым словам определяем видео это или картинка и переключаемся автоматически
-      const lower = prompt.toLowerCase();
-      const isVideoPrompt = ['camera', 'motion', 'shot', 'dolly', 'pan ', 'zoom', 'fps', 'cinematic move'].some(k => lower.includes(k));
-      handleSetChatMode(isVideoPrompt ? 'video' : 'images');
     }
     setFillPrompt(prompt);
   }, [handleSetChatMode]);
 
   // ── Главный обработчик отправки ─────────────────────────────────────────────────
-  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
+  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, imageModel?: string, imageAspectRatio?: string) => {
     if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
     // Сбрасываем предложение диспетчера при каждой отправке
     setDispatchResult(null);
@@ -555,9 +652,9 @@ export default function ChatConversationPage() {
     // isPromptComposeRequest актуален только в режиме чата (где пользователь просит AI *написать* промт).
     if (chatMode === 'images' && !file) {
       if (prompt && isImageEditRequest(prompt) && lastGeneratedImageRef.current) {
-        return handleGenerateImage(prompt, lastGeneratedImageRef.current);
+        return handleGenerateImage(prompt, lastGeneratedImageRef.current, imageModel, imageAspectRatio);
       }
-      return handleGenerateImage(prompt || 'beautiful landscape');
+      return handleGenerateImage(prompt || 'beautiful landscape', undefined, imageModel, imageAspectRatio);
     }
     if (chatMode === 'video') {
       const hasSourceImage = !!(file && getFileCategory(file) === 'image');
@@ -570,7 +667,7 @@ export default function ChatConversationPage() {
         try {
           const { url } = await api.upload.image(file!);
           const base: VideoOptions = videoOptions ?? {
-            videoModel: 'motion', duration: '8s', aspectRatio: '16:9',
+            videoModel: DEFAULT_VIDEO_MODEL_ID, duration: '8s', aspectRatio: '16:9',
             enableAudio: false, resolution: '720p', negativePrompt: '',
           };
           effectiveVideoOptions = { ...base, imageUrl: url };
@@ -611,55 +708,9 @@ export default function ChatConversationPage() {
       return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
     }
 
-    // ── Маршрутизация намерения по картинке ───────────────────────────────────
-    // Флаг: пользователь хочет, чтобы AI НАПИСАЛ промт для картинки (а не сгенерировал её напрямую)
-    let isWritingPrompt = false;
-
-    if (!file && prompt) {
-      const lower = prompt.toLowerCase().trim();
-
-      // 1. Только глагол: одиночный глагол ИЛИ глагол + местоимение/ссылочное слово (существительное про картинку не нужно)
-      //    "сгенерируй", "нарисуй его", "создай по этому промту"
-      const verbOnly = IMAGE_VERBS.some(v =>
-        lower === v ||
-        lower.startsWith(v + ' это') ||
-        lower.startsWith(v + ' его') ||
-        lower.startsWith(v + ' её') ||
-        lower.startsWith(v + ' пожалуйста') ||
-        (lower.startsWith(v) && REF_KEYWORDS.some(ref => lower.includes(ref)))
-      );
-      if (verbOnly) {
-        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.mediaUrl);
-        if (lastAssistant) {
-          return handleGenerateImage(extractImagePrompt(lastAssistant.content));
-        }
-      }
-
-      // 2. Пользователь хочет, чтобы AI НАПИСАЛ промт — содержит "промт", но НЕ как ссылку.
-      //    "напиши промт битва ангелов", "создай промт для изображения 9:18"
-      //    → уходим в обычный AI-чат с добавленной в историю инструкцией по промтам для картинок
-      if (isPromptComposeRequest(prompt)) {
-        isWritingPrompt = true;
-        // проваливаемся в обычный AI-чат ниже
-      } else if (isImageRequest(prompt)) {
-        // 3. Есть ссылочное ключевое слово → извлекаем промт из последнего сообщения ассистента
-        //    "сгенерируй изображение по этому промту", "нарисуй картинку по нему"
-        const isRef = REF_KEYWORDS.some((kw) => lower.includes(kw));
-        if (isRef) {
-          const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.mediaUrl);
-          if (lastAssistant) {
-            return handleGenerateImage(extractImagePrompt(lastAssistant.content));
-          }
-        }
-        // 4. Только намерение ("хочу картинку", "хотел бы сделать изображение") → переключаемся в режим картинок
-        if (isOnlyImageIntent(prompt)) {
-          handleSetChatMode('images');
-          return;
-        }
-        // 5. В промте есть реальное описание → генерируем напрямую
-        return handleGenerateImage(prompt);
-      }
-    }
+    // Режим чата — отправленное сообщение всегда идёт в чат, без угадывания
+    // по тексту "а вдруг это про картинку". Хочет картинку — переключит вкладку
+    // сам, она прямо в тулбаре.
 
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
@@ -673,13 +724,10 @@ export default function ChatConversationPage() {
 
       if (category === 'image') {
         try {
+          // Картинка, прикреплённая в чате, всегда идёт в vision-чат (спросить/обсудить),
+          // а не в платную генерацию правки — для правки есть вкладка "Картинка".
           imageUrl = await resizeImageToBase64(file);
           fileDisplayUrl = imageUrl;
-
-          // Редактирование картинки: пользователь прикрепил изображение и хочет его изменить
-          if (prompt && isImageEditRequest(prompt)) {
-            return handleGenerateImage(prompt, imageUrl);
-          }
         } catch {
           showToast('Не удалось обработать изображение', 'error');
         }
@@ -710,7 +758,7 @@ export default function ChatConversationPage() {
       id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'user' as const,
       content: displayContent,
-      mode,
+      mode: 'chat',
       tokensCost: 0,
       cacheHit: false,
       mediaUrl: fileDisplayUrl,
@@ -723,53 +771,14 @@ export default function ChatConversationPage() {
     try {
       const { sendMessage: send } = await import('@/lib/socket');
 
-      const historyBase = messages
+      const history = messages
         .filter((m) => m.id !== tempUserMsg.id)
         .slice(-10)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const IMAGE_PROMPT_GUIDE = [
-        {
-          role: 'user' as const,
-          content: 'Когда я прошу написать промт — имею в виду промт для AI-генерации изображений (DALL-E / Stable Diffusion). Пиши промт на английском с деталями стиля, освещения, композиции, качества — оформляй в блоке кода ```. После блока кода добавляй русский перевод промта обычным текстом.',
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Понял! Буду писать детальные промты для AI-генерации изображений: английский вариант в блоке кода, затем русский перевод — чтобы было понятно что именно сгенерирует нейросеть.',
-        },
-      ];
-      const VIDEO_PROMPT_GUIDE = [
-        {
-          role: 'user' as const,
-          content: 'Когда я прошу написать промт для видео — имею в виду промт для AI-генерации видео (Veo / Kling). Пиши промт на английском: сцена, движение камеры, действия, атмосфера, стиль — оформляй в блоке кода ```. После блока кода добавляй русский перевод промта обычным текстом.',
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Понял! Буду писать детальные промты для AI-генерации видео: английский вариант в блоке кода, затем русский перевод.',
-        },
-      ];
-      const MUSIC_PROMPT_GUIDE = [
-        {
-          role: 'user' as const,
-          content: 'Когда я прошу написать промт для музыки — имею в виду промт для AI-генерации трека (Suno). Пиши промт на английском: жанр, инструменты, темп, настроение, вокал — кратко через запятую, оформляй в блоке кода ```. После блока кода добавляй русский перевод промта обычным текстом.',
-        },
-        {
-          role: 'assistant' as const,
-          content: 'Понял! Буду писать промты для AI-генерации музыки: английский вариант в блоке кода, затем русский перевод.',
-        },
-      ];
-
-      // Режимы video/music всегда завершаются выше через return, поэтому activeGuide используется
-      // только в режиме чата (когда пользователь просит AI *написать* промт для картинки)
-      const activeGuide = IMAGE_PROMPT_GUIDE;
-
-      const history = isWritingPrompt
-        ? [...activeGuide, ...historyBase]
-        : historyBase;
-
       const { tokensCost, cacheHit } = await send({
         chatId: id,
-        mode: preferredModel === 'deepseek' ? 'think' : 'chat',
+        model,
         prompt,
         history,
         jwt: accessToken,
@@ -777,7 +786,6 @@ export default function ChatConversationPage() {
         fileContent,
         fileName,
         fileLang,
-        preferredModel,
       });
 
       const { streamContent } = useChatStore.getState();
@@ -785,7 +793,7 @@ export default function ChatConversationPage() {
         id: `msg-${Date.now()}`,
         role: 'assistant' as const,
         content: streamContent,
-        mode,
+        mode: 'chat',
         tokensCost,
         cacheHit,
         mediaUrl: null,
@@ -798,9 +806,7 @@ export default function ChatConversationPage() {
 
     } catch (err: any) {
       setStreaming(false);
-      if (err.code === 'LIMIT_MESSAGES_DAILY') {
-        setLimitType('LIMIT_MESSAGES_DAILY');
-      } else if (err.code === 'LIMIT_MESSAGES') {
+      if (err.code === 'LIMIT_MESSAGES') {
         setLimitType('LIMIT_MESSAGES');
       } else if (err.code === 'LIMIT_PRO_MESSAGES' || err.code === 'LIMIT_PRO_UNAVAILABLE') {
         setLimitType('LIMIT_PRO_MESSAGES');
@@ -824,9 +830,9 @@ export default function ChatConversationPage() {
         showToast(err.message ?? 'Не удалось отправить сообщение', 'error');
       }
     }
-  }, [id, messages, mode, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
+  }, [id, messages, model, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
 
-  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || !messagesReady;
+  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || generatingVoice || !messagesReady;
 
   // isLoading = true, пока ждём токен ИЛИ ждём сообщения с сервера
   const isLoading = !accessToken || !messagesReady;
@@ -847,11 +853,13 @@ export default function ChatConversationPage() {
 
       <InputBar
         onSend={handleSend}
+        onVoiceRecording={handleGenerateVoice}
         onStop={() => { abortStream(); setStreaming(false); }}
         isStreaming={busy}
+        disabled={busy}
         placeholder={placeholder}
-        preferredModel={preferredModel}
-        setPreferredModel={setPreferredModel}
+        model={model}
+        setModel={setModel}
         userPlan={user?.plan}
         onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
         chatMode={chatMode}
@@ -862,11 +870,6 @@ export default function ChatConversationPage() {
         userImages={user?.images_this_week}
         userMusic={user?.music_this_week}
         userVideos={user?.videos_this_month}
-        userProFreeRemaining={(() => {
-          const limits: Record<string, number> = { FREE: 0, BASIC: 0, PRO: 20, VIP: 50, ULTRA: -1 };
-          const limit = limits[user?.plan ?? 'FREE'] ?? 0;
-          return limit === -1 ? undefined : Math.max(0, limit - (user?.pro_messages_today ?? 0));
-        })()}
       />
     </div>
   );

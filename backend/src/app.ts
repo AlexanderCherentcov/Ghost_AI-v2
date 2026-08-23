@@ -25,10 +25,12 @@ import supportRoutes from './routes/support.js';
 import adminRoutes from './routes/admin.js';
 import plansRoutes from './routes/plans.js';
 import dispatchRoutes from './routes/dispatch.js';
+import maintenanceRoutes from './routes/maintenance.js';
 
 import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
+import { startVoiceWorker } from './workers/voice.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Сборка приложения ──────────────────────────────────────────────────────
@@ -139,6 +141,7 @@ export async function buildApp() {
   await fastify.register(adminRoutes,   { prefix: '/api' });
   await fastify.register(plansRoutes,    { prefix: '/api' });
   await fastify.register(dispatchRoutes, { prefix: '/api' });
+  await fastify.register(maintenanceRoutes, { prefix: '/api' });
 
   // ── Раздача изображений (сгенерированные картинки, сохранённые на диск) ──
   fastify.get('/images/:filename', async (request, reply) => {
@@ -276,6 +279,7 @@ async function start() {
   startVisionWorker();
   startSoundWorker();
   startReelWorker();
+  startVoiceWorker();
 
   // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();

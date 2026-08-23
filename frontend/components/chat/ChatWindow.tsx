@@ -2,11 +2,15 @@
 
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GhostIcon } from '@/components/icons/GhostIcon';
+import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { greetingByHour } from '@/lib/utils';
+
+// Цикл лого-форм из мокапа (Chat.dc.html: CYCLE_SEQ) — используется и для простаивающего
+// hero (медленно, 4000/1200), и для индикатора «думаю» (быстро, 900/500).
+const CYCLE_SEQ = ['brainicon', 'claude', 'chatgpt', 'gemini', 'deepseek', 'kling', 'sora', 'perplexity'];
 
 interface ChatWindowProps {
   onSuggestion?: (text: string) => void;
@@ -66,14 +70,14 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
       {isLoading ? (
         <ChatSkeleton />
       ) : isEmpty ? (
-        <div className="flex flex-col items-center justify-center flex-1 text-center px-4">
+        <div className="flex flex-col items-center justify-center flex-1 min-h-0 text-center px-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <GhostIcon size={64} className="text-accent animate-float mx-auto mb-6" animated />
-            <h1 className="text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Чем займёмся?</h1>
+            <ParticleAvatar size={88} cycleShapes={CYCLE_SEQ} stageMs={4000} transMs={1200} spinSpeed={0.006} className="mx-auto mb-6" />
+            <h1 className="font-display text-3xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Чем займёмся?</h1>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               {greetingByHour()}{user?.name ? `, ${user.name.charAt(0).toUpperCase() + user.name.slice(1)}` : ''}.
             </p>
@@ -90,15 +94,19 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
             ))}
           </AnimatePresence>
 
-          {/* Стримящееся сообщение */}
+          {/* Стримящееся сообщение — тот же живой particle-avatar, что и у обычных
+              сообщений ассистента (мокап: canvas на каждом сообщении). */}
           {isStreaming && streamContent && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex gap-3 py-4"
             >
-              <GhostIcon size={24} className="text-accent flex-shrink-0 mt-0.5" />
-              <div className="flex-1 leading-7 prose-ghost" style={{ color: 'var(--text-primary)' }}>
+              <ParticleAvatar size={30} spinSpeed={0.006} className="flex-shrink-0 mt-0.5" />
+              <div
+                className="flex-1 leading-7 prose-ghost rounded-[14px] px-4 py-3"
+                style={{ color: 'var(--text-primary)', background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}
+              >
                 <span>{streamContent}</span>
                 <span className="ghost-cursor" />
               </div>
@@ -110,15 +118,19 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex gap-3 py-4"
+              className="flex gap-3 py-4 items-center"
             >
-              <GhostIcon size={24} className="text-accent flex-shrink-0" />
-              <div className="flex items-center gap-1.5 py-2">
+              <ParticleAvatar size={30} cycleShapes={CYCLE_SEQ} className="flex-shrink-0" />
+              <div
+                className="flex items-center gap-2 px-4 py-3.5 rounded-[14px]"
+                style={{ background: 'var(--panel-glass)', border: '1px solid rgba(167,139,250,.16)' }}
+              >
+                <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>Загрузка</span>
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }}
+                    className="w-[5px] h-[5px] rounded-full animate-[blink_1s_ease-in-out_infinite]"
+                    style={{ background: '#a78bfa', animationDelay: `${i * 0.15}s` }}
                   />
                 ))}
               </div>

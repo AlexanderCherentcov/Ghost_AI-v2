@@ -739,7 +739,7 @@ export default function ChatConversationPage() {
         .slice(-10)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const { tokensCost, cacheHit } = await send({
+      const { tokensCost, cacheHit, model: usedModel } = await send({
         chatId: id,
         model,
         prompt,
@@ -757,6 +757,7 @@ export default function ChatConversationPage() {
         role: 'assistant' as const,
         content: streamContent,
         mode: 'chat',
+        provider: usedModel,
         tokensCost,
         cacheHit,
         mediaUrl: null,

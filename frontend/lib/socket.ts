@@ -16,6 +16,9 @@ export interface WSChunk {
   chatId?: string;
   code?: string;
   message?: string;
+  // Id модели из реестра, которая реально ответила (chat.ts:usedSpecId) — только
+  // на 'done', для мгновенной аватар-анимации без ожидания перезагрузки истории.
+  model?: string;
 }
 
 export interface WSMessage {
@@ -100,7 +103,7 @@ export function disconnectWS() {
 const STALL_BEFORE_FIRST = 30_000;
 const STALL_AFTER_TOKEN  = 20_000;
 
-export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean; title?: string }> {
+export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cacheHit: boolean; title?: string; model?: string }> {
   return new Promise((resolve, reject) => {
     const socket = connectWS();
     const requestId = `${msg.chatId}-${Date.now()}-${Math.random()}`;
@@ -132,7 +135,7 @@ export function sendMessage(msg: WSMessage): Promise<{ tokensCost: number; cache
         resetStall(); // сбрасываем окно зависания на каждом токене
       } else if (chunk.type === 'done') {
         cleanup();
-        resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false, title: chunk.title });
+        resolve({ tokensCost: chunk.tokensCost ?? 0, cacheHit: chunk.cacheHit ?? false, title: chunk.title, model: chunk.model });
       } else if (chunk.type === 'error') {
         cleanup();
         reject(Object.assign(new Error(chunk.message ?? chunk.code ?? 'WS error'), { code: chunk.code }));

@@ -349,6 +349,9 @@ export interface Message {
   cacheHit: boolean;
   mediaUrl: string | null;
   fileName?: string | null; // для оптимистичного отображения имени прикреплённого файла
+  // Id модели из реестра (backend/src/config/models.ts), которая реально ответила —
+  // для аватар-анимации конкретной модели (см. MessageAvatar/modelParticleShape).
+  provider?: string | null;
   createdAt: string;
 }
 

@@ -123,6 +123,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           tokensCost: true,
           cacheHit: true,
           mediaUrl: true,
+          provider: true,
           createdAt: true,
         },
       });
@@ -479,9 +480,17 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           await setVectorCached(spec.id, effectivePrompt, { content: fullResponse }, userHistoryContext, responseStyle);
         }
 
-        // Сохраняем ответ ассистента. provider хранит РЕАЛЬНО ответившую модель
-        // (usedProviderModel из события used_model), а не просто выбор пользователя —
-        // если сработал резерв из fallbackModels, это будет видно в данных.
+        // provider хранит РЕАЛЬНО ответившую модель — но в НАШЕМ внутреннем id
+        // (том же, что уже используется для картинок/видео: spec.id), а не в
+        // сыром слаге OpenRouter (usedProviderModel вида 'deepseek/deepseek-v3.2').
+        // Иначе фронту (аватар-анимация конкретной модели, modelParticleShape())
+        // нечем было бы сопоставить это со своим реестром иконок — там ключи
+        // ровно как в config/models.ts. Фолбэк на spec.id, если резервная модель
+        // почему-то не нашлась в реестре по своему providerModel (не должно
+        // случаться, но send() ниже не должен упасть из-за этого).
+        const usedSpecId = findChatModelByProviderModel(usedProviderModel)?.id ?? spec.id;
+
+        // Сохраняем ответ ассистента.
         await prisma.$transaction([
           prisma.message.create({
             data: {
@@ -490,7 +499,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
               role: 'assistant',
               content: encrypt(fullResponse),
               mode: 'chat',
-              provider: usedProviderModel,
+              provider: usedSpecId,
               cacheHit: false,
               tokensCost: 0,
             },
@@ -498,8 +507,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }),
         ]);
 
-        // Отправляем done сразу — это сразу разблокирует ввод у пользователя
-        send({ type: 'done', tokensCost: 0, cacheHit: false });
+        // Отправляем done сразу — это сразу разблокирует ввод у пользователя.
+        // model — чтобы фронт мог сразу проиграть аватар-анимацию нужной модели
+        // на только что пришедшем сообщении, не дожидаясь перезагрузки истории.
+        send({ type: 'done', tokensCost: 0, cacheHit: false, model: usedSpecId });
 
         // Автогенерация заголовка в фоне (не блокирует)
         const messageCount = await prisma.message.count({ where: { chatId } });

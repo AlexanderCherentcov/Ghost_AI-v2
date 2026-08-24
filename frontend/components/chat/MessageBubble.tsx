@@ -8,6 +8,7 @@ import { CopyIcon, CheckIcon, BoltIcon, SoundIcon, MuteIcon } from '@/components
 import { fileExtIcon } from './inputbar/fileHelpers';
 import { ImageViewer } from '@/components/ui/ImageViewer';
 import { MessageAvatar } from './MessageAvatar';
+import { useAuthStore } from '@/store/auth.store';
 import type { Message } from '@/lib/api';
 
 interface MessageBubbleProps {
@@ -26,6 +27,7 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [videoOpen, setVideoOpen] = useState(false);
+  const { user } = useAuthStore();
   const isUser = message.role === 'user';
   const codeBlockPrompt = !isUser && !message.mediaUrl && onUsePrompt
     ? extractCodeBlock(message.content)
@@ -51,21 +53,36 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
     >
       {/* Аватар ассистента — живой particle-avatar, как в утверждённом мокапе (Chat.dc.html:
           canvas на каждом сообщении, не только в hero/typing). См. MessageAvatar. */}
-      {!isUser && <MessageAvatar size={30} />}
-      {/* Аватар пользователя — квадрат с инициалом, тот же градиент, что в мокапе
-          (linear-gradient(135deg,#2dd4bf,#0f9c8c)). У нас его не было вообще. */}
+      {!isUser && <MessageAvatar size={30} modelId={message.provider} />}
+      {/* Аватар пользователя — реальное фото профиля, если есть (тот же avatarUrl,
+          что в Sidebar/Profile), иначе инициал первой буквы имени — тот же градиент,
+          что был у заглушки "Я" (linear-gradient(135deg,#2dd4bf,#0f9c8c)). */}
       {isUser && (
-        <div
-          className="flex-shrink-0 mt-0.5 w-[30px] h-[30px] rounded-lg flex items-center justify-center text-[13px] font-bold text-white"
-          style={{ background: 'linear-gradient(135deg, #2dd4bf, #0f9c8c)' }}
-        >
-          Я
-        </div>
+        user?.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt=""
+            className="flex-shrink-0 mt-0.5 w-[30px] h-[30px] rounded-lg object-cover"
+          />
+        ) : (
+          <div
+            className="flex-shrink-0 mt-0.5 w-[30px] h-[30px] rounded-lg flex items-center justify-center text-[13px] font-bold text-white"
+            style={{ background: 'linear-gradient(135deg, #2dd4bf, #0f9c8c)' }}
+          >
+            {user?.name?.trim()?.charAt(0).toUpperCase() ?? 'Я'}
+          </div>
+        )
       )}
 
       <div className={`relative max-w-[78%] ${isUser ? 'order-first' : ''}`}>
         {isUser ? (
           <>
+          {/* Имя над пузырём — по прямому запросу Александра (аватар — фото, но
+              нужно и имя рядом), только у пользователя: у ассистента подписи не
+              было и не добавляем — единообразия ради (см. MessageAvatar). */}
+          <div className="text-[11px] text-right mb-1 pr-1" style={{ color: 'var(--text-muted)' }}>
+            {user?.name?.trim() || 'Вы'}
+          </div>
           {/* Пузырь пользователя — единая скруглённость 14px по всем углам (мокап), без
               «хвостика» */}
           <div

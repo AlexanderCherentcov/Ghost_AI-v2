@@ -14,7 +14,10 @@ import { api } from './api';
 // не влияет на цену/доступность (та всегда приходит с бэкенда).
 const DISPLAY_NAME_OVERRIDES: Record<string, string> = {
   'gemini-flash-image': 'Nano Banana',
-  'gemini-pro-image': 'Gemini Pro',
+  // 'Gemini Pro Image' — без override оставляем родной лейбл с бэкенда: с
+  // урезанным до 'Gemini Pro' названием модель на хиро визуально не отличить
+  // от текстовой (там уже есть отдельная 'Gemini' для чата) — Александр заметил
+  // путаницу в витрине картинок.
   'gpt-image-mini': 'GPT Image',
   'gpt-4o': 'GPT-4o',
   'gpt-4o-mini': 'GPT-4o',

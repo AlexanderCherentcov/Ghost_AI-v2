@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, type Message } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
@@ -37,6 +37,26 @@ async function resizeImageToBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+// Патчит сообщение-плейсхолдер результатом job'а (готовое изображение/видео/трек
+// или текст ошибки). Раньше это было `current.map(m => m.id === placeholderId ? ... : m)`,
+// продублированное в 4 обработчиках генерации + логике возобновления после
+// перезагрузки — если к моменту завершения job'а плейсхолдера уже нет в сторе
+// (стор мог быть перезаписан из другого источника, пока шёл опрос), .map() по
+// отсутствующему id молча ничего не делал и готовый результат генерации терялся
+// НАВСЕГДА, без ошибки и следа — ровно то, что произошло на проде 24.08 (картинка
+// сгенерировалась, но не появилась в чате). Теперь при отсутствии плейсхолдера
+// результат просто добавляется как новое сообщение вместо того, чтобы пропасть.
+function patchOrAppendMessage(placeholder: Message, patch: Partial<Message>) {
+  const current = useChatStore.getState().messages;
+  const found = current.some((m) => m.id === placeholder.id);
+  if (found) {
+    useChatStore.getState().setMessages(current.map((m) => (m.id === placeholder.id ? { ...m, ...patch } : m)));
+  } else {
+    console.warn(`[Chat] Плейсхолдер ${placeholder.id} пропал из стора — добавляю результат генерации заново`);
+    useChatStore.getState().addMessage({ ...placeholder, ...patch });
+  }
 }
 
 async function readFileAsText(file: File): Promise<string> {
@@ -141,11 +161,11 @@ export default function ChatConversationPage() {
           if (alreadyDone) { localStorage.removeItem(`pending_gen_${id}`); return; }
 
           // Добавляем плейсхолдер и возобновляем опрос
-          const placeholderId = `resumed-${Date.now()}`;
-          useChatStore.getState().addMessage({
-            id: placeholderId, role: 'assistant', content: '', mode,
+          const placeholder: Message = {
+            id: `resumed-${Date.now()}`, role: 'assistant', content: '', mode,
             tokensCost: 0, cacheHit: false, mediaUrl: '__loading__', createdAt: new Date().toISOString(),
-          });
+          };
+          useChatStore.getState().addMessage(placeholder);
           if (mode === 'vision') setGeneratingImage(true);
           else setGeneratingVideo(true);
 
@@ -154,20 +174,10 @@ export default function ChatConversationPage() {
             const job = await api.generate.status(jobId);
             if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
-              useChatStore.getState().setMessages(
-                useChatStore.getState().messages.map((m) =>
-                  m.id === placeholderId ? { ...m, content: prompt, mediaUrl: job.mediaUrl!, tokensCost: 0 } : m
-                )
-              );
+              patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
-              useChatStore.getState().setMessages(
-                useChatStore.getState().messages.map((m) =>
-                  m.id === placeholderId
-                    ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null }
-                    : m
-                )
-              );
+              patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
               localStorage.removeItem(`pending_gen_${id}`);
             } else {
               await new Promise((r) => setTimeout(r, mode === 'reel' ? 3000 : 2000));
@@ -281,9 +291,8 @@ export default function ChatConversationPage() {
       createdAt: new Date().toISOString(),
     });
 
-    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    addMessage({
-      id: placeholderId,
+    const placeholder: Message = {
+      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'assistant',
       content: '',
       mode: 'vision',
@@ -291,7 +300,8 @@ export default function ChatConversationPage() {
       cacheHit: false,
       mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
-    });
+    };
+    addMessage(placeholder);
 
     try {
       const { jobId } = await api.generate.vision({ prompt, chatId: id, ...(sourceImageUrl ? { sourceImageUrl } : {}), ...(model ? { model } : {}), ...(imageAspectRatio ? { imageAspectRatio } : {}) });
@@ -302,22 +312,12 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 });
           lastGeneratedImageRef.current = job.mediaUrl;
           triggerAutoTitle(prompt);
           // Счётчик обновляется на бэкенде; локально баланс обновлять не нужно
         } else if (job.status === 'failed') {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null });
         } else {
           await new Promise((r) => setTimeout(r, 2000));
           return poll();
@@ -326,11 +326,7 @@ export default function ChatConversationPage() {
 
       await poll();
     } catch (err: any) {
-      useChatStore.getState().setMessages(
-        useChatStore.getState().messages.map((m) =>
-          m.id === placeholderId ? { ...m, content: 'Ошибка генерации', mediaUrl: null } : m
-        )
-      );
+      patchOrAppendMessage(placeholder, { content: 'Ошибка генерации', mediaUrl: null });
       showToast(err.message ?? 'Ошибка генерации изображения', 'error');
     } finally {
       localStorage.removeItem(`pending_gen_${id}`);
@@ -356,9 +352,8 @@ export default function ChatConversationPage() {
       createdAt: new Date().toISOString(),
     });
 
-    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    addMessage({
-      id: placeholderId,
+    const placeholder: Message = {
+      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'assistant',
       content: '',
       mode: 'reel',
@@ -366,7 +361,8 @@ export default function ChatConversationPage() {
       cacheHit: false,
       mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
-    });
+    };
+    addMessage(placeholder);
 
     try {
       const { jobId } = await api.generate.reel({
@@ -388,20 +384,10 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
           triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null });
         } else {
           await new Promise((r) => setTimeout(r, 3000));
           return poll();
@@ -410,10 +396,7 @@ export default function ChatConversationPage() {
 
       await poll();
     } catch (err: any) {
-      const current = useChatStore.getState().messages;
-      useChatStore.getState().setMessages(current.map((m) =>
-        m.id === placeholderId ? { ...m, content: 'Ошибка генерации видео', mediaUrl: null } : m
-      ));
+      patchOrAppendMessage(placeholder, { content: 'Ошибка генерации видео', mediaUrl: null });
       if (err.code === 'LIMIT_VIDEOS') {
         setLimitType('LIMIT_VIDEOS');
       } else if (err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {
@@ -438,9 +421,8 @@ export default function ChatConversationPage() {
     if (!accessToken || !messagesReady) return;
 
     const localUrl = URL.createObjectURL(file);
-    const userPlaceholderId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    addMessage({
-      id: userPlaceholderId,
+    const userPlaceholder: Message = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'user',
       content: '',
       mode: 'voice',
@@ -448,11 +430,11 @@ export default function ChatConversationPage() {
       cacheHit: false,
       mediaUrl: localUrl,
       createdAt: new Date().toISOString(),
-    });
+    };
+    addMessage(userPlaceholder);
 
-    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    addMessage({
-      id: placeholderId,
+    const placeholder: Message = {
+      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'assistant',
       content: '',
       mode: 'voice',
@@ -460,15 +442,14 @@ export default function ChatConversationPage() {
       cacheHit: false,
       mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
-    });
+    };
+    addMessage(placeholder);
 
     setGeneratingVoice(true);
     try {
       const { url: audioUrl } = await api.upload.audio(file);
       // Локальный blob-URL не переживёт перезагрузку страницы — меняем на настоящий сразу после загрузки
-      useChatStore.getState().setMessages(
-        useChatStore.getState().messages.map((m) => (m.id === userPlaceholderId ? { ...m, mediaUrl: audioUrl } : m))
-      );
+      patchOrAppendMessage(userPlaceholder, { mediaUrl: audioUrl });
 
       const { jobId } = await api.generate.voice({ chatId: id, audioUrl });
       localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'voice', prompt: '' }));
@@ -478,20 +459,11 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) => {
-            if (m.id === userPlaceholderId) return { ...m, content: job.prompt || m.content };
-            if (m.id === placeholderId) return { ...m, mediaUrl: job.mediaUrl };
-            return m;
-          }));
+          patchOrAppendMessage(userPlaceholder, { content: job.prompt || userPlaceholder.content });
+          patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
           if (job.prompt) triggerAutoTitle(job.prompt);
         } else if (job.status === 'failed') {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось обработать голосовое сообщение'}`, mediaUrl: null }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось обработать голосовое сообщение'}`, mediaUrl: null });
         } else {
           await new Promise((r) => setTimeout(r, 1500));
           return poll();
@@ -500,11 +472,7 @@ export default function ChatConversationPage() {
 
       await poll();
     } catch (err: any) {
-      useChatStore.getState().setMessages(
-        useChatStore.getState().messages.map((m) =>
-          m.id === placeholderId ? { ...m, content: 'Ошибка обработки голосового сообщения', mediaUrl: null } : m
-        )
-      );
+      patchOrAppendMessage(placeholder, { content: 'Ошибка обработки голосового сообщения', mediaUrl: null });
       showToast(err.message ?? 'Ошибка обработки голосового сообщения', 'error');
       throw err; // VoiceWidget сам покажет короткую ошибку рядом с микрофоном и сбросит состояние записи
     } finally {
@@ -532,9 +500,8 @@ export default function ChatConversationPage() {
       createdAt: new Date().toISOString(),
     });
 
-    const placeholderId = `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    addMessage({
-      id: placeholderId,
+    const placeholder: Message = {
+      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       role: 'assistant',
       content: '',
       mode: 'sound',
@@ -542,7 +509,8 @@ export default function ChatConversationPage() {
       cacheHit: false,
       mediaUrl: '__loading__',
       createdAt: new Date().toISOString(),
-    });
+    };
+    addMessage(placeholder);
 
     try {
       const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode, musicDuration, lyrics, sunoStyle, sunoTitle, sunoInstrumental });
@@ -552,20 +520,10 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
           triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
-          const current = useChatStore.getState().messages;
-          useChatStore.getState().setMessages(current.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: `Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null }
-              : m
-          ));
+          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null });
         } else {
           await new Promise((r) => setTimeout(r, 3000));
           return poll();
@@ -574,11 +532,7 @@ export default function ChatConversationPage() {
 
       await poll();
     } catch (err: any) {
-      useChatStore.getState().setMessages(
-        useChatStore.getState().messages.map((m) =>
-          m.id === placeholderId ? { ...m, content: 'Ошибка генерации музыки', mediaUrl: null } : m
-        )
-      );
+      patchOrAppendMessage(placeholder, { content: 'Ошибка генерации музыки', mediaUrl: null });
       if (err.code === 'LIMIT_MUSIC') {
         setLimitType('LIMIT_MUSIC');
       } else if (err.code === 'LIMIT_MUSIC_UNAVAILABLE') {

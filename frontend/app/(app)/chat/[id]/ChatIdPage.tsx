@@ -92,6 +92,14 @@ export default function ChatConversationPage() {
   const [generatingVoice, setGeneratingVoice] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  // Модель, выбранная на главной ДО создания этого чата (реле через sessionStorage,
+  // см. auto-send ниже) — прокидывается в InputBar как presetImageModel/
+  // presetVideoModel, иначе его собственное состояние imageModel/videoOptions
+  // остаётся на дефолтной модели, и следующая генерация после первой (у которой
+  // модель передавалась явным аргументом в handleGenerateImage/Video) уходит уже
+  // не на ту модель, которую выбрал пользователь — выглядит как самопроизвольная смена.
+  const [presetImageModel, setPresetImageModel] = useState<string | undefined>();
+  const [presetVideoModel, setPresetVideoModel] = useState<string | undefined>();
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
   const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -248,12 +256,14 @@ export default function ChatConversationPage() {
         handleGenerateVoice(file);
       } else if (initialVideoPrompt) {
         setChatMode('video');
+        if (initialVideoOptions?.videoModel) setPresetVideoModel(initialVideoOptions.videoModel);
         handleGenerateVideo(initialVideoPrompt, initialVideoOptions);
       } else if (initialMusicPrompt) {
         setChatMode('music');
         handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
       } else if (initialImagePrompt) {
         setChatMode('images');
+        if (initialImageModel) setPresetImageModel(initialImageModel);
         handleGenerateImage(initialImagePrompt, undefined, initialImageModel, initialImageAspectRatio);
       } else if (initialImageUrl) {
         const res = await fetch(initialImageUrl);
@@ -822,6 +832,8 @@ export default function ChatConversationPage() {
         isStreaming={busy}
         disabled={busy}
         placeholder={placeholder}
+        presetImageModel={presetImageModel}
+        presetVideoModel={presetVideoModel}
         model={model}
         setModel={setModel}
         userPlan={user?.plan}

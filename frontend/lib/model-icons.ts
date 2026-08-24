@@ -22,21 +22,25 @@ interface ModelIconEntry {
 
 const MODEL_ICON_MAP: Record<string, ModelIconEntry> = {
   // ─── Чат ───
+  // Плоского SVG для чипов/пиллов у OpenAI пока нет (см. modelIcon() — там всё ещё
+  // мозг-заглушка), но форма для particle-аватара реально есть в particle-logos-data.js
+  // (та же, что уже крутится в цикле лого на лендинге — LOOP в ParticleBrainField.tsx),
+  // просто не была здесь подключена.
   'llama-3.1-fast': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
-  'gpt-4o-mini': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
+  'gpt-4o-mini': { icon: FALLBACK_ICON, particleShape: 'chatgpt' },
   'deepseek-v3.2': { icon: '/models/deepseek.svg', particleShape: 'deepseek' },
   'gemini-2.5-flash': { icon: '/models/gemini.svg', particleShape: 'gemini' },
   sonar: { icon: '/models/perplexity.svg', particleShape: 'perplexity' },
   'claude-haiku-4.5': { icon: '/models/claude.svg', particleShape: 'claude' },
   'gemini-2.5-pro': { icon: '/models/gemini.svg', particleShape: 'gemini' },
-  'gpt-4o': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
+  'gpt-4o': { icon: FALLBACK_ICON, particleShape: 'chatgpt' },
 
   // ─── Изображения ───
   'gemini-flash-image': { icon: '/models/gemini.svg', particleShape: 'gemini' },
   'gemini-pro-image': { icon: '/models/gemini.svg', particleShape: 'gemini' },
-  'gpt-image-mini': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
-  'gpt-image': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
-  'gpt-5.4-image-2': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
+  'gpt-image-mini': { icon: FALLBACK_ICON, particleShape: 'chatgpt' },
+  'gpt-image': { icon: FALLBACK_ICON, particleShape: 'chatgpt' },
+  'gpt-5.4-image-2': { icon: FALLBACK_ICON, particleShape: 'chatgpt' },
   'nano-banana-classic': { icon: '/models/gemini.svg', particleShape: 'gemini' },
 
   // ─── Видео ───

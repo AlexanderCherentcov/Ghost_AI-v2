@@ -13,6 +13,31 @@ import { encrypt } from '../lib/crypto.js';
 import { notifyApiError } from '../services/admin-notify.js';
 import crypto from 'crypto';
 
+// Порог "протухания" активной задачи. Раньше guard ниже блокировал новые запросы,
+// пока есть job в статусе pending/processing БЕЗ ограничения по времени — если
+// воркер завис (реальный случай: providers/openrouter.ts:generateImageFlux без
+// таймаута на fetch к OpenRouter держал промис вечно нерешённым), BullMQ
+// worker.on('failed') не срабатывает никогда (для зависшего промиса это событие
+// просто не наступает), job навсегда остаётся processing, и пользователь
+// блокировался от повторных попыток НАВСЕГДА — ровно то, что случилось на проде
+// 2026-08-24 с job cmt7ehgdj0005fj442gztkgtb. Порог ниже даёт защиту даже если
+// где-то ещё всплывёт похожий зависший промис — video дольше остальных, у него
+// объективно самая долгая честная генерация.
+const STALE_JOB_MINUTES: Record<string, number> = {
+  vision: 5,
+  sound: 5,
+  reel: 15,
+  voice: 3,
+};
+
+async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTES) {
+  const staleCutoff = new Date(Date.now() - STALE_JOB_MINUTES[mode] * 60_000);
+  return prisma.generateJob.findFirst({
+    where: { userId, mode, status: { in: ['pending', 'processing'] }, createdAt: { gt: staleCutoff } },
+    select: { id: true },
+  });
+}
+
 const generateSchema = z.object({
   prompt: z.string().min(1).max(2000),
   chatId: z.string().optional(),
@@ -110,10 +135,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Блокировка задачи: отклоняем, если у пользователя уже выполняется vision-задача
-      const activeJob = await prisma.generateJob.findFirst({
-        where: { userId, mode: 'vision', status: { in: ['pending', 'processing'] } },
-        select: { id: true },
-      });
+      const activeJob = await findActiveJob(userId, 'vision');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
@@ -231,10 +253,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Блокировка задачи: отклоняем, если у пользователя уже выполняется sound-задача
-      const activeJob = await prisma.generateJob.findFirst({
-        where: { userId, mode: 'sound', status: { in: ['pending', 'processing'] } },
-        select: { id: true },
-      });
+      const activeJob = await findActiveJob(userId, 'sound');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
@@ -356,10 +375,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Блокировка задачи: отклоняем, если у пользователя уже выполняется reel-задача
-      const activeJob = await prisma.generateJob.findFirst({
-        where: { userId, mode: 'reel', status: { in: ['pending', 'processing'] } },
-        select: { id: true },
-      });
+      const activeJob = await findActiveJob(userId, 'reel');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
@@ -462,10 +478,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       }
 
       // Блокировка задачи: отклоняем, если уже выполняется голосовая задача
-      const activeJob = await prisma.generateJob.findFirst({
-        where: { userId, mode: 'voice', status: { in: ['pending', 'processing'] } },
-        select: { id: true },
-      });
+      const activeJob = await findActiveJob(userId, 'voice');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }

@@ -145,21 +145,39 @@ export async function generateImageFlux(
   // непроверенный запрос, который может тихо сломать генерацию.
   const supportsAspectRatio = model.startsWith('google/');
 
-  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.FRONTEND_URL ?? 'https://ghostlineai.ru',
-      'X-Title': 'GhostLine AI',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: userContent }],
-      modalities: ['image'],
-      ...(aspectRatio && supportsAspectRatio ? { image_config: { aspect_ratio: aspectRatio } } : {}),
-    }),
-  });
+  // Таймаут на fetch — без него зависший/аномально медленный апстрим (реальный
+  // случай: openai/gpt-5-image) держит промис вечно нерешённым: BullMQ-воркер не
+  // получает ни успеха, ни исключения, GenerateJob навсегда остаётся 'processing',
+  // а activeJob-guard в routes/generate.ts после этого блокирует пользователя от
+  // новых попыток безо всякого предела по времени. 120с — с запасом под медленную
+  // high-quality генерацию, но не бесконечность.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ''}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.FRONTEND_URL ?? 'https://ghostlineai.ru',
+        'X-Title': 'GhostLine AI',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: userContent }],
+        modalities: ['image'],
+        ...(aspectRatio && supportsAspectRatio ? { image_config: { aspect_ratio: aspectRatio } } : {}),
+      }),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw new Error('OpenRouter image generation: timeout (120s)');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const err = await response.text().catch(() => response.statusText);

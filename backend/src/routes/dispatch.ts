@@ -122,10 +122,22 @@ const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
 // ─── Генерация заголовка чата ─────────────────────────────────────────────────
 // Вызывается из chat.ts на первом сообщении пользователя, чтобы получить умный заголовок из 3-6 слов.
 
-const TITLE_SYSTEM = `You are a chat title generator. Given the user's first message, return a SHORT title (3–6 words max) that captures the main topic.
+// Живая проверка в проде вскрыла: слабая/быстрая Llama (та же модель, что даёт
+// сбои идентичности в chat — см. lib/prompts.ts) регулярно путает "озаглавь"
+// с "ответь" — первое сообщение пользователя выглядит как вопрос/задача/загадка
+// К НЕЙ, и модель начинает его РЕШАТЬ вместо того, чтобы описать тему, обрываясь
+// на середине по лимиту токенов ("Вот мои ответы на загадки:\n\n1. Без него не
+// выйдешь в сеть..." вместо названия). Явный запрет отвечать + контрастные
+// примеры (вопрос/загадка → тема, а не решение) — тот же приём, что уже помог
+// с честностью идентичности модели.
+const TITLE_SYSTEM = `You are ONLY a title generator. You NEVER answer, solve, or respond to what the user's message asks — you are not talking to them. Given the user's first message, output ONLY a short title (3–6 words) naming its TOPIC — never its answer, solution or content.
+
 Rules:
+- Output ONLY the title text on a single line — no preamble, no explanation, no quotes, no markdown, no line breaks.
+- Even if the message is a question, riddle, request or task — describe what it's ABOUT, do not answer or solve it.
+- Do not describe yourself or your role.
 - Same language as the message (Russian if Russian, English if English)
-- No quotes, no punctuation at the end
+- No punctuation at the end
 - No generic titles like "Новый чат", "Chat", "Help me"
 - Be specific and descriptive
 - If it's a creative task (image/video/music), reflect that
@@ -136,7 +148,22 @@ Examples:
 "сгенерируй аниме девушку с мечом" → Аниме девушка с мечом
 "write me a cover letter for a developer job" → Developer cover letter
 "что такое квантовая запутанность" → Квантовая запутанность
-"сделай грустный джаз про осень" → Грустный джаз про осень`;
+"сделай грустный джаз про осень" → Грустный джаз про осень
+"привет" → Приветствие
+"реши загадку: без него не выйдешь в сеть, хоть весь день жми на кнопки" → Загадка про интернет
+"помоги, ошибка в цикле for, не работает код" → Ошибка в цикле for`;
+
+// Сеть безопасности поверх промпта — сама модель иногда всё равно срывается
+// в ответ/многострочный текст (см. комментарий у TITLE_SYSTEM), поэтому режем
+// по границе слова, а не raw.slice(80), которое рвало текст посреди слова
+// ("Чтобы решить задачу с кодом, я и") и оставляло переносы строк в title,
+// который потом рендерится в один ряд в сайдбаре.
+function sanitizeTitle(raw: string): string {
+  const oneLine = raw.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const noQuotes = oneLine.replace(/^["'«]+|["'»]+$/g, '');
+  const words = noQuotes.split(' ').filter(Boolean).slice(0, 8);
+  return words.join(' ').slice(0, 60);
+}
 
 export async function generateChatTitle(prompt: string): Promise<string> {
   // Фолбэк: обрезаем промт до 50 символов
@@ -152,7 +179,7 @@ export async function generateChatTitle(prompt: string): Promise<string> {
     } catch {
       raw = await callOpenRouterJSON(msgs, OR_MODELS.llama, 30);
     }
-    const title = raw.trim().replace(/^["']|["']$/g, '').slice(0, 80);
+    const title = sanitizeTitle(raw);
     return title || fallback;
   } catch {
     return fallback;

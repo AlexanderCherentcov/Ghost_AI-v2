@@ -39,6 +39,40 @@ export async function sendTelegramMessage(
   return result.message_id;
 }
 
+export async function sendTelegramPhoto(
+  botToken: string,
+  chatId: string | number,
+  photoUrl: string,
+  caption: string,
+  options?: { replyMarkup?: InlineKeyboardMarkup },
+): Promise<number> {
+  const result = await callTelegramApi<{ message_id: number }>(botToken, 'sendPhoto', {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption,
+    parse_mode: 'HTML',
+    ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
+  });
+  return result.message_id;
+}
+
+export async function sendTelegramVideo(
+  botToken: string,
+  chatId: string | number,
+  videoUrl: string,
+  caption: string,
+  options?: { replyMarkup?: InlineKeyboardMarkup },
+): Promise<number> {
+  const result = await callTelegramApi<{ message_id: number }>(botToken, 'sendVideo', {
+    chat_id: chatId,
+    video: videoUrl,
+    caption,
+    parse_mode: 'HTML',
+    ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
+  });
+  return result.message_id;
+}
+
 export async function editMessageReplyMarkup(
   botToken: string,
   chatId: string | number,

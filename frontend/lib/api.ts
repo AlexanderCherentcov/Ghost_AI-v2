@@ -299,6 +299,25 @@ export const api = {
     list: (mode?: string, page = 1) =>
       request<{ jobs: GenerateJob[] }>(`/generate?${mode ? `mode=${mode}&` : ''}page=${page}`),
   },
+
+  gallery: {
+    share: (data: { jobId: string }) =>
+      request<{ id: string; status: string }>('/gallery/share', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    // Публичный список — request() сам не шлёт Authorization без токена, гостю доступен так же.
+    list: (params: { sort?: 'top' | 'new'; page?: number; limit?: number } = {}) => {
+      const query = new URLSearchParams();
+      if (params.sort) query.set('sort', params.sort);
+      if (params.page) query.set('page', String(params.page));
+      if (params.limit) query.set('limit', String(params.limit));
+      const qs = query.toString();
+      return request<GalleryResponse>(`/gallery${qs ? `?${qs}` : ''}`);
+    },
+    like: (id: string) =>
+      request<{ liked: boolean; likesCount: number }>(`/gallery/${id}/like`, { method: 'POST' }),
+  },
 };
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -353,6 +372,32 @@ export interface Message {
   // для аватар-анимации конкретной модели (см. MessageAvatar/modelParticleShape).
   provider?: string | null;
   createdAt: string;
+  // Только клиентское поле (бэкенд его не возвращает и не хранит на Message) —
+  // проставляется в ChatIdPage сразу после успешной генерации картинки/видео,
+  // чтобы MessageBubble мог показать кнопку "В галерею" (см. api.gallery.share).
+  // У сообщений, загруженных из истории (перезагрузка страницы), всегда undefined —
+  // делиться можно только только что сгенерированной в этой сессии работой.
+  jobId?: string;
+}
+
+export interface GalleryItem {
+  id: string;
+  domain: string; // 'image' | 'video'
+  modelId: string;
+  modelLabel: string;
+  prompt: string;
+  mediaUrl: string;
+  likesCount: number;
+  likedByMe: boolean;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface GalleryResponse {
+  items: GalleryItem[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface GenerateJob {

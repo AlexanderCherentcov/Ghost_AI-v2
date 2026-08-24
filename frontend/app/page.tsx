@@ -11,7 +11,7 @@ import {
 import { ParticleBrainField } from '@/components/landing/ParticleBrainField';
 import { HeroVideoBackground } from '@/components/landing/HeroVideoBackground';
 import { SupportWidget } from '@/components/ui/SupportWidget';
-import { api, type PlanInfo } from '@/lib/api';
+import { api, type PlanInfo, type GalleryItem } from '@/lib/api';
 import { loadFeatureModelNames, topNames, type FeatureModelNames } from '@/lib/model-display';
 import { fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations, type CheapestCosts } from '@/lib/pricing';
 import { formatNumber } from '@/lib/utils';
@@ -175,6 +175,12 @@ export default function LandingPage() {
   // картинок/видео/треков хватит Caspers на тарифе", а не выдумывать цифры. Если
   // появится модель дешевле — пересчитается само, без правок текста на странице.
   const [cheapest, setCheapest] = useState<CheapestCosts | null>(null);
+  // Витрина в хиро: как только в галерее есть хотя бы одна одобренная работа —
+  // показываем реальные топ-лайкнутые картинки/видео вместо плейсхолдера с
+  // названием модели. До этого (пустая галерея на старте) остаётся честная
+  // плейсхолдер-плитка — см. SHOWCASE_ITEMS ниже, тот же приём, что раньше был
+  // единственным вариантом.
+  const [galleryTop, setGalleryTop] = useState<GalleryItem[]>([]);
   useEffect(() => {
     api.payments.plans().then((data) => {
       setPlans(data.plans);
@@ -182,12 +188,11 @@ export default function LandingPage() {
       setCheapest(cheapestCosts(data.models.image, data.models.video, data.casper_costs.music_generate ?? 5));
     }).catch(() => {});
     loadFeatureModelNames().then(setModelNames).catch(() => {});
+    api.gallery.list({ sort: 'top', limit: 6 }).then((data) => setGalleryTop(data.items)).catch(() => {});
   }, []);
   const FEATURES = buildFeatures(modelNames);
-  // Витрина в хиро: реальные названия моделей с бэкенда, но без реальных превью —
-  // таких файлов пока нет в репозитории (см. обсуждение с Александром). Плейсхолдер-
-  // плитки с пунктирной рамкой и подписью модели; когда придут реальные генерации —
-  // подставить background-image на каждую плитку по SHOWCASE_ITEMS[i].name.
+  // Плейсхолдер-плитки — реальные названия моделей с бэкенда, но без превью
+  // (используются, только пока галерея пуста, см. galleryTop выше).
   const SHOWCASE_ITEMS = [
     ...topNames(modelNames?.image ?? [], 3).map((name) => ({ name, domain: 'image' as const })),
     ...topNames(modelNames?.video ?? [], 3).map((name) => ({ name, domain: 'video' as const })),
@@ -340,28 +345,51 @@ export default function LandingPage() {
             transition={{ duration: 0.6, delay: 0.15 }}
             className="hidden lg:grid grid-cols-2 gap-4 w-[380px] shrink-0"
           >
-            {SHOWCASE_ITEMS.map((item, i) => (
-              <div
-                key={`${item.domain}-${item.name}`}
-                className={`relative rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 ${SHOWCASE_TILE_HEIGHT}`}
-                style={{
-                  background: SHOWCASE_GRADIENTS[i],
-                  border: '1px dashed rgba(255,255,255,.18)',
-                }}
-              >
-                {item.domain === 'video' ? (
-                  <ReelIcon size={22} className="opacity-40" />
-                ) : (
-                  <VisionIcon size={22} className="opacity-40" />
-                )}
-                <span
-                  className="absolute bottom-2 left-2 right-2 truncate text-[11px] px-2 py-1 rounded-lg text-center"
-                  style={{ background: 'rgba(6,5,14,0.65)', color: 'rgba(255,255,255,.7)' }}
+            {galleryTop.length > 0 ? (
+              galleryTop.map((item) => (
+                <Link
+                  key={item.id}
+                  href="/gallery"
+                  className={`group relative rounded-2xl overflow-hidden block ${SHOWCASE_TILE_HEIGHT}`}
+                  style={{ border: '1px solid rgba(255,255,255,.12)' }}
                 >
-                  {item.name}
-                </span>
-              </div>
-            ))}
+                  {item.domain === 'video' ? (
+                    <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                  ) : (
+                    <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                  )}
+                  <div
+                    className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[11px] truncate opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.85))', color: 'rgba(255,255,255,.85)' }}
+                  >
+                    {item.modelLabel} · {item.authorName}
+                  </div>
+                </Link>
+              ))
+            ) : (
+              SHOWCASE_ITEMS.map((item, i) => (
+                <div
+                  key={`${item.domain}-${item.name}`}
+                  className={`relative rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 ${SHOWCASE_TILE_HEIGHT}`}
+                  style={{
+                    background: SHOWCASE_GRADIENTS[i],
+                    border: '1px dashed rgba(255,255,255,.18)',
+                  }}
+                >
+                  {item.domain === 'video' ? (
+                    <ReelIcon size={22} className="opacity-40" />
+                  ) : (
+                    <VisionIcon size={22} className="opacity-40" />
+                  )}
+                  <span
+                    className="absolute bottom-2 left-2 right-2 truncate text-[11px] px-2 py-1 rounded-lg text-center"
+                    style={{ background: 'rgba(6,5,14,0.65)', color: 'rgba(255,255,255,.7)' }}
+                  >
+                    {item.name}
+                  </span>
+                </div>
+              ))
+            )}
           </motion.div>
           </div>
 

@@ -7,7 +7,7 @@ import {
 import {
   listChats, createChat, deleteChat, getChatMessages,
   startVisionJob, startSoundJob, startReelJob, startVoiceJob, pollJob, generateLyrics,
-  getMe, createPlanPayment, createCasperPayment, getModels, getCasperHistory,
+  getMe, createPlanPayment, createCasperPayment, getModels, getCasperHistory, shareToGallery,
   type ChatModelOption, type ImageModelOption, type VideoModelOption,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
@@ -1299,9 +1299,16 @@ async function handleGeneration(ctx: Context, session: UserSession, prompt: stri
 
     await ctx.api.deleteMessage(ctx.chat!.id, placeholder.message_id).catch(() => {});
     const caption = prompt.slice(0, 1000);
-    if (mode === 'vision') await ctx.replyWithPhoto(result.mediaUrl, { caption });
+    // Кнопка "В галерею" — только картинка/видео (в отличие от текста песни у
+    // музыки, тут есть что публично показать). Job уже done к этому моменту
+    // (pollJob дождался выше) — значит достаточно передать jobId сразу в
+    // reply_markup, без постфактум-редактирования клавиатуры (прецедента для
+    // этого в проекте и так нет, см. shareToGallery — общий вход что для веба,
+    // что для бота, оба знают jobId).
+    const shareKb = mode !== 'sound' ? new InlineKeyboard().text('📸 В галерею', `gal_share:${jobId}`) : undefined;
+    if (mode === 'vision') await ctx.replyWithPhoto(result.mediaUrl, { caption, reply_markup: shareKb });
     else if (mode === 'sound') await ctx.replyWithAudio(result.mediaUrl, { caption });
-    else await ctx.replyWithVideo(result.mediaUrl, { caption });
+    else await ctx.replyWithVideo(result.mediaUrl, { caption, reply_markup: shareKb });
 
     const spendNote = await casperSpendNote(session, balanceBefore);
     if (spendNote) await ctx.reply(spendNote);
@@ -1310,6 +1317,24 @@ async function handleGeneration(ctx: Context, session: UserSession, prompt: stri
     await editOrSend(ctx, placeholder.message_id, `❌ ${msg}`);
   }
 }
+
+// Публикация в галерею по кнопке под только что полученной генерацией —
+// backend сам достаёт mediaUrl/prompt/modelId из GenerateJob по jobId
+// (см. services/gallery.ts:shareToGallery), проверяет владение (userId) и
+// шлёт карточку на модерацию всем админам. Идемпотентно на бэкенде —
+// повторный тап (двойной клик) просто получит понятную ошибку, не сломает данные.
+bot.callbackQuery(/^gal_share:(.+)$/, async (ctx) => {
+  if (!ctx.from) return;
+  const jobId = ctx.match[1];
+  const session = await ensureSession(ctx.from);
+  try {
+    await shareToGallery(session, jobId);
+    await ctx.answerCallbackQuery('📸 Отправлено на модерацию!');
+    await ctx.editMessageReplyMarkup().catch(() => {});
+  } catch (err: any) {
+    await ctx.answerCallbackQuery({ text: apiErrorMessage(err, 'Не удалось отправить'), show_alert: true });
+  }
+});
 
 // ─── Админ: /setplan ─────────────────────────────────────────────────────────
 // Использование: /setplan <userId> <PLAN>

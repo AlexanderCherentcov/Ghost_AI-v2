@@ -83,7 +83,7 @@ export function startVisionWorker() {
 
       await prisma.generateJob.update({
         where: { id: jobId },
-        data: { status: 'done', mediaUrl },
+        data: { status: 'done', mediaUrl, modelId: spec.id },
       });
 
       // Сохраняем сообщение ассистента с изображением в историю чата

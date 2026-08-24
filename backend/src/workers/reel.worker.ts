@@ -190,7 +190,7 @@ async function finalizeJob(
 ): Promise<string | undefined> {
   await prisma.generateJob.update({
     where: { id: jobId },
-    data: { status: 'done', mediaUrl },
+    data: { status: 'done', mediaUrl, modelId },
   });
 
   let messageId: string | undefined;

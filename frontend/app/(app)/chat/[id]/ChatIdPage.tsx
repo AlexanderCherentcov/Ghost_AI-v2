@@ -194,7 +194,7 @@ export default function ChatConversationPage() {
             const job = await api.generate.status(jobId);
             if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
-              patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
+              patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId });
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
               patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
@@ -343,7 +343,7 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10 });
+          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10, jobId });
           lastGeneratedImageRef.current = job.mediaUrl;
           triggerAutoTitle(prompt);
           // Счётчик обновляется на бэкенде; локально баланс обновлять не нужно
@@ -415,7 +415,7 @@ export default function ChatConversationPage() {
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
         if (job.status === 'done' && job.mediaUrl) {
-          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
+          patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId });
           triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
           patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null });

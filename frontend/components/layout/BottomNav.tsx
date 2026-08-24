@@ -25,6 +25,17 @@ function IconChat({ active }: { active: boolean }) {
   );
 }
 
+function IconGallery({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? '2.2' : '1.6'} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  );
+}
+
 function IconPlans({ active }: { active: boolean }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -47,10 +58,11 @@ function IconProfile({ active }: { active: boolean }) {
 }
 
 const ITEMS = [
-  { href: '/history', label: 'История', Icon: IconHistory },
-  { href: '/chat',    label: 'Чат',     Icon: IconChat },
-  { href: '/billing', label: 'Тарифы',  Icon: IconPlans },
-  { href: '/profile', label: 'Профиль', Icon: IconProfile },
+  { href: '/history', label: 'История',  Icon: IconHistory },
+  { href: '/chat',    label: 'Чат',      Icon: IconChat },
+  { href: '/gallery', label: 'Галерея',  Icon: IconGallery },
+  { href: '/billing', label: 'Тарифы',   Icon: IconPlans },
+  { href: '/profile', label: 'Профиль',  Icon: IconProfile },
 ];
 
 export function BottomNav() {

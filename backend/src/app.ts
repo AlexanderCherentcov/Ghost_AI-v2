@@ -22,6 +22,7 @@ import paymentRoutes from './routes/payments.js';
 import generateRoutes from './routes/generate.js';
 import promoRoutes from './routes/promo.js';
 import supportRoutes from './routes/support.js';
+import galleryRoutes from './routes/gallery.js';
 import adminRoutes from './routes/admin.js';
 import plansRoutes from './routes/plans.js';
 import dispatchRoutes from './routes/dispatch.js';
@@ -138,6 +139,7 @@ export async function buildApp() {
   await fastify.register(generateRoutes, { prefix: '/api' });
   await fastify.register(promoRoutes, { prefix: '/api' });
   await fastify.register(supportRoutes, { prefix: '/api' });
+  await fastify.register(galleryRoutes, { prefix: '/api' });
   await fastify.register(adminRoutes,   { prefix: '/api' });
   await fastify.register(plansRoutes,    { prefix: '/api' });
   await fastify.register(dispatchRoutes, { prefix: '/api' });
@@ -191,6 +193,46 @@ export async function buildApp() {
       return reply.send(fs.createReadStream(filepath, { start, end }));
     }
 
+    reply.header('Content-Length', String(total));
+    return reply.send(fs.createReadStream(filepath));
+  });
+
+  // ── Раздача галереи (копии картинок/видео, опубликованных в GalleryItem) ──
+  // Отдельная папка от /images и /videos (см. GalleryItem в schema.prisma) —
+  // содержит и картинки, и видео вперемешку, поэтому тип отдаём по расширению,
+  // с той же поддержкой Range для видео, что и в /videos выше.
+  fastify.get('/gallery-media/:filename', async (request, reply) => {
+    const { filename } = request.params as { filename: string };
+    if (filename.includes('/') || filename.includes('..')) {
+      return reply.code(400).send({ error: 'Invalid filename' });
+    }
+    const filepath = path.join(process.cwd(), 'uploads', 'gallery', filename);
+    if (!fs.existsSync(filepath)) return reply.code(404).send({ error: 'Not found' });
+
+    const ext = path.extname(filename).toLowerCase();
+    const isVideo = ext === '.mp4';
+    reply.header('Cache-Control', 'public, max-age=31536000');
+    reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (!isVideo) {
+      reply.header('Content-Type', ext === '.png' ? 'image/png' : 'image/jpeg');
+      return reply.send(fs.createReadStream(filepath));
+    }
+
+    const stat = fs.statSync(filepath);
+    const total = stat.size;
+    const rangeHeader = (request.headers as Record<string, string>).range;
+    reply.header('Accept-Ranges', 'bytes');
+    reply.header('Content-Type', 'video/mp4');
+    if (rangeHeader) {
+      const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : total - 1;
+      reply.code(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${total}`);
+      reply.header('Content-Length', String(end - start + 1));
+      return reply.send(fs.createReadStream(filepath, { start, end }));
+    }
     reply.header('Content-Length', String(total));
     return reply.send(fs.createReadStream(filepath));
   });

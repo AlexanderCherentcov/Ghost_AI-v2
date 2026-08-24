@@ -36,6 +36,11 @@ export async function deleteChat(session: UserSession, chatId: string): Promise<
   await client(session).delete(`/chats/${chatId}`);
 }
 
+/** Публикация готовой генерации в галерею (модерация) — см. backend/src/services/gallery.ts. */
+export async function shareToGallery(session: UserSession, jobId: string): Promise<void> {
+  await client(session).post('/gallery/share', { jobId });
+}
+
 export async function getChatMessages(session: UserSession, chatId: string, limit = 20) {
   const { data } = await client(session).get(`/chats/${chatId}/messages?limit=${limit}`);
   return data.messages as Array<{ role: string; content: string; mode: string; mediaUrl: string | null }>;

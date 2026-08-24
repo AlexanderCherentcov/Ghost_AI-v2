@@ -48,6 +48,12 @@ enum MessageDirection {
   OUT // от оператора пользователю
 }
 
+enum GalleryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -104,6 +110,8 @@ model User {
   casperTransactions CasperTransaction[]
   promoRedemptions   PromoRedemption[]
   supportTickets     SupportTicket[]
+  galleryItems       GalleryItem[]
+  galleryLikes       GalleryLike[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -219,6 +227,12 @@ model GenerateJob {
   status    String   @default("pending") // pending | processing | done | failed
   prompt    String   @db.Text
   mediaUrl  String?
+  // id модели из реестра (config/models.ts), которой реально сделана работа —
+  // проставляется воркером при завершении (vision/reel). Нужно для галереи
+  // (services/gallery.ts:shareToGallery по jobId) — единственное место, откуда
+  // можно узнать модель без похода в Message (у sound/voice не проставляется,
+  // им шаринг в галерею не нужен).
+  modelId   String?
   error     String?
   bullJobId String?
   createdAt DateTime @default(now())
@@ -271,4 +285,41 @@ model SupportMessage {
   createdAt DateTime          @default(now())
 
   @@index([ticketId, createdAt])
+}
+
+// ─── Галерея работ пользователей ───────────────────────────────────────────
+// Отдельная от Chat/Message/GenerateJob модель — специально НЕЗАВИСИМАЯ от их
+// TTL-очистки (services/cleanup.ts удаляет старые сообщения и файлы видео по
+// возрасту). Публикация в галерее копирует медиафайл в свою постоянную папку
+// (uploads/gallery/) при одобрении — иначе опубликованная работа исчезла бы
+// через MESSAGE_TTL_DAYS/VIDEO_TTL_DAYS молча, 404 на проде.
+
+model GalleryItem {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain        String        // 'image' | 'video'
+  modelId       String        // id модели из реестра (config/models.ts) — подпись "сделано на Kling"
+  prompt        String        @db.Text
+  mediaUrl      String        // копия файла в uploads/gallery/, НЕ исходный chat/generateJob mediaUrl
+  status        GalleryStatus @default(PENDING)
+  likes         GalleryLike[]
+  likesCount    Int           @default(0) // денормализовано — сортировка топа без агрегации на каждый запрос
+  createdAt     DateTime      @default(now())
+  reviewedAt    DateTime?
+
+  @@index([status, likesCount])
+  @@index([userId, createdAt])
+}
+
+model GalleryLike {
+  id            String      @id @default(cuid())
+  galleryItemId String
+  galleryItem   GalleryItem @relation(fields: [galleryItemId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([galleryItemId, userId]) // 1 лайк на пользователя — защита от накрутки
+  @@index([userId])
 }

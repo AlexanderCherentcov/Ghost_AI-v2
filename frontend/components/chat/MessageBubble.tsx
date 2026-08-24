@@ -9,6 +9,7 @@ import { fileExtIcon } from './inputbar/fileHelpers';
 import { ImageViewer } from '@/components/ui/ImageViewer';
 import { MessageAvatar } from './MessageAvatar';
 import { useAuthStore } from '@/store/auth.store';
+import { api } from '@/lib/api';
 import type { Message } from '@/lib/api';
 
 interface MessageBubbleProps {
@@ -123,6 +124,7 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
               <MediaContent
                 mediaUrl={message.mediaUrl}
                 mode={message.mode}
+                jobId={message.jobId}
                 onOpenImage={() => setViewerUrl(message.mediaUrl!)}
                 onOpenVideo={() => setVideoOpen(true)}
               />
@@ -313,11 +315,58 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
   );
 }
 
+// Кнопка "В галерею" — переиспользуется и на карточке картинки, и на карточке
+// видео (см. MediaContent ниже), поэтому вынесена отдельным компонентом, а не
+// продублирована в двух местах. jobId есть только у сообщений, сгенерированных
+// в текущей сессии (см. комментарий у Message.jobId в lib/api.ts) — из истории
+// после перезагрузки страницы кнопка не показывается вообще.
+function ShareToGalleryButton({ jobId }: { jobId: string }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+
+  async function handleShare() {
+    if (state !== 'idle' && state !== 'error') return;
+    setState('sending');
+    try {
+      await api.gallery.share({ jobId });
+      setState('sent');
+    } catch {
+      setState('error');
+    }
+  }
+
+  if (state === 'sent') {
+    return (
+      <span className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--accent)' }}>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        На модерации
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={handleShare}
+      disabled={state === 'sending'}
+      className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
+      style={{ color: state === 'error' ? '#f87171' : 'var(--text-secondary)' }}
+      title={state === 'error' ? 'Не получилось, нажмите ещё раз' : undefined}
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M6 1l1.8 3.6L11.5 5l-2.8 2.6.7 3.9L6 9.6 2.6 11.5l.7-3.9L.5 5l3.7-.4L6 1z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/>
+      </svg>
+      {state === 'sending' ? 'Отправляю...' : state === 'error' ? 'Не отправилось' : 'В галерею'}
+    </button>
+  );
+}
+
 function MediaContent({
-  mediaUrl, mode, onOpenImage, onOpenVideo,
+  mediaUrl, mode, jobId, onOpenImage, onOpenVideo,
 }: {
   mediaUrl: string;
   mode: string;
+  jobId?: string;
   onOpenImage?: () => void;
   onOpenVideo?: () => void;
 }) {
@@ -337,7 +386,8 @@ function MediaContent({
             onClick={onOpenImage}
             title="Нажмите для просмотра"
           />
-          <div className="flex justify-end px-3 py-2 bg-[var(--bg-elevated)]">
+          <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-elevated)]">
+            {jobId ? <ShareToGalleryButton jobId={jobId} /> : <span />}
             <button
               onClick={() => downloadFile(mediaUrl, 'jpg')}
               className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"
@@ -362,7 +412,7 @@ function MediaContent({
   if (mode === 'reel') {
     return (
       <div className="space-y-1.5">
-        <VideoCard mediaUrl={mediaUrl} onOpen={onOpenVideo} />
+        <VideoCard mediaUrl={mediaUrl} jobId={jobId} onOpen={onOpenVideo} />
         <AiDisclaimer />
       </div>
     );
@@ -371,7 +421,7 @@ function MediaContent({
   return null;
 }
 
-function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void }) {
+function VideoCard({ mediaUrl, jobId, onOpen }: { mediaUrl: string; jobId?: string; onOpen?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(false);
 
@@ -413,6 +463,7 @@ function VideoCard({ mediaUrl, onOpen }: { mediaUrl: string; onOpen?: () => void
           </button>
         </div>
         <div className="flex items-center gap-3">
+          {jobId && <ShareToGalleryButton jobId={jobId} />}
           <button
             onClick={onOpen}
             className="flex items-center gap-1.5 text-[11px] transition-colors hover:opacity-100 opacity-60"

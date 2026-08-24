@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  PlusIcon, SettingsIcon, TrashIcon, EditIcon,
+  PlusIcon, SettingsIcon, TrashIcon, EditIcon, ImageIcon,
 } from '@/components/icons';
 import { CasperCoin } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
@@ -175,7 +175,7 @@ export function Sidebar() {
       {/* Лого + переключатель — две разные раскладки, чтобы избежать обрезки при переполнении */}
       {sidebarOpen ? (
         <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
-          <Link href="/chat" className="flex items-center gap-3 min-w-0 flex-1">
+          <Link href="/" className="flex items-center gap-3 min-w-0 flex-1">
             <img
               src="/ghostline-logo-icon.png"
               alt="GhostLine"
@@ -198,7 +198,7 @@ export function Sidebar() {
         </div>
       ) : (
         <div className="flex flex-col items-center pt-4 pb-3 gap-3">
-          <Link href="/chat">
+          <Link href="/">
             <img
               src="/ghostline-logo-icon.png"
               alt="GhostLine"
@@ -238,6 +238,22 @@ export function Sidebar() {
           <PlusIcon size={16} className="flex-shrink-0" />
           {sidebarOpen && <span>Новый чат</span>}
         </button>
+      </div>
+
+      {/* Галерея — публичная витрина одобренных работ пользователей */}
+      <div className="px-3 mb-4">
+        <Link
+          href="/gallery"
+          className={cn(
+            'w-full flex items-center transition-all hover:opacity-100 opacity-70',
+            sidebarOpen ? 'gap-2 justify-start px-2.5 py-2' : 'justify-center p-2.5'
+          )}
+          style={{ color: 'var(--text-primary)' }}
+          aria-label="Галерея"
+        >
+          <ImageIcon size={16} className="flex-shrink-0" />
+          {sidebarOpen && <span className="text-[13.5px] font-medium">Галерея</span>}
+        </Link>
       </div>
 
       {/* Разделитель */}

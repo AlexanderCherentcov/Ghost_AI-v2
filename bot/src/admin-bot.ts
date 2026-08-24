@@ -643,6 +643,34 @@ bot.callbackQuery(/^dp_yes:(.+)$/, async (ctx) => {
   }
 });
 
+// ── Модерация галереи — карточка приходит фото/видео-сообщением (см.
+// services/gallery.ts:postReviewCard), поэтому editMessageText недоступен,
+// только editMessageReplyMarkup (убираем кнопки после решения). Идемпотентно:
+// approve/reject на бэкенде сами проверяют status==='PENDING' и возвращают 409,
+// если работа уже обработана (например с другого админ-устройства) — тогда
+// просто показываем алерт, а не падаем.
+bot.callbackQuery(/^gal_ok:(.+)$/, async (ctx) => {
+  const itemId = ctx.match[1];
+  try {
+    await api.post(`/gallery/${itemId}/approve`);
+    await ctx.answerCallbackQuery('✅ Одобрено, уже в галерее!');
+    await ctx.editMessageReplyMarkup().catch(() => {});
+  } catch (err: any) {
+    await ctx.answerCallbackQuery({ text: apiErrorMessage(err), show_alert: true });
+  }
+});
+
+bot.callbackQuery(/^gal_no:(.+)$/, async (ctx) => {
+  const itemId = ctx.match[1];
+  try {
+    await api.post(`/gallery/${itemId}/reject`);
+    await ctx.answerCallbackQuery('❌ Отклонено');
+    await ctx.editMessageReplyMarkup().catch(() => {});
+  } catch (err: any) {
+    await ctx.answerCallbackQuery({ text: apiErrorMessage(err), show_alert: true });
+  }
+});
+
 bot.callbackQuery('search_hint', async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.reply(

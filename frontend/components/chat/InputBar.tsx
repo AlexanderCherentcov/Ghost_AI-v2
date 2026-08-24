@@ -34,6 +34,13 @@ export { DEFAULT_CASPER_COSTS, calcCaspers };
 const FALLBACK_VIDEO_MODEL_ID = 'kling-v2.5';
 const FALLBACK_IMAGE_MODEL_ID = 'gemini-flash-image';
 
+// Последний выбор модели картинки/видео — переживает перезагрузку страницы.
+// Раньше imageModel/videoOptions.videoModel были чистым useState без персиста:
+// любой рефреш откатывал выбор пользователя (например GPT Image) обратно на
+// дефолт молча, без обратной связи — выглядело как "модель сама поменялась".
+const IMAGE_MODEL_STORAGE_KEY = 'ghostline_last_image_model';
+const VIDEO_MODEL_STORAGE_KEY = 'ghostline_last_video_model';
+
 // Диспетчер (/dispatch) предлагает видео в упрощённом трёхуровневом словаре
 // motion/cinema/reality — это его собственная классификация "на глаз", не список
 // моделей. Переводим её в реальный id реестра, только когда пользователь принимает подсказку.
@@ -131,6 +138,23 @@ export function InputBar({
   // Реально применяется только у Gemini-семейства (см. lib/image-model-params.ts) —
   // undefined для остальных моделей, провайдер сам выбирает соотношение.
   const [imageAspectRatio, setImageAspectRatio] = useState<string | undefined>(undefined);
+
+  // Восстанавливаем последний выбор модели ПОСЛЕ монтирования (не в initial-state
+  // лениво) — иначе серверный рендер (дефолт) разойдётся с клиентским (значение
+  // из localStorage) и React пожалуется на hydration mismatch. Тот же приём, что
+  // и у persist в chat.store.ts (skipHydration + ручная гидратация в providers.tsx).
+  useEffect(() => {
+    const storedImageModel = localStorage.getItem(IMAGE_MODEL_STORAGE_KEY);
+    if (storedImageModel) setImageModel(storedImageModel);
+    const storedVideoModel = localStorage.getItem(VIDEO_MODEL_STORAGE_KEY);
+    if (storedVideoModel) setVideoOptions((prev) => ({ ...prev, videoModel: storedVideoModel }));
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(IMAGE_MODEL_STORAGE_KEY, imageModel);
+  }, [imageModel]);
+  useEffect(() => {
+    localStorage.setItem(VIDEO_MODEL_STORAGE_KEY, videoOptions.videoModel);
+  }, [videoOptions.videoModel]);
 
   const [musicOptions, setMusicOptions] = useState<MusicOptions>({
     title: '',

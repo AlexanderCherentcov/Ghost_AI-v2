@@ -92,6 +92,18 @@ export default function ChatConversationPage() {
   const [generatingVoice, setGeneratingVoice] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  // Восстанавливаем последний режим композера ПОСЛЕ монтирования, не в
+  // initial-state лениво — иначе серверный рендер (дефолт 'chat') разойдётся с
+  // клиентским (значение из localStorage) и будет hydration mismatch. Раньше
+  // chatMode нигде не сохранялся вообще — любой рефреш откатывал на 'chat',
+  // выглядело как самопроизвольное переключение с картинки/видео.
+  useEffect(() => {
+    const stored = localStorage.getItem('ghostline_last_chat_mode') as ChatMode | null;
+    if (stored) setChatMode(stored);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('ghostline_last_chat_mode', chatMode);
+  }, [chatMode]);
   // Модель, выбранная на главной ДО создания этого чата (реле через sessionStorage,
   // см. auto-send ниже) — прокидывается в InputBar как presetImageModel/
   // presetVideoModel, иначе его собственное состояние imageModel/videoOptions

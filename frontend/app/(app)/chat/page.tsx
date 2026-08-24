@@ -246,6 +246,16 @@ export default function ChatPage() {
   const { addChat, model, setModel } = useChatStore();
   const { user } = useAuthStore();
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  // Восстанавливаем последний режим после монтирования (не лениво в initial-state,
+  // чтобы не разойтись с серверным рендером — hydration mismatch). См. тот же
+  // приём и подробный комментарий в ChatIdPage.tsx.
+  useEffect(() => {
+    const stored = localStorage.getItem('ghostline_last_chat_mode') as ChatMode | null;
+    if (stored) setChatMode(stored);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('ghostline_last_chat_mode', chatMode);
+  }, [chatMode]);
   // Витрина моделей под инпутом — исчезает, как только человек реально начал
   // действовать: отправил первое сообщение или выбрал модель карточкой. По прямому
   // запросу Александра: не должна висеть под уже занятым диалогом.

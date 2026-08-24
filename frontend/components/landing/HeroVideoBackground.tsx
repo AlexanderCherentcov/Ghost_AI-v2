@@ -4,17 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 
 // Полноэкранный фон hero. На десктопе — видео (только при "быстром" соединении,
 // иначе лишний трафик и просадка производительности — ту же проблему в этой сессии
-// уже решали для canvas с частицами). На мобильных — статичное изображение вместо
-// видео вообще (по прямому решению Александра: жёстко по типу устройства, не по
-// скорости соединения — так же делает Webflow, у них это надёжнее navigator.connection,
-// которого нет в Safari/Firefox). Если файла нет/не загрузился — тихо ничего не
-// рендерим, hero остаётся как был (частицы + виньетка из ParticleBrainField), без
-// сломанного/пустого блока.
-//
-// ЗАГЛУШКА: реальных /hero-video.mp4 и /hero-poster.jpg пока нет в public —
-// Александр подберёт и пришлёт. До этого компонент рендерит null (404 → onError).
+// уже решали для canvas с частицами). На мобильных — видео вообще не рендерим
+// (по прямому решению Александра: жёстко по типу устройства, не по скорости
+// соединения — так же делает Webflow, у них это надёжнее navigator.connection,
+// которого нет в Safari/Firefox), рендерим null — под этим компонентом уже лежит
+// fixed-canvas с частицами (ParticleBrainField, см. app/page.tsx), он и остаётся
+// видимым фоном hero на мобильных. Если файла нет/не загрузился на десктопе —
+// тоже тихо ничего не рендерим, а не ломаем блок.
 const VIDEO_SRC = '/hero-video.mp4';
-const POSTER_SRC = '/hero-poster.jpg';
 // Граница "мобильный/десктоп" — та же, что у остального адаптива на странице (Tailwind md:).
 const MOBILE_BREAKPOINT = 768;
 
@@ -28,7 +25,7 @@ function isSlowConnection(): boolean {
   return ['slow-2g', '2g', '3g'].includes(conn.effectiveType);
 }
 
-type Mode = 'loading' | 'video' | 'image' | 'off';
+type Mode = 'loading' | 'video' | 'off';
 
 // Затемнение поверх видео/изображения — тот же принцип, что у глобальной виньетки
 // ParticleBrainField, но сильнее: у реального контента обычно больше контраста/цвета,
@@ -52,12 +49,8 @@ export function HeroVideoBackground() {
 
   useEffect(() => {
     const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
-    if (isMobile) {
-      setMode('image');
-      return;
-    }
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reducedMotion || isSlowConnection()) {
+    if (isMobile || reducedMotion || isSlowConnection()) {
       setMode('off');
       return;
     }
@@ -83,20 +76,6 @@ export function HeroVideoBackground() {
 
   if (mode === 'off' || mode === 'loading') return null;
 
-  if (mode === 'image') {
-    return (
-      <>
-        <img
-          src={POSTER_SRC}
-          alt=""
-          onError={() => setMode('off')}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <Overlay />
-      </>
-    );
-  }
-
   return (
     <>
       <video
@@ -105,7 +84,6 @@ export function HeroVideoBackground() {
         muted
         loop
         playsInline
-        poster={POSTER_SRC}
         onError={() => setMode('off')}
         className="absolute inset-0 w-full h-full object-cover"
       >

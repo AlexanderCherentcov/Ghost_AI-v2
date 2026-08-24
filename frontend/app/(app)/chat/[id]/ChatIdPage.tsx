@@ -235,16 +235,25 @@ export default function ChatConversationPage() {
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
+      // Переключаем видимый режим композера ПЕРЕД генерацией — иначе страница
+      // монтируется с дефолтным chatMode:'chat' (useState выше) и пилюли/UI
+      // показывают чат, хотя реально уже идёт генерация картинки/видео/музыки/
+      // голоса: пользователь выбрал режим на главной, но сюда, в новый чат,
+      // выбор не долетал вообще (только сам промт/опции через sessionStorage).
       if (initialVoiceAudioUrl) {
+        setChatMode('voice');
         const res = await fetch(initialVoiceAudioUrl);
         const blob = await res.blob();
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: initialVoiceAudioType });
         handleGenerateVoice(file);
       } else if (initialVideoPrompt) {
+        setChatMode('video');
         handleGenerateVideo(initialVideoPrompt, initialVideoOptions);
       } else if (initialMusicPrompt) {
+        setChatMode('music');
         handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
       } else if (initialImagePrompt) {
+        setChatMode('images');
         handleGenerateImage(initialImagePrompt, undefined, initialImageModel, initialImageAspectRatio);
       } else if (initialImageUrl) {
         const res = await fetch(initialImageUrl);

@@ -12,6 +12,7 @@ import { generateMusicSuno } from '../services/providers/suno.js';
 import { routeAudio } from '../services/audio-router.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
+import { refundCaspers } from '../services/tokens.js';
 
 // ── Конвертирует FLAC → MP3 через ffmpeg ──────────────────────────────────────
 // Safari/iOS не поддерживает FLAC. GoAPI отдаёт .flac — конвертируем сразу.
@@ -76,6 +77,9 @@ interface SoundJob {
   sunoStyle?: string;
   sunoTitle?: string;
   sunoInstrumental?: boolean;
+  // См. комментарий у одноимённого поля в vision.worker.ts — нужно для возврата
+  // Caspers при падении job'а после списания.
+  caspersSpent: number;
 }
 
 export function startSoundWorker() {
@@ -163,6 +167,7 @@ export function startSoundWorker() {
         where: { id: job.data.jobId },
         data: { status: 'failed', error: err.message },
       });
+      await refundCaspers(job.data.userId, job.data.caspersSpent, 'music_generate').catch(() => {});
     }
     console.error(`[SoundWorker] Job ${job?.id} failed:`, err.message);
   });

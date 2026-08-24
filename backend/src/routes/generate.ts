@@ -215,6 +215,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         size: effectiveSize,
         modelId,
         mediaCacheMode,
+        caspersSpent: deductResult.caspersSpent,
         ...(sourceImageUrl ? { sourceImageUrl } : {}),
         ...(imageAspectRatio ? { imageAspectRatio } : {}),
       }).catch(async (err: any) => {
@@ -308,6 +309,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         sunoStyle: sunoStyle,
         sunoTitle: sunoTitle,
         sunoInstrumental: sunoInstrumental,
+        caspersSpent: deductResult.caspersSpent,
       }).catch(async (err: any) => {
         await refundCaspers(userId, deductResult.caspersSpent, 'music_generate').catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
@@ -441,6 +443,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         imageUrl: videoImageUrl ?? null,
         negativePrompt,
         cameraPreset: videoCameraPreset,
+        caspersSpent: deductResult.caspersSpent,
       }).catch(async (err: any) => {
         await refundCaspers(userId, deductResult.caspersSpent, spec.id).catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
@@ -504,6 +507,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         userId,
         chatId: chatId ?? null,
         audioUrl,
+        caspersSpent: deductResult.caspersSpent,
       }).catch(async (err: any) => {
         await refundCaspers(userId, deductResult.caspersSpent, 'voice_exchange').catch(() => {});
         const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);

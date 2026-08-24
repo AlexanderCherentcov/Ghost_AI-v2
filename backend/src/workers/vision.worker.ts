@@ -5,6 +5,7 @@ import { generateImageFlux } from '../services/providers/openrouter.js';
 import { findModel } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
+import { refundCaspers } from '../services/tokens.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -32,6 +33,13 @@ interface VisionJob {
   // Реально прокидывается только для Gemini-семейства (image_config.aspect_ratio
   // через OpenRouter chat/completions) — см. providerModel-проверку в generateImageFlux.
   imageAspectRatio?: string;
+  // Сколько реально списано за этот job (routes/generate.ts:checkAndDeduct) — нужно
+  // здесь, чтобы вернуть Caspers при падении ПОСЛЕ постановки в очередь (см.
+  // worker.on('failed') ниже). Раньше возврат был только на ошибку постановки
+  // в очередь (routes/generate.ts, до этого места) — если сам воркер падал
+  // (таймаут/ошибка провайдера), Caspers списывались и терялись без возврата,
+  // даже когда пользователь не получил вообще ничего.
+  caspersSpent: number;
 }
 
 export function startVisionWorker() {
@@ -105,6 +113,7 @@ export function startVisionWorker() {
         where: { id: job.data.jobId },
         data: { status: 'failed', error: err.message },
       });
+      await refundCaspers(job.data.userId, job.data.caspersSpent, job.data.modelId).catch(() => {});
     }
     console.error(`[VisionWorker] Job ${job?.id} failed:`, err.message);
   });

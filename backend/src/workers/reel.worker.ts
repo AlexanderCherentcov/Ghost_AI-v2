@@ -11,6 +11,7 @@ import { generateVideoSora, type SoraModel } from '../services/providers/openai-
 import { findModel, type VideoDurationChoice } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
+import { refundCaspers } from '../services/tokens.js';
 
 // ── Video сохраняем на наш сервер — GoAPI хранит файлы только 3 дня ───────────
 async function saveVideoUrlToDisk(url: string): Promise<string> {
@@ -57,6 +58,9 @@ interface ReelJob {
   negativePrompt?: string;
   /** Только Kling — простой пресет камеры, см. buildCameraControl в providers/goapi.ts. */
   cameraPreset?: string;
+  // См. комментарий у одноимённого поля в vision.worker.ts — нужно для возврата
+  // Caspers при падении job'а после списания.
+  caspersSpent: number;
 }
 
 export function startReelWorker() {
@@ -161,6 +165,7 @@ export function startReelWorker() {
         where: { id: job.data.jobId },
         data: { status: 'failed', error: err.message },
       });
+      await refundCaspers(job.data.userId, job.data.caspersSpent, job.data.modelId).catch(() => {});
     }
     console.error(`[ReelWorker] Job ${job?.id} failed:`, err.message);
   });

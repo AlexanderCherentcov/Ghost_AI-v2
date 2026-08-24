@@ -9,6 +9,7 @@ import { callCloudflareJSON } from '../services/providers/cloudflare.js';
 import { resolveChatModel } from '../services/ai-router.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
+import { refundCaspers } from '../services/tokens.js';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'audio');
 
@@ -34,6 +35,9 @@ interface VoiceJob {
   userId: string;
   chatId: string | null;
   audioUrl: string;
+  // См. комментарий у одноимённого поля в vision.worker.ts — нужно для возврата
+  // Caspers при падении job'а после списания.
+  caspersSpent: number;
 }
 
 export function startVoiceWorker() {
@@ -116,6 +120,7 @@ export function startVoiceWorker() {
         where: { id: job.data.jobId },
         data: { status: 'failed', error: err.message },
       });
+      await refundCaspers(job.data.userId, job.data.caspersSpent, 'voice_exchange').catch(() => {});
     }
     console.error(`[VoiceWorker] Job ${job?.id} failed:`, err.message);
   });

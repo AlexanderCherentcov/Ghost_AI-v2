@@ -178,16 +178,23 @@ export default function GalleryPage() {
             />
             <span className="font-display font-bold text-base tracking-tight">GhostLine</span>
           </Link>
-          {user ? (
-            <Link href="/chat" className="btn btn-primary text-sm h-9 px-5 flex items-center gap-2">
-              <TokenIcon size={14} />
-              {formatNumber(user.caspers_balance)} Caspers
+          {/* Явные кнопки на главную и в чат — по прямому запросу Александра
+              (раньше был только один условный "Войти"/чат-баланс). */}
+          <div className="flex items-center gap-3">
+            <Link href="/" className="hidden sm:block text-sm text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">
+              Главная
             </Link>
-          ) : (
-            <Link href="/login" className="btn btn-primary text-sm h-9 px-5">
-              Войти
-            </Link>
-          )}
+            {user ? (
+              <Link href="/chat" className="btn btn-primary text-sm h-9 px-5 flex items-center gap-2">
+                <TokenIcon size={14} />
+                {formatNumber(user.caspers_balance)} Caspers
+              </Link>
+            ) : (
+              <Link href="/login" className="btn btn-primary text-sm h-9 px-5">
+                Войти
+              </Link>
+            )}
+          </div>
         </div>
       </nav>
 

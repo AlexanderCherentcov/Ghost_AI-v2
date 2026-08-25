@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { checkBotSecret } from '../lib/bot-auth.js';
 import {
-  shareToGallery, approveItem, rejectItem, toggleLike, listPublic,
+  shareToGallery, approveItem, rejectItem, toggleLike, listPublic, listFeatured,
   GalleryError, type GallerySort,
 } from '../services/gallery.js';
 
@@ -15,6 +15,10 @@ const listQuerySchema = z.object({
   page:   z.coerce.number().int().min(1).default(1),
   limit:  z.coerce.number().int().min(1).max(50).default(24),
   domain: z.enum(['image', 'video']).optional(),
+});
+
+const featuredQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(20).default(10),
 });
 
 const galleryRoutes: FastifyPluginAsync = async (fastify) => {
@@ -50,6 +54,23 @@ const galleryRoutes: FastifyPluginAsync = async (fastify) => {
 
     const { items, total } = await listPublic({ sort: sort as GallerySort, page, limit, viewerUserId, domain });
     return reply.send({ items, total, page, limit });
+  });
+
+  // ── Витрина для главной страницы — топ по лайкам, добор случайными, если
+  // лайкнутых меньше лимита (см. services/gallery.ts:listFeatured) ──
+  fastify.get('/gallery/featured', async (request, reply) => {
+    const { limit } = featuredQuerySchema.parse(request.query);
+
+    let viewerUserId: string | undefined;
+    try {
+      await request.jwtVerify();
+      viewerUserId = (request.user as unknown as { userId: string }).userId;
+    } catch {
+      // гость — витрина всё равно отдаётся, просто без likedByMe
+    }
+
+    const items = await listFeatured(limit, viewerUserId);
+    return reply.send({ items });
   });
 
   // ── Лайк — тумблер, только для залогиненных ──

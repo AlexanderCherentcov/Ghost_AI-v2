@@ -318,6 +318,9 @@ export const api = {
     },
     like: (id: string) =>
       request<{ liked: boolean; likesCount: number }>(`/gallery/${id}/like`, { method: 'POST' }),
+    // Витрина для главной — топ по лайкам, добор случайными если лайкнутых меньше limit.
+    featured: (limit = 10) =>
+      request<{ items: GalleryItem[] }>(`/gallery/featured?limit=${limit}`),
   },
 };
 

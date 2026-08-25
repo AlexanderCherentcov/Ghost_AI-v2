@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
-import type { GalleryItem } from '@prisma/client';
+import { Prisma, type GalleryItem } from '@prisma/client';
 import { findModel } from '../config/models.js';
 import { sendTelegramPhoto, sendTelegramVideo, type InlineKeyboardMarkup } from '../lib/telegram-forum.js';
 import { escHtml } from '../lib/admin-user-card.js';
@@ -161,6 +161,33 @@ export interface GalleryListItem {
   createdAt: Date;
 }
 
+// include-набор, общий для listPublic/listFeatured — оба маппят строки той же
+// формы через mapRowToListItem() ниже.
+function galleryInclude(viewerUserId?: string) {
+  return {
+    user: { select: { name: true } },
+    likes: viewerUserId ? { where: { userId: viewerUserId }, select: { id: true } } : false,
+  } as const;
+}
+
+type GalleryRow = Prisma.GalleryItemGetPayload<{ include: ReturnType<typeof galleryInclude> }>;
+
+function mapRowToListItem(row: GalleryRow): GalleryListItem {
+  const spec = findGalleryModelSpec(row.domain as 'image' | 'video', row.modelId);
+  return {
+    id: row.id,
+    domain: row.domain,
+    modelId: row.modelId,
+    modelLabel: spec?.label ?? row.modelId,
+    prompt: row.prompt,
+    mediaUrl: row.mediaUrl,
+    likesCount: row.likesCount,
+    likedByMe: Array.isArray(row.likes) ? row.likes.length > 0 : false,
+    authorName: row.user.name ?? 'Без имени',
+    createdAt: row.createdAt,
+  };
+}
+
 /** Публичный список — только APPROVED. viewerUserId опционален (гость видит всё, но likedByMe всегда false). */
 export async function listPublic(opts: {
   sort: GallerySort;
@@ -178,29 +205,48 @@ export async function listPublic(opts: {
       orderBy: sort === 'top' ? { likesCount: 'desc' } : { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
-      include: {
-        user: { select: { name: true } },
-        likes: viewerUserId ? { where: { userId: viewerUserId }, select: { id: true } } : false,
-      },
+      include: galleryInclude(viewerUserId),
     }),
     prisma.galleryItem.count({ where }),
   ]);
 
-  const items: GalleryListItem[] = rows.map((row) => {
-    const spec = findGalleryModelSpec(row.domain as 'image' | 'video', row.modelId);
-    return {
-      id: row.id,
-      domain: row.domain,
-      modelId: row.modelId,
-      modelLabel: spec?.label ?? row.modelId,
-      prompt: row.prompt,
-      mediaUrl: row.mediaUrl,
-      likesCount: row.likesCount,
-      likedByMe: Array.isArray(row.likes) ? row.likes.length > 0 : false,
-      authorName: row.user.name ?? 'Без имени',
-      createdAt: row.createdAt,
-    };
+  return { items: rows.map(mapRowToListItem), total };
+}
+
+/**
+ * Витрина для главной страницы — до `limit` работ, сначала по лайкам (реальный
+ * топ), но если лайкнутых работ меньше лимита (типичная ситуация для свежей
+ * галереи — по решению Александра 2026-08-25: "если топа нет — рандомные"),
+ * добор идёт случайными среди ОДОБРЕННЫХ, а не оставляет дыры/повторы. Prisma
+ * не умеет ORDER BY RANDOM() нативно — добираем id сырым запросом, дальше
+ * обычный findMany с тем же include, что и у топовых (одна и та же форма
+ * объекта, единая точка мэппинга — mapRowToListItem).
+ */
+export async function listFeatured(limit: number, viewerUserId?: string): Promise<GalleryListItem[]> {
+  const topRows = await prisma.galleryItem.findMany({
+    where: { status: 'APPROVED', likesCount: { gt: 0 } },
+    orderBy: { likesCount: 'desc' },
+    take: limit,
+    include: galleryInclude(viewerUserId),
   });
 
-  return { items, total };
+  const need = limit - topRows.length;
+  if (need <= 0) return topRows.map(mapRowToListItem);
+
+  const excludeIds = topRows.map((r) => r.id);
+  const randomIdRows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "GalleryItem"
+    WHERE status = 'APPROVED'
+      AND id NOT IN (${excludeIds.length ? Prisma.join(excludeIds) : Prisma.raw("''")})
+    ORDER BY RANDOM()
+    LIMIT ${need}
+  `;
+  if (randomIdRows.length === 0) return topRows.map(mapRowToListItem);
+
+  const randomRows = await prisma.galleryItem.findMany({
+    where: { id: { in: randomIdRows.map((r) => r.id) } },
+    include: galleryInclude(viewerUserId),
+  });
+
+  return [...topRows, ...randomRows].map(mapRowToListItem);
 }

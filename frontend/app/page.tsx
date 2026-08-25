@@ -175,12 +175,14 @@ export default function LandingPage() {
   // картинок/видео/треков хватит Caspers на тарифе", а не выдумывать цифры. Если
   // появится модель дешевле — пересчитается само, без правок текста на странице.
   const [cheapest, setCheapest] = useState<CheapestCosts | null>(null);
-  // Витрина в хиро: как только в галерее есть хотя бы одна одобренная работа —
-  // показываем реальные топ-лайкнутые картинки/видео вместо плейсхолдера с
-  // названием модели. До этого (пустая галерея на старте) остаётся честная
-  // плейсхолдер-плитка — см. SHOWCASE_ITEMS ниже, тот же приём, что раньше был
-  // единственным вариантом.
-  const [galleryTop, setGalleryTop] = useState<GalleryItem[]>([]);
+  // Витрина в хиро и отдельная секция "Галерея работ" ниже — один и тот же
+  // источник данных (не дублируем запрос): топ по лайкам, добор случайными,
+  // если лайкнутых меньше лимита (см. backend/src/services/gallery.ts:listFeatured,
+  // решение Александра 2026-08-25 "если топа нет — рандомные"). Хиро берёт первые
+  // 6, секция — все до 10. Пока в галерее вообще ничего нет (пустой массив) —
+  // в хиро остаётся честная плейсхолдер-плитка (SHOWCASE_ITEMS ниже), а секция
+  // целиком скрывается — см. рендер секции.
+  const [galleryFeatured, setGalleryFeatured] = useState<GalleryItem[]>([]);
   useEffect(() => {
     api.payments.plans().then((data) => {
       setPlans(data.plans);
@@ -188,7 +190,7 @@ export default function LandingPage() {
       setCheapest(cheapestCosts(data.models.image, data.models.video, data.casper_costs.music_generate ?? 5));
     }).catch(() => {});
     loadFeatureModelNames().then(setModelNames).catch(() => {});
-    api.gallery.list({ sort: 'top', limit: 6 }).then((data) => setGalleryTop(data.items)).catch(() => {});
+    api.gallery.featured(10).then((data) => setGalleryFeatured(data.items)).catch(() => {});
   }, []);
   const FEATURES = buildFeatures(modelNames);
   // Плейсхолдер-плитки — реальные названия моделей с бэкенда, но без превью
@@ -345,8 +347,8 @@ export default function LandingPage() {
             transition={{ duration: 0.6, delay: 0.15 }}
             className="hidden lg:grid grid-cols-2 gap-4 w-[380px] shrink-0"
           >
-            {galleryTop.length > 0 ? (
-              galleryTop.map((item) => (
+            {galleryFeatured.length > 0 ? (
+              galleryFeatured.slice(0, 6).map((item) => (
                 <Link
                   key={item.id}
                   href="/gallery"
@@ -438,6 +440,48 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Галерея работ — скрыта целиком, пока в галерее нет ни одной одобренной
+            работы (свежая инсталляция) — пустая секция выглядела бы сломанной,
+            честнее не показывать её вообще, чем врать плейсхолдерами. */}
+        {galleryFeatured.length > 0 && (
+          <section id="gallery" className="py-24 px-6 scroll-mt-20">
+            <div className="max-w-6xl mx-auto">
+              <SectionHeading eyebrow="СООБЩЕСТВО" title="Галерея работ" subtitle="Картинки и видео, которыми поделились пользователи GhostLine" />
+
+              <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+                {galleryFeatured.map((item) => (
+                  <Link
+                    key={item.id}
+                    href="/gallery"
+                    className="group relative flex-shrink-0 snap-start rounded-2xl overflow-hidden"
+                    style={{ width: 220, height: 220, border: '1px solid var(--panel-glass-border)' }}
+                  >
+                    {item.domain === 'video' ? (
+                      <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                    ) : (
+                      <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                    )}
+                    <div
+                      className="absolute inset-x-0 bottom-0 px-3 py-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.92))' }}
+                    >
+                      <p className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,.85)' }}>
+                        {item.modelLabel} · {capitalizeFirst(item.authorName)}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="text-center mt-8">
+                <Link href="/gallery" className="btn btn-primary text-sm h-11 px-7">
+                  Смотреть всю галерею →
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* How it works */}
         <section id="how" className="py-24 px-6 scroll-mt-20">

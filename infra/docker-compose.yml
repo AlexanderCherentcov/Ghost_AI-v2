@@ -18,6 +18,13 @@ services:
       retries: 5
 
   # ── Cache / Queue ─────────────────────────────────────────────────────────────
+  # --save 60 1 + смонтированный volume — раньше был "--save \"\"" без volume (чистая
+  # память), и любой рестарт контейнера/сервера (2 раза за 2026-08-24 из-за OOM при
+  # деплое) полностью обнулял Redis: флаг тех.работ, BullMQ-очередь сгенерированных
+  # но ещё не подхваченных job'ов, рейт-лимиты, кэш ответов. Флаг тех.работ откатывался
+  # на "выключено" (безопасное направление), но очередь генераций могла тихо потерять
+  # задачи в процессе. RDB-снапшот раз в 60с при изменениях — не 100% гарантия (могли
+  # потерять последние <60с), но не бесплатная память без всякого сохранения.
   redis:
     image: redis:7-alpine
     command: >
@@ -25,8 +32,11 @@ services:
       --requirepass ${REDIS_PASSWORD:-changeme}
       --maxmemory 256mb
       --maxmemory-policy noeviction
-      --save ""
+      --save 60 1
+      --dir /data
     restart: always
+    volumes:
+      - redis_data:/data
     networks:
       - ghost_net
     healthcheck:
@@ -194,3 +204,6 @@ volumes:
   backend_uploads:
     external: true
     name: infra_backend_uploads
+  redis_data:
+    external: true
+    name: infra_redis_data

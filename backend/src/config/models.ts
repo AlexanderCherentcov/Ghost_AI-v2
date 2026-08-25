@@ -223,12 +223,14 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     fallbackModel: 'google/gemini-3-pro-image',
     cost: 10, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
+    previewImageUrl: '/previews/gemini-flash-image.jpg',
   },
   {
     id: 'gemini-pro-image', domain: 'image', label: 'Gemini Pro Image', blurb: 'Google', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'google/gemini-3-pro-image',
     cost: 22, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
+    previewImageUrl: '/previews/gemini-pro-image.jpg',
   },
   {
     // TODO: pricing.image для этой модели не сверен (есть только prompt/completion в дампе
@@ -249,6 +251,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     provider: 'openrouter', providerModel: 'google/gemini-3.1-flash-lite-image',
     cost: 5, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
+    previewImageUrl: '/previews/nano-banana-2-lite.jpg',
   },
   // Seedream 5 (ByteDance) и Qwen Image 3 — УБРАНЫ 2026-08-20: проверено вживую по
   // живому каталогу OpenRouter (api/v1/models, 414 моделей на момент проверки) — ни
@@ -288,6 +291,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     provider: 'openrouter', providerModel: 'google/gemini-2.5-flash-image',
     cost: 6, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
+    previewImageUrl: '/previews/nano-banana-classic.jpg',
   },
 ];
 

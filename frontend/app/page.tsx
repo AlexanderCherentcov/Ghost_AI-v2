@@ -125,7 +125,7 @@ const THESIS = [
 ];
 
 const STEPS = [
-  { n: 1, title: 'Войдите в один клик', desc: 'Google, Яндекс или Telegram — без анкет и паролей. 100 Caspers дарим сразу.' },
+  { n: 1, title: 'Войдите в один клик', desc: 'Google, Яндекс или Telegram — без анкет и паролей. Бесплатный чат — сразу, без карты.' },
   { n: 2, title: 'Выберите режим', desc: 'Диалог, изображение, видео, музыка или голос — переключайтесь в любой момент, не теряя историю.' },
   { n: 3, title: 'Получите результат', desc: 'GhostLine сам подберёт модель в режиме «Авто» или отработает именно ту, что вы выбрали явно — без подмены и переплаты.' },
 ];
@@ -329,7 +329,7 @@ export default function LandingPage() {
             </div>
 
             <div className="flex gap-3 flex-wrap">
-              {[tagline ?? '100 Caspers в подарок', 'Без сложной регистрации', 'Отменить в любой момент'].map((t) => (
+              {[tagline ?? 'Бесплатный чат каждый день', 'Без сложной регистрации', 'Отменить в любой момент'].map((t) => (
                 <span key={t} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs" style={{ background: 'var(--panel-glass)', border: '1px solid rgba(255,255,255,.1)', color: 'rgba(255,255,255,.75)' }}>
                   {t}
                 </span>

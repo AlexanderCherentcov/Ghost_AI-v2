@@ -160,6 +160,10 @@ export async function buildApp() {
     reply.header('Cache-Control', 'public, max-age=31536000');
     // Разрешаем кросс-доменную вставку (Helmet по умолчанию ставит same-origin, что блокирует <img> с домена фронтенда)
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+    // Content-Length — без него ответ уходит chunked, а Telegram при sendPhoto
+    // по URL (бот отправляет результат генерации именно этой ссылкой) может
+    // упасть с "failed to get HTTP url content" на chunked-ответах.
+    reply.header('Content-Length', String(fs.statSync(filepath).size));
     return reply.send(fs.createReadStream(filepath));
   });
 
@@ -215,7 +219,11 @@ export async function buildApp() {
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
 
     if (!isVideo) {
+      // Content-Length обязателен: без него ответ уходит как Transfer-Encoding:
+      // chunked, а Telegram при sendPhoto/sendVideo по URL умеет падать с
+      // "failed to get HTTP url content" именно на chunked-ответах без длины.
       reply.header('Content-Type', ext === '.png' ? 'image/png' : 'image/jpeg');
+      reply.header('Content-Length', String(fs.statSync(filepath).size));
       return reply.send(fs.createReadStream(filepath));
     }
 

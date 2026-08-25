@@ -307,11 +307,12 @@ export const api = {
         body: JSON.stringify(data),
       }),
     // Публичный список — request() сам не шлёт Authorization без токена, гостю доступен так же.
-    list: (params: { sort?: 'top' | 'new'; page?: number; limit?: number } = {}) => {
+    list: (params: { sort?: 'top' | 'new'; page?: number; limit?: number; domain?: 'image' | 'video' } = {}) => {
       const query = new URLSearchParams();
       if (params.sort) query.set('sort', params.sort);
       if (params.page) query.set('page', String(params.page));
       if (params.limit) query.set('limit', String(params.limit));
+      if (params.domain) query.set('domain', params.domain);
       const qs = query.toString();
       return request<GalleryResponse>(`/gallery${qs ? `?${qs}` : ''}`);
     },

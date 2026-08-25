@@ -11,9 +11,10 @@ const shareSchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  sort:  z.enum(['top', 'new']).default('top'),
-  page:  z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(50).default(24),
+  sort:   z.enum(['top', 'new']).default('top'),
+  page:   z.coerce.number().int().min(1).default(1),
+  limit:  z.coerce.number().int().min(1).max(50).default(24),
+  domain: z.enum(['image', 'video']).optional(),
 });
 
 const galleryRoutes: FastifyPluginAsync = async (fastify) => {
@@ -37,7 +38,7 @@ const galleryRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── Публичный список — без авторизации, но токен (если есть) даёт likedByMe ──
   fastify.get('/gallery', async (request, reply) => {
-    const { sort, page, limit } = listQuerySchema.parse(request.query);
+    const { sort, page, limit, domain } = listQuerySchema.parse(request.query);
 
     let viewerUserId: string | undefined;
     try {
@@ -47,7 +48,7 @@ const galleryRoutes: FastifyPluginAsync = async (fastify) => {
       // гость — список всё равно отдаём, просто без likedByMe
     }
 
-    const { items, total } = await listPublic({ sort: sort as GallerySort, page, limit, viewerUserId });
+    const { items, total } = await listPublic({ sort: sort as GallerySort, page, limit, viewerUserId, domain });
     return reply.send({ items, total, page, limit });
   });
 

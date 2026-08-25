@@ -167,9 +167,10 @@ export async function listPublic(opts: {
   page: number;
   limit: number;
   viewerUserId?: string;
+  domain?: 'image' | 'video';
 }): Promise<{ items: GalleryListItem[]; total: number }> {
-  const { sort, page, limit, viewerUserId } = opts;
-  const where = { status: 'APPROVED' as const };
+  const { sort, page, limit, viewerUserId, domain } = opts;
+  const where = { status: 'APPROVED' as const, ...(domain ? { domain } : {}) };
 
   const [rows, total] = await Promise.all([
     prisma.galleryItem.findMany({

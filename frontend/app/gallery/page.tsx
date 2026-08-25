@@ -2,12 +2,40 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { GhostIcon } from '@/components/icons/GhostIcon';
+import { TokenIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { api, type GalleryItem, type GalleryResponse } from '@/lib/api';
-import { capitalizeFirst } from '@/lib/utils';
+import { capitalizeFirst, formatNumber } from '@/lib/utils';
+
+type DomainFilter = 'all' | 'image' | 'video';
 
 const PAGE_LIMIT = 24;
+
+// Эмодзи (🔥/🆕) — только для бота (там нет SVG-рендера, там это уместно и
+// единообразно с остальным ботом). На сайте везде SVG-иконки, как и во всём
+// остальном интерфейсе — по прямому замечанию Александра.
+function TrendingIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 1c1 2.5-1.5 3-1.5 5.5 0 1 .5 1.5 1.5 1.5s1.5-1 1.5-2c1.5 1 2.5 2.5 2.5 4 0 2.5-2 4.5-4.5 4.5S3 13 3 10.5C3 6 8 5 8 1z"
+        stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 1.5l1.2 3.8 3.8 1.2-3.8 1.2L8 11.5l-1.2-3.8-3.8-1.2 3.8-1.2L8 1.5z"
+        stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"
+      />
+      <path d="M13 10l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6.6-1.9z" fill="currentColor" />
+    </svg>
+  );
+}
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
@@ -95,15 +123,21 @@ function GalleryCard({ item, canLike, onLikeChange }: {
 export default function GalleryPage() {
   const { user, isLoading } = useAuthStore();
   const [sort, setSort] = useState<'top' | 'new'>('top');
+  const [domainFilter, setDomainFilter] = useState<DomainFilter>('all');
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (nextSort: 'top' | 'new', nextPage: number, append: boolean) => {
+  const load = useCallback(async (nextSort: 'top' | 'new', nextDomain: DomainFilter, nextPage: number, append: boolean) => {
     setLoading(true);
     try {
-      const data: GalleryResponse = await api.gallery.list({ sort: nextSort, page: nextPage, limit: PAGE_LIMIT });
+      const data: GalleryResponse = await api.gallery.list({
+        sort: nextSort,
+        page: nextPage,
+        limit: PAGE_LIMIT,
+        ...(nextDomain !== 'all' ? { domain: nextDomain } : {}),
+      });
       setItems((prev) => (append ? [...prev, ...data.items] : data.items));
       setTotal(data.total);
     } catch {
@@ -115,8 +149,8 @@ export default function GalleryPage() {
 
   useEffect(() => {
     setPage(1);
-    load(sort, 1, false);
-  }, [sort, load]);
+    load(sort, domainFilter, 1, false);
+  }, [sort, domainFilter, load]);
 
   function handleLikeChange(id: string, liked: boolean, likesCount: number) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, likedByMe: liked, likesCount } : it)));
@@ -129,17 +163,33 @@ export default function GalleryPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-void)] text-[var(--text-primary)]">
-      <header className="border-b border-[var(--border)] py-4 px-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-sm text-[rgba(255,255,255,0.5)] hover:text-white transition-colors">
-            <GhostIcon size={20} className="text-accent" />
-            GhostLine AI
+      {/* Тот же навбар, что на лендинге (app/page.tsx) — фиксированная стеклянная
+          панель с реальным лого. Раньше здесь был другой, более старый паттерн
+          (GhostIcon вместо картинки, обычный статичный header) — по прямому
+          замечанию Александра "галерея в старом дизайне". */}
+      <nav className="sticky top-0 z-50 border-b border-[var(--panel-glass-border)] backdrop-blur-xl bg-[rgba(6,5,14,0.72)]">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <img
+              src="/ghostline-logo-icon.png"
+              alt="GhostLine"
+              className="w-9 h-9 rounded-[9px] object-cover"
+              style={{ filter: 'drop-shadow(0 0 10px rgba(123,92,240,.55))' }}
+            />
+            <span className="font-display font-bold text-base tracking-tight">GhostLine</span>
           </Link>
-          <Link href={user ? '/chat' : '/login'} className="text-sm text-accent hover:opacity-80 transition-opacity">
-            {user ? 'В чат →' : 'Войти →'}
-          </Link>
+          {user ? (
+            <Link href="/chat" className="btn btn-primary text-sm h-9 px-5 flex items-center gap-2">
+              <TokenIcon size={14} />
+              {formatNumber(user.caspers_balance)} Caspers
+            </Link>
+          ) : (
+            <Link href="/login" className="btn btn-primary text-sm h-9 px-5">
+              Войти
+            </Link>
+          )}
         </div>
-      </header>
+      </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
@@ -149,21 +199,45 @@ export default function GalleryPage() {
               Картинки и видео, которыми поделились пользователи GhostLine
             </p>
           </div>
-          <div className="flex gap-2">
-            {(['top', 'new'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSort(s)}
-                className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
-                style={{
-                  background: sort === s ? 'var(--accent-dim)' : 'var(--panel-glass)',
-                  color: sort === s ? 'var(--accent)' : 'var(--text-secondary)',
-                  border: '1px solid var(--panel-glass-border)',
-                }}
-              >
-                {s === 'top' ? '🔥 Топ' : '🆕 Новое'}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-4">
+            {/* Вкладки по типу работы */}
+            <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)' }}>
+              {([
+                ['all', 'Все'],
+                ['image', 'Картинки'],
+                ['video', 'Видео'],
+              ] as const).map(([d, label]) => (
+                <button
+                  key={d}
+                  onClick={() => setDomainFilter(d)}
+                  className="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors"
+                  style={{
+                    background: domainFilter === d ? 'var(--accent-dim)' : 'transparent',
+                    color: domainFilter === d ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Сортировка */}
+            <div className="flex gap-2">
+              {(['top', 'new'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSort(s)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
+                  style={{
+                    background: sort === s ? 'var(--accent-dim)' : 'var(--panel-glass)',
+                    color: sort === s ? 'var(--accent)' : 'var(--text-secondary)',
+                    border: '1px solid var(--panel-glass-border)',
+                  }}
+                >
+                  {s === 'top' ? <TrendingIcon /> : <SparkleIcon />}
+                  {s === 'top' ? 'Топ' : 'Новое'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -182,7 +256,7 @@ export default function GalleryPage() {
         {hasMore && (
           <div className="flex justify-center mt-8">
             <button
-              onClick={() => { const next = page + 1; setPage(next); load(sort, next, true); }}
+              onClick={() => { const next = page + 1; setPage(next); load(sort, domainFilter, next, true); }}
               disabled={loading}
               className="px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
               style={{ background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-primary)' }}

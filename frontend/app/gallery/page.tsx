@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { TokenIcon } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
 import { api, type GalleryItem, type GalleryResponse } from '@/lib/api';
-import { capitalizeFirst, formatNumber } from '@/lib/utils';
+import { capitalizeFirst } from '@/lib/utils';
+import { UserBalanceNav } from '@/components/layout/UserBalanceNav';
 
 type DomainFilter = 'all' | 'image' | 'video';
 
@@ -185,10 +185,7 @@ export default function GalleryPage() {
               Главная
             </Link>
             {user ? (
-              <Link href="/chat" className="btn btn-primary text-sm h-9 px-5 flex items-center gap-2">
-                <TokenIcon size={14} />
-                {formatNumber(user.caspers_balance)} Caspers
-              </Link>
+              <UserBalanceNav caspersBalance={user.caspers_balance} />
             ) : (
               <Link href="/login" className="btn btn-primary text-sm h-9 px-5">
                 Войти

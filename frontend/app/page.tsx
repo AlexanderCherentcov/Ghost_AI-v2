@@ -16,6 +16,7 @@ import { loadFeatureModelNames, topNames, type FeatureModelNames } from '@/lib/m
 import { fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations, type CheapestCosts } from '@/lib/pricing';
 import { formatNumber, capitalizeFirst } from '@/lib/utils';
 import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
+import { UserBalanceNav } from '@/components/layout/UserBalanceNav';
 import { useAuthStore } from '@/store/auth.store';
 
 // Заметно темнее и непрозрачнее стандартного --panel-glass — карточки на лендинге
@@ -264,10 +265,7 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-3">
             {user ? (
-              <Link href="/chat" className="btn btn-primary text-sm h-9 px-5 flex items-center gap-2">
-                <TokenIcon size={14} />
-                {formatNumber(user.caspers_balance)} Caspers
-              </Link>
+              <UserBalanceNav caspersBalance={user.caspers_balance} />
             ) : (
               <>
                 {/* Оборачиваем в div, а не вешаем hidden прямо на .btn: .btn — обычный CSS-класс

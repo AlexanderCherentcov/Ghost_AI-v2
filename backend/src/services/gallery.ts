@@ -102,9 +102,18 @@ async function postReviewCard(item: GalleryItem): Promise<void> {
 
   const send = item.domain === 'video' ? sendTelegramVideo : sendTelegramPhoto;
   const keyboard = galleryReviewKeyboard(item.id);
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     ADMIN_IDS.map((adminId) => send(ADMIN_BOT_TOKEN, adminId, item.mediaUrl, caption, { replyMarkup: keyboard })),
   );
+  // allSettled глотает индивидуальные ошибки — без явного логирования сбой отправки
+  // конкретному админу (например неверный chat_id или Telegram не смог скачать
+  // mediaUrl) проходил незамеченным: HTTP-ответ клиенту всё равно 202, карточка
+  // просто никогда не приходила, и в логах не было ни следа.
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      console.error(`[Gallery] Failed to notify admin ${ADMIN_IDS[i]} for item ${item.id}:`, result.reason?.message ?? result.reason);
+    }
+  });
 }
 
 export async function approveItem(itemId: string): Promise<GalleryItem | null> {

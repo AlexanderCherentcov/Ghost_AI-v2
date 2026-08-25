@@ -112,6 +112,19 @@ export default function ChatConversationPage() {
   // не на ту модель, которую выбрал пользователь — выглядит как самопроизвольная смена.
   const [presetImageModel, setPresetImageModel] = useState<string | undefined>();
   const [presetVideoModel, setPresetVideoModel] = useState<string | undefined>();
+  // Карта id→умеет-ли-видеть-картинки для чат-моделей — независимая проверка
+  // ПРЯМО перед отправкой, дублирующая гард в InputBar. InputBar снимает
+  // вложение реактивным useEffect при смене модели, но если он по какой-то
+  // причине не успел сработать до клика "Отправить" (например модель сменилась
+  // без явного клика — восстановление из persist), пользователь получал сырую
+  // ошибку бэкенда вместо понятного тоста. Здесь — последний рубеж прямо в
+  // точке отправки, видит самое свежее состояние `model`.
+  const [chatVisionModels, setChatVisionModels] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    api.payments.plans().then((data) => {
+      setChatVisionModels(new Set(data.models.chat.filter((m) => m.capabilities?.vision).map((m) => m.id)));
+    }).catch(() => {});
+  }, []);
   const [dispatchResult, setDispatchResult] = useState<{ category: string; autoFill: Record<string, unknown> } | null>(null);
   const dispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -641,6 +654,22 @@ export default function ChatConversationPage() {
       }
       return handleGenerateImage(prompt || 'beautiful landscape', undefined, imageModel, imageAspectRatio);
     }
+    if (chatMode === 'images' && file && getFileCategory(file) === 'image') {
+      // Прикреплённое в режиме "Картинки" фото — источник для правки по фото
+      // (img2img), а не вложение для vision-чата. Раньше эта ветка вообще не
+      // обрабатывалась: условие выше требовало !file, поэтому запрос с
+      // прикреплённым фото проваливался в общую логику чата ниже и уходил в
+      // vision-чат на ВЫБРАННОЙ ЧАТ-модели (а не imageModel) — если та не
+      // умела распознавать картинки (например Sonar), пользователь получал
+      // ошибку про чат-модель, хотя выбирал модель картинки (Nano Banana и т.п.).
+      try {
+        const { url } = await api.upload.image(file);
+        return handleGenerateImage(prompt || 'отредактируй изображение', url, imageModel, imageAspectRatio);
+      } catch {
+        showToast('Не удалось загрузить изображение', 'error');
+        return;
+      }
+    }
     if (chatMode === 'video') {
       const hasSourceImage = !!(file && getFileCategory(file) === 'image');
       if (!prompt.trim() && !hasSourceImage) return;
@@ -708,6 +737,10 @@ export default function ChatConversationPage() {
       fileName = file.name;
 
       if (category === 'image') {
+        if (model !== 'auto' && chatVisionModels.size > 0 && !chatVisionModels.has(model)) {
+          showToast('Выбранная модель не распознаёт изображения — переключитесь на «Авто» или модель с поддержкой картинок', 'error');
+          return;
+        }
         try {
           // Картинка, прикреплённая в чате, всегда идёт в vision-чат (спросить/обсудить),
           // а не в платную генерацию правки — для правки есть вкладка "Картинка".

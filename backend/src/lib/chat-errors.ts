@@ -10,6 +10,7 @@
  * показываем пользователю точный текст ошибки, а не общий "попробуйте позже".
  */
 export const CHAT_LIMIT_CODES = [
+  'LIMIT_MESSAGES',
   'LIMIT_PRO_MESSAGES',
   'LIMIT_PRO_UNAVAILABLE',
   'LIMIT_IMAGES',

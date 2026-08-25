@@ -21,7 +21,14 @@ export function planAtLeast(userPlan: PlanKey, required: PlanKey): boolean {
 // Приветственный бонус Caspers для новых пользователей — используется в
 // routes/auth.ts при регистрации И здесь же, в тексте фичи FREE-плана,
 // чтобы оба места не расходились при изменении суммы бонуса.
-export const FREE_WELCOME_CASPERS = 100;
+//
+// Убран по прямому решению Александра 2026-08-25: экономически невыгоден —
+// на 100 Caspers новый пользователь мог полностью попробовать платные функции
+// (картинки/музыку) без единой оплаты. Единственная бесплатная часть теперь —
+// стандартный чат (llama-3.1-fast, единственная модель с cost:0 в реестре),
+// но и он больше не безлимитный — см. FREE_LIMITS.chat_daily и checkAndDeduct
+// в services/tokens.ts.
+export const FREE_WELCOME_CASPERS = 0;
 
 // ─── Лимиты FREE-тарифа (публично видимые) ───────────────────────────────────
 // Объявлены до PLANS, т.к. используются в тексте фич FREE-плана ниже.
@@ -35,6 +42,11 @@ export const FREE_LIMITS = {
   // videos_monthly: 3, но лимит нигде не проверялся — приветственный бонус можно было
   // целиком потратить на видео без ограничений.
   videos_monthly: 0,
+  // Стандартный (бесплатный, cost:0) чат был безлимитным на всех тарифах включая
+  // FREE — см. историю в services/tokens.ts:checkAndDeduct. По прямому решению
+  // Александра 2026-08-25: закрываем дыру — жёсткий дневной лимит, сброс по
+  // day_start (уже существующий механизм, см. checkResets).
+  chat_daily: 10,
 } as const;
 
 export interface PlanInfo {
@@ -60,8 +72,7 @@ export const PLANS: Record<PlanKey, PlanInfo> = {
     badge: null,
     popular: false,
     features: [
-      `${FREE_WELCOME_CASPERS} Caspers при регистрации`,
-      'Стандартный чат: без ограничений',
+      `Стандартный чат: до ${FREE_LIMITS.chat_daily} сообщений в день`,
       'Изображения и музыка — за Caspers',
       'Видео — с тарифа BASIC',
     ],

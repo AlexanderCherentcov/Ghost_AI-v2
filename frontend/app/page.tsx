@@ -184,7 +184,7 @@ export default function LandingPage() {
   useEffect(() => {
     api.payments.plans().then((data) => {
       setPlans(data.plans);
-      setTagline(freeTierTagline(data.free.welcome_caspers));
+      setTagline(freeTierTagline(data.free.limits.chat_daily));
       setCheapest(cheapestCosts(data.models.image, data.models.video, data.casper_costs.music_generate ?? 5));
     }).catch(() => {});
     loadFeatureModelNames().then(setModelNames).catch(() => {});

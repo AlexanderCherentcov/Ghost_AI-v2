@@ -174,11 +174,20 @@ export async function checkAndDeduct(
     const plan = user.plan as string;
 
     // ── обычный чат (бесплатная модель, cost === 0) ─────────────────────────
-    // Безлимитный на всех тарифах, включая FREE — Cloudflare-модель ничего не
-    // стоит по себестоимости, ограничивать её незачем, платят только за платные
-    // модели чата (см. про-чат ниже) и генерацию. std_messages_today остаётся
-    // как счётчик для статистики/админки, не как лимит.
+    // Безлимитный на платных тарифах — Cloudflare-модель ничего не стоит по
+    // себестоимости, ограничивать её там незачем. На FREE — жёсткий дневной
+    // лимит (FREE_LIMITS.chat_daily), см. решение Александра 2026-08-25:
+    // раньше это был реальный безлимит даже без приветственного бонуса, теперь
+    // бонус убран (FREE_WELCOME_CASPERS: 0) и лимит на чат — единственное,
+    // что вообще ограничивает FREE-тариф. std_messages_today сбрасывается
+    // в checkResets по day_start — тот же механизм, что уже был для статистики.
     if (domain === 'chat' && cost === 0) {
+      if (plan === 'FREE' && user.std_messages_today >= FREE_LIMITS.chat_daily) {
+        throw Object.assign(
+          new Error('Лимит бесплатных сообщений на сегодня исчерпан'),
+          { code: 'LIMIT_MESSAGES' },
+        );
+      }
       await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
       return { caspersSpent: 0 };
     }

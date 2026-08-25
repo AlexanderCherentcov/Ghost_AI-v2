@@ -51,7 +51,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     api.payments.plans()
-      .then((data) => setTagline(freeTierTagline(data.free.welcome_caspers)))
+      .then((data) => setTagline(freeTierTagline(data.free.limits.chat_daily)))
       .catch(() => {});
   }, []);
 

@@ -459,6 +459,7 @@ export interface FreeLimits {
   images_weekly: number;
   music_weekly: number;
   videos_monthly: number;
+  chat_daily: number;
 }
 export interface CasperPriceTier {
   max: number;

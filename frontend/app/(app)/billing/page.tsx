@@ -345,7 +345,7 @@ export default function BillingPage() {
               <span className="font-medium text-white text-sm">Бесплатный план</span>
               {plansData && (
                 <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
-                  {freeTierTagline(plansData.free.welcome_caspers)}
+                  {freeTierTagline(plansData.free.limits.chat_daily)}
                 </span>
               )}
             </div>

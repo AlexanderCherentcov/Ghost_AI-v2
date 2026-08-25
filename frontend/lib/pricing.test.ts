@@ -53,8 +53,8 @@ describe('fakeCyclePrice — маркетинговая зачёркнутая �
 });
 
 describe('freeTierTagline — единственное место сборки этого текста', () => {
-  it('подставляет реальную цифру бонуса, а не захардкоженную 100', () => {
-    expect(freeTierTagline(100)).toBe('100 Caspers · безлимитный чат · всё остальное за Caspers');
-    expect(freeTierTagline(200)).toBe('200 Caspers · безлимитный чат · всё остальное за Caspers');
+  it('подставляет реальный дневной лимит, а не захардкоженное число', () => {
+    expect(freeTierTagline(10)).toBe('10 бесплатных сообщений в день · картинки и музыка за Caspers');
+    expect(freeTierTagline(20)).toBe('20 бесплатных сообщений в день · картинки и музыка за Caspers');
   });
 });

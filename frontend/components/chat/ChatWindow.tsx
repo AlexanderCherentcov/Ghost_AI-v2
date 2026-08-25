@@ -6,7 +6,7 @@ import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
-import { greetingByHour } from '@/lib/utils';
+import { greetingByHour, capitalizeFirst } from '@/lib/utils';
 
 // Цикл лого-форм из мокапа (Chat.dc.html: CYCLE_SEQ) — используется и для простаивающего
 // hero (медленно, 4000/1200), и для индикатора «думаю» (быстро, 900/500).
@@ -79,7 +79,7 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
             <ParticleAvatar size={88} cycleShapes={CYCLE_SEQ} stageMs={4000} transMs={1200} spinSpeed={0.006} className="mx-auto mb-6" />
             <h1 className="font-display text-3xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Чем займёмся?</h1>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {greetingByHour()}{user?.name ? `, ${user.name.charAt(0).toUpperCase() + user.name.slice(1)}` : ''}.
+              {greetingByHour()}{user?.name ? `, ${capitalizeFirst(user.name)}` : ''}.
             </p>
           </motion.div>
         </div>

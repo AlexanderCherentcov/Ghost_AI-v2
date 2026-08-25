@@ -48,6 +48,13 @@ export function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '...' : str;
 }
 
+// Раньше эта же строка (charAt(0).toUpperCase() + slice(1)) была скопирована
+// в трёх местах (приветствие в ChatWindow, имя в chat/page.tsx, подпись над
+// сообщением в MessageBubble) — вынесено в одну функцию.
+export function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export function greetingByHour(): string {
   const h = new Date().getHours();
   if (h < 5) return 'Доброй ночи';

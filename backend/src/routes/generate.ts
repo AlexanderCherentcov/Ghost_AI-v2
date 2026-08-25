@@ -645,6 +645,11 @@ Return ONLY the lyrics text, nothing else.`;
         mode: job.mode,
         prompt: job.prompt,
         mediaUrl: job.mediaUrl,
+        // Нужна фронту для аватар-анимации свежесгенерированного сообщения
+        // (MessageAvatar/modelParticleShape) — раньше поля тут не было вообще,
+        // и аватар картинки/видео до перезагрузки страницы всегда падал на
+        // общий "мозг", даже у моделей со своим лого (напр. gpt-image/chatgpt).
+        modelId: job.modelId,
         error: job.error ? 'Генерация провалась, попробуйте позже' : null,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,

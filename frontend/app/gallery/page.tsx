@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 import { useAuthStore } from '@/store/auth.store';
 import { api, type GalleryItem, type GalleryResponse } from '@/lib/api';
+import { capitalizeFirst } from '@/lib/utils';
 
 const PAGE_LIMIT = 24;
 
@@ -68,7 +69,7 @@ function GalleryCard({ item, canLike, onLikeChange }: {
         <p className="text-[12px] text-white/90 line-clamp-2 mb-1">{item.prompt}</p>
         <div className="flex items-center justify-between">
           <span className="text-[10px]" style={{ color: 'rgba(255,255,255,.55)' }}>
-            {item.modelLabel} · {item.authorName}
+            {item.modelLabel} · {capitalizeFirst(item.authorName)}
           </span>
         </div>
       </div>

@@ -406,6 +406,9 @@ export interface GenerateJob {
   mode: string;
   prompt: string;
   mediaUrl: string | null;
+  // Id модели из реестра, которой сделана работа (vision/reel — у sound/voice null).
+  // Нужно для MessageAvatar сразу после генерации, до перезагрузки истории.
+  modelId?: string | null;
   error: string | null;
   createdAt: string;
   updatedAt: string;

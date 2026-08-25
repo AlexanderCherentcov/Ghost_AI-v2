@@ -14,7 +14,7 @@ import { SupportWidget } from '@/components/ui/SupportWidget';
 import { api, type PlanInfo, type GalleryItem } from '@/lib/api';
 import { loadFeatureModelNames, topNames, type FeatureModelNames } from '@/lib/model-display';
 import { fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations, type CheapestCosts } from '@/lib/pricing';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, capitalizeFirst } from '@/lib/utils';
 import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -362,7 +362,7 @@ export default function LandingPage() {
                     className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[11px] truncate opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.85))', color: 'rgba(255,255,255,.85)' }}
                   >
-                    {item.modelLabel} · {item.authorName}
+                    {item.modelLabel} · {capitalizeFirst(item.authorName)}
                   </div>
                 </Link>
               ))

@@ -10,6 +10,7 @@ import { ImageViewer } from '@/components/ui/ImageViewer';
 import { MessageAvatar } from './MessageAvatar';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
+import { capitalizeFirst } from '@/lib/utils';
 import type { Message } from '@/lib/api';
 
 interface MessageBubbleProps {
@@ -82,7 +83,7 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
               нужно и имя рядом), только у пользователя: у ассистента подписи не
               было и не добавляем — единообразия ради (см. MessageAvatar). */}
           <div className="text-[11px] text-right mb-1 pr-1" style={{ color: 'var(--text-muted)' }}>
-            {user?.name?.trim() || 'Вы'}
+            {user?.name?.trim() ? capitalizeFirst(user.name.trim()) : 'Вы'}
           </div>
           {/* Пузырь пользователя — единая скруглённость 14px по всем углам (мокап), без
               «хвостика» */}

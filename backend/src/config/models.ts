@@ -267,6 +267,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     id: 'gpt-image', domain: 'image', label: 'GPT Image', blurb: 'OpenAI · выше качеством, чем mini', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5-image',
     cost: 70, autoEligible: true, capabilities: { edit: true },
+    previewImageUrl: '/previews/gpt-image.jpg',
   },
   {
     // 2026-08-20: openai/gpt-5.4-image-2 — новейшая модель OpenAI для картинок
@@ -275,6 +276,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     id: 'gpt-5.4-image-2', domain: 'image', label: 'GPT-5.4 Image 2', blurb: 'OpenAI · новейшая модель', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5.4-image-2',
     cost: 52, autoEligible: true, capabilities: { edit: true },
+    previewImageUrl: '/previews/gpt-5.4-image-2.jpg',
   },
   {
     // 2026-08-20: google/gemini-2.5-flash-image — оригинальная модель "Nano Banana"

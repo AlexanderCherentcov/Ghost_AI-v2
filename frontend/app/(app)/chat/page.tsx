@@ -12,7 +12,7 @@ import { getFileCategory } from '@/components/chat/InputBar';
 import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { modelParticleShape } from '@/lib/model-icons';
 import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, CasperCoin } from '@/components/icons';
-import { cn } from '@/lib/utils';
+import { cn, capitalizeFirst } from '@/lib/utils';
 
 // Мокап (Chat.dc.html: quickModeKeys) показывает 4 пилюли включая активный текущий
 // режим (chat/video/image/music), без голоса. У нас голос — реальная рабочая фича
@@ -276,7 +276,7 @@ export default function ChatPage() {
   const [presetVideoModel, setPresetVideoModel] = useState<string | undefined>();
 
   const name = user?.name?.split(' ')[0] ?? 'Ghost';
-  const firstName = name.charAt(0).toUpperCase() + name.slice(1);
+  const firstName = capitalizeFirst(name);
 
   // Сбрасываем активный чат, чтобы сайдбар не подсвечивал устаревший чат
   useEffect(() => {

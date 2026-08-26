@@ -439,21 +439,23 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Галерея работ — скрыта целиком, пока в галерее нет ни одной одобренной
-            работы (свежая инсталляция) — пустая секция выглядела бы сломанной,
-            честнее не показывать её вообще, чем врать плейсхолдерами. */}
-        {galleryFeatured.length > 0 && (
-          <section id="gallery" className="py-24 px-6 scroll-mt-20">
-            <div className="max-w-6xl mx-auto">
-              <SectionHeading eyebrow="СООБЩЕСТВО" title="Галерея работ" subtitle="Картинки и видео, которыми поделились пользователи GhostLine" />
+        {/* Галерея работ — секция и кнопка "Смотреть всю галерею" видны всегда
+            (по прямому запросу Александра — вход в галерею не должен зависеть
+            от того, есть ли уже одобренные работы). Слайдер показывается,
+            только когда есть что показать; иначе — тот же честный пустой
+            статус, что и на самой /gallery, а не плейсхолдеры-заглушки. */}
+        <section id="gallery" className="py-24 px-6 scroll-mt-20">
+          <div className="max-w-6xl mx-auto">
+            <SectionHeading eyebrow="СООБЩЕСТВО" title="Галерея работ" subtitle="Картинки и видео, которыми поделились пользователи GhostLine" />
 
-              <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+            {galleryFeatured.length > 0 ? (
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
                 {galleryFeatured.map((item) => (
                   <Link
                     key={item.id}
                     href="/gallery"
-                    className="group relative flex-shrink-0 snap-start rounded-2xl overflow-hidden"
-                    style={{ width: 220, height: 220, border: '1px solid var(--panel-glass-border)' }}
+                    className="group relative flex-shrink-0 snap-start rounded-2xl overflow-hidden w-[42vw] h-[42vw] sm:w-[220px] sm:h-[220px]"
+                    style={{ border: '1px solid var(--panel-glass-border)' }}
                   >
                     {item.domain === 'video' ? (
                       <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
@@ -471,15 +473,19 @@ export default function LandingPage() {
                   </Link>
                 ))}
               </div>
-
-              <div className="text-center mt-8">
-                <Link href="/gallery" className="btn btn-primary text-sm h-11 px-7">
-                  Смотреть всю галерею →
-                </Link>
+            ) : (
+              <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Пока пусто — станьте первым, кто поделится своей работой в чате
               </div>
+            )}
+
+            <div className="text-center mt-8">
+              <Link href="/gallery" className="btn btn-primary text-sm h-11 px-7">
+                Смотреть всю галерею →
+              </Link>
             </div>
-          </section>
-        )}
+          </div>
+        </section>
 
         {/* How it works */}
         <section id="how" className="py-24 px-6 scroll-mt-20">

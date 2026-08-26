@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/components/ui/Toast';
 import { api, type PlansResponse } from '@/lib/api';
 import { calculateCasperPrice, pricePerCasper, fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations } from '@/lib/pricing';
-import { CheckIcon, CasperCoin } from '@/components/icons';
+import { CheckIcon } from '@/components/icons';
 import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
 import { cn, formatNumber } from '@/lib/utils';
 
@@ -153,11 +153,9 @@ export default function BillingPage() {
               </div>
               {plan === 'FREE' && plansData && (
                 <div className="text-right">
-                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1 flex items-center justify-end gap-1">
-                    <CasperCoin size={12} />
-                    {plansData.free.welcome_caspers} Caspers при регистрации
+                  <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">
+                    До {plansData.free.limits.chat_daily} бесплатных сообщений в день
                   </p>
-                  <p className="text-xs text-[rgba(255,255,255,0.4)]">Безлимитный чат</p>
                   <p className="text-xs text-[rgba(255,255,255,0.4)]">Остальное — за Caspers</p>
                 </div>
               )}

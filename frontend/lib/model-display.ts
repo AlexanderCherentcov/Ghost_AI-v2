@@ -45,6 +45,40 @@ export interface FeatureModelNames {
   video: string[];
 }
 
+export interface FeatureModelPreview {
+  name: string;
+  domain: 'image' | 'video';
+  previewUrl: string;
+}
+
+let previewCache: Promise<FeatureModelPreview[]> | null = null;
+
+// Для витрины в хиро лендинга — те же модели, что в /api/plans, но только те,
+// у которых уже загружено превью (см. previews/ и config/models.ts) — модели
+// без превью в этой витрине не участвуют, чтобы не подставлять пустоту вместо
+// картинки (честная деградация, как и остальная галерея на лендинге).
+export function loadFeatureModelPreviews(): Promise<FeatureModelPreview[]> {
+  if (!previewCache) {
+    previewCache = api.payments.plans().then((data) => {
+      const seen = new Set<string>();
+      const out: FeatureModelPreview[] = [];
+      const collect = (models: Array<{ id: string; label: string; previewImageUrl?: string }>, domain: 'image' | 'video') => {
+        for (const m of models) {
+          if (!m.previewImageUrl) continue;
+          const name = displayName(m.id, m.label);
+          if (seen.has(name)) continue;
+          seen.add(name);
+          out.push({ name, domain, previewUrl: m.previewImageUrl });
+        }
+      };
+      collect(data.models.image, 'image');
+      collect(data.models.video, 'video');
+      return out;
+    });
+  }
+  return previewCache;
+}
+
 function displayName(id: string, label: string): string {
   return DISPLAY_NAME_OVERRIDES[id] ?? label;
 }

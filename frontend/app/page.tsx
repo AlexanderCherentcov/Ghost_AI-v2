@@ -12,7 +12,7 @@ import { ParticleBrainField } from '@/components/landing/ParticleBrainField';
 import { HeroVideoBackground } from '@/components/landing/HeroVideoBackground';
 import { SupportWidget } from '@/components/ui/SupportWidget';
 import { api, type PlanInfo, type GalleryItem } from '@/lib/api';
-import { loadFeatureModelNames, topNames, type FeatureModelNames } from '@/lib/model-display';
+import { loadFeatureModelNames, loadFeatureModelPreviews, topNames, type FeatureModelNames, type FeatureModelPreview } from '@/lib/model-display';
 import { fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations, type CheapestCosts } from '@/lib/pricing';
 import { formatNumber, capitalizeFirst } from '@/lib/utils';
 import { PlanFeatureList } from '@/components/billing/PlanFeatureList';
@@ -172,6 +172,7 @@ export default function LandingPage() {
   const [tagline, setTagline] = useState<string | null>(null);
   const [faqOpen, setFaqOpen] = useState(0);
   const [modelNames, setModelNames] = useState<FeatureModelNames | null>(null);
+  const [modelPreviews, setModelPreviews] = useState<FeatureModelPreview[]>([]);
   // Самая дешёвая модель в каждом домене — чтобы честно посчитать "до скольки
   // картинок/видео/треков хватит Caspers на тарифе", а не выдумывать цифры. Если
   // появится модель дешевле — пересчитается само, без правок текста на странице.
@@ -191,14 +192,17 @@ export default function LandingPage() {
       setCheapest(cheapestCosts(data.models.image, data.models.video, data.casper_costs.music_generate ?? 5));
     }).catch(() => {});
     loadFeatureModelNames().then(setModelNames).catch(() => {});
+    loadFeatureModelPreviews().then(setModelPreviews).catch(() => {});
     api.gallery.featured(10).then((data) => setGalleryFeatured(data.items)).catch(() => {});
   }, []);
   const FEATURES = buildFeatures(modelNames);
-  // Плейсхолдер-плитки — реальные названия моделей с бэкенда, но без превью
-  // (используются, только пока галерея пуста, см. galleryTop выше).
+  // Плитки в хиро — по приоритету: реальная работа из галереи, иначе превью
+  // самой модели (см. previewImageUrl в config/models.ts), иначе — честная
+  // градиентная заглушка с иконкой и названием (для моделей без превью).
+  const previewByName = new Map(modelPreviews.map((p) => [p.name, p.previewUrl]));
   const SHOWCASE_ITEMS = [
-    ...topNames(modelNames?.image ?? [], 3).map((name) => ({ name, domain: 'image' as const })),
-    ...topNames(modelNames?.video ?? [], 3).map((name) => ({ name, domain: 'video' as const })),
+    ...topNames(modelNames?.image ?? [], 3).map((name) => ({ name, domain: 'image' as const, previewUrl: previewByName.get(name) })),
+    ...topNames(modelNames?.video ?? [], 3).map((name) => ({ name, domain: 'video' as const, previewUrl: previewByName.get(name) })),
   ];
 
   return (
@@ -371,12 +375,15 @@ export default function LandingPage() {
                 <div
                   key={`${item.domain}-${item.name}`}
                   className={`relative rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 ${SHOWCASE_TILE_HEIGHT}`}
-                  style={{
-                    background: SHOWCASE_GRADIENTS[i],
-                    border: '1px dashed rgba(255,255,255,.18)',
-                  }}
+                  style={
+                    item.previewUrl
+                      ? { border: '1px solid rgba(255,255,255,.12)' }
+                      : { background: SHOWCASE_GRADIENTS[i], border: '1px dashed rgba(255,255,255,.18)' }
+                  }
                 >
-                  {item.domain === 'video' ? (
+                  {item.previewUrl ? (
+                    <img src={item.previewUrl} alt={item.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                  ) : item.domain === 'video' ? (
                     <ReelIcon size={22} className="opacity-40" />
                   ) : (
                     <VisionIcon size={22} className="opacity-40" />

@@ -238,6 +238,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     id: 'gpt-image-mini', domain: 'image', label: 'GPT Image mini', blurb: 'OpenAI', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5-image-mini',
     cost: 14, autoEligible: true, capabilities: { edit: false },
+    previewImageUrl: '/previews/gpt-image-mini.jpg',
   },
   {
     // Цена по формуле реестра: Caspers = USD_cost × 400 (проверено на Sora — единственной

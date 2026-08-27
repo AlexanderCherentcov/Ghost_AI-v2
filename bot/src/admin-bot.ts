@@ -652,7 +652,7 @@ bot.callbackQuery(/^dp_yes:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^gal_ok:(.+)$/, async (ctx) => {
   const itemId = ctx.match[1];
   try {
-    await api.post(`/gallery/${itemId}/approve`);
+    await api.post(`/gallery/${itemId}/approve`, {});
     await ctx.answerCallbackQuery('✅ Одобрено, уже в галерее!');
     await ctx.editMessageReplyMarkup().catch(() => {});
   } catch (err: any) {
@@ -663,7 +663,7 @@ bot.callbackQuery(/^gal_ok:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^gal_no:(.+)$/, async (ctx) => {
   const itemId = ctx.match[1];
   try {
-    await api.post(`/gallery/${itemId}/reject`);
+    await api.post(`/gallery/${itemId}/reject`, {});
     await ctx.answerCallbackQuery('❌ Отклонено');
     await ctx.editMessageReplyMarkup().catch(() => {});
   } catch (err: any) {

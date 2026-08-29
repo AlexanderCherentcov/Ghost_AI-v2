@@ -644,17 +644,24 @@ bot.callbackQuery(/^dp_yes:(.+)$/, async (ctx) => {
 });
 
 // ── Модерация галереи — карточка приходит фото/видео-сообщением (см.
-// services/gallery.ts:postReviewCard), поэтому editMessageText недоступен,
-// только editMessageReplyMarkup (убираем кнопки после решения). Идемпотентно:
-// approve/reject на бэкенде сами проверяют status==='PENDING' и возвращают 409,
-// если работа уже обработана (например с другого админ-устройства) — тогда
-// просто показываем алерт, а не падаем.
+// services/gallery.ts:postReviewCard), поэтому editMessageText недоступен —
+// только editMessageCaption. Идемпотентно: approve/reject на бэкенде сами
+// проверяют status==='PENDING' и возвращают 409, если работа уже обработана
+// (например с другого админ-устройства) — тогда просто показываем алерт.
+//
+// Дописываем решение в подпись карточки — по прямому запросу Александра: раньше
+// после решения кнопки просто исчезали, а сама карточка никак не показывала, что
+// с ней стало (одобрена/отклонена), особенно заметно при пролистывании истории
+// чата с админ-ботом. Берём caption как есть (без исходной HTML-разметки — Telegram
+// отдаёт её только плоским текстом) и дописываем статус жирным снизу; reply_markup
+// очищаем явно пустым массивом в том же вызове (undefined оставил бы старые кнопки).
 bot.callbackQuery(/^gal_ok:(.+)$/, async (ctx) => {
   const itemId = ctx.match[1];
   try {
     await api.post(`/gallery/${itemId}/approve`, {});
     await ctx.answerCallbackQuery('✅ Одобрено, уже в галерее!');
-    await ctx.editMessageReplyMarkup().catch(() => {});
+    const caption = ctx.callbackQuery.message?.caption ?? '';
+    await ctx.editMessageCaption({ caption: `${caption}\n\n✅ <b>Одобрено</b>`, parse_mode: 'HTML', reply_markup: { inline_keyboard: [] } }).catch(() => {});
   } catch (err: any) {
     await ctx.answerCallbackQuery({ text: apiErrorMessage(err), show_alert: true });
   }
@@ -665,7 +672,8 @@ bot.callbackQuery(/^gal_no:(.+)$/, async (ctx) => {
   try {
     await api.post(`/gallery/${itemId}/reject`, {});
     await ctx.answerCallbackQuery('❌ Отклонено');
-    await ctx.editMessageReplyMarkup().catch(() => {});
+    const caption = ctx.callbackQuery.message?.caption ?? '';
+    await ctx.editMessageCaption({ caption: `${caption}\n\n❌ <b>Отклонено</b>`, parse_mode: 'HTML', reply_markup: { inline_keyboard: [] } }).catch(() => {});
   } catch (err: any) {
     await ctx.answerCallbackQuery({ text: apiErrorMessage(err), show_alert: true });
   }

@@ -317,6 +317,24 @@ export function ArrowDownIcon({ size = 20, className = '', style }: IconProps) {
   );
 }
 
+export function ArrowLeftIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <line x1="16" y1="10" x2="4" y2="10" />
+      <path d="M8 5.5L3.5 10 8 14.5" />
+    </svg>
+  );
+}
+
+export function ArrowRightIcon({ size = 20, className = '', style }: IconProps) {
+  return (
+    <svg {...base(size, className, style)}>
+      <line x1="4" y1="10" x2="16" y2="10" />
+      <path d="M12 5.5L16.5 10 12 14.5" />
+    </svg>
+  );
+}
+
 // ─── History / Часы ──────────────────────────────────────────────────────────
 /** Циферблат со стрелкой, указывающей назад */
 export function HistoryIcon({ size = 20, className = '', style }: IconProps) {

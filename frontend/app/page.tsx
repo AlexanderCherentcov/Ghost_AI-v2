@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChatIcon, VisionIcon, SoundIcon, ReelIcon, MicIcon,
-  SparkleIcon, TokenIcon, ArrowDownIcon, CheckIcon,
+  SparkleIcon, TokenIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, CheckIcon,
   AppleIcon, AndroidIcon, WindowsIcon,
 } from '@/components/icons';
 import { ParticleBrainField } from '@/components/landing/ParticleBrainField';
@@ -185,6 +185,16 @@ export default function LandingPage() {
   // в хиро остаётся честная плейсхолдер-плитка (SHOWCASE_ITEMS ниже), а секция
   // целиком скрывается — см. рендер секции.
   const [galleryFeatured, setGalleryFeatured] = useState<GalleryItem[]>([]);
+  // Горизонтальный скролл без видимого scrollbar (снизу, style scrollbarWidth:'none')
+  // выглядел нерабочим на десктопе без трекпада — мышью прокрутить было нечем,
+  // ни намёка на то, что список вообще листается (жалоба Александра "слайдер не
+  // работает"). Стрелки скроллят на ширину видимой области реальным scrollBy.
+  const galleryScrollRef = useRef<HTMLDivElement>(null);
+  function scrollGallery(dir: 'left' | 'right') {
+    const el = galleryScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === 'left' ? -el.clientWidth * 0.9 : el.clientWidth * 0.9, behavior: 'smooth' });
+  }
   useEffect(() => {
     api.payments.plans().then((data) => {
       setPlans(data.plans);
@@ -455,29 +465,55 @@ export default function LandingPage() {
             <SectionHeading eyebrow="СООБЩЕСТВО" title="Галерея работ" subtitle="Картинки и видео, которыми поделились пользователи GhostLine" />
 
             {galleryFeatured.length > 0 ? (
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
-                {galleryFeatured.map((item) => (
-                  <Link
-                    key={item.id}
-                    href="/gallery"
-                    className="group relative flex-shrink-0 snap-start rounded-2xl overflow-hidden w-[42vw] h-[42vw] sm:w-[220px] sm:h-[220px]"
-                    style={{ border: '1px solid var(--panel-glass-border)' }}
-                  >
-                    {item.domain === 'video' ? (
-                      <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
-                    ) : (
-                      <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                    )}
-                    <div
-                      className="absolute inset-x-0 bottom-0 px-3 py-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.92))' }}
+              <div className="relative">
+                <div ref={galleryScrollRef} className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-6 px-6 snap-x snap-mandatory" style={{ scrollbarWidth: 'none' }}>
+                  {galleryFeatured.map((item) => (
+                    <Link
+                      key={item.id}
+                      href="/gallery"
+                      className="group relative flex-shrink-0 snap-start rounded-2xl overflow-hidden w-[42vw] h-[42vw] sm:w-[220px] sm:h-[220px]"
+                      style={{ border: '1px solid var(--panel-glass-border)' }}
                     >
-                      <p className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,.85)' }}>
-                        {item.modelLabel} · {capitalizeFirst(item.authorName)}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
+                      {item.domain === 'video' ? (
+                        <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                      ) : (
+                        <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                      )}
+                      <div
+                        className="absolute inset-x-0 bottom-0 px-3 py-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.92))' }}
+                      >
+                        <p className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,.85)' }}>
+                          {item.modelLabel} · {capitalizeFirst(item.authorName)}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                {/* Стрелки — только там, где физически есть, что листать (на мобильных
+                    экранах ниже sm: свайп и так интуитивен, стрелки только мешали бы). */}
+                {galleryFeatured.length > 2 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => scrollGallery('left')}
+                      aria-label="Прокрутить назад"
+                      className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 items-center justify-center w-10 h-10 rounded-full transition-opacity hover:opacity-100"
+                      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-primary)', opacity: 0.85 }}
+                    >
+                      <ArrowLeftIcon size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollGallery('right')}
+                      aria-label="Прокрутить вперёд"
+                      className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 items-center justify-center w-10 h-10 rounded-full transition-opacity hover:opacity-100"
+                      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-primary)', opacity: 0.85 }}
+                    >
+                      <ArrowRightIcon size={18} />
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>

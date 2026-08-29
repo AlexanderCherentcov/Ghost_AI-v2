@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateVideoVeo3, generateVideoKling, generateVideoGeneric, type VideoAspectRatio, type VideoResolution } from '../services/providers/goapi.js';
-import { findModel, type VideoDurationChoice } from '../config/models.js';
+import { findModel, type VideoDurationChoice, type VideoModelSpec } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 import { refundCaspers } from '../services/tokens.js';
@@ -54,6 +54,58 @@ interface ReelJob {
   caspersSpent: number;
 }
 
+// Диспетчер по конкретному GoAPI-провайдеру — вынесен из воркера отдельной
+// функцией, чтобы её можно было вызвать дважды: на исходной модели и (если та
+// упала) на fallbackModelId (см. VideoModelSpec.fallbackModelId в config/models.ts).
+async function generateViaGoapi(
+  spec: VideoModelSpec,
+  opts: {
+    prompt: string;
+    duration: VideoDurationChoice;
+    aspectRatio: VideoAspectRatio;
+    enableAudio: boolean;
+    resolution: VideoResolution;
+    imageUrl?: string;
+    negativePrompt?: string;
+    cameraPreset?: string;
+  },
+): Promise<string> {
+  if (spec.goapiModel === 'kling') {
+    const klingDuration = opts.duration === '4s' ? 5 : 10;
+    return generateVideoKling(opts.prompt, {
+      duration: klingDuration,
+      aspectRatio: opts.aspectRatio,
+      enableAudio: opts.enableAudio,
+      imageUrl: opts.imageUrl,
+      negativePrompt: opts.negativePrompt || undefined,
+      cameraPreset: opts.cameraPreset || undefined,
+      mode: spec.klingMode,
+      version: spec.klingVersion,
+    });
+  }
+  if (spec.goapiModel === 'veo3.1') {
+    const veoModel: 'standard' | 'pro' = spec.goapiTaskType === 'veo3.1-video' ? 'pro' : 'standard';
+    return generateVideoVeo3(opts.prompt, {
+      model: veoModel,
+      duration: opts.duration,
+      aspectRatio: opts.aspectRatio,
+      generateAudio: opts.enableAudio,
+      resolution: opts.resolution,
+      imageUrl: opts.imageUrl,
+      negativePrompt: opts.negativePrompt || undefined,
+    });
+  }
+  return generateVideoGeneric(spec.goapiModel, {
+    prompt: opts.prompt,
+    duration: opts.duration,
+    aspectRatio: opts.aspectRatio,
+    enableAudio: opts.enableAudio,
+    resolution: opts.resolution,
+    imageUrl: opts.imageUrl,
+    negativePrompt: opts.negativePrompt,
+  });
+}
+
 export function startReelWorker() {
   const worker = new Worker<ReelJob>(
     'reel',
@@ -76,39 +128,36 @@ export function startReelWorker() {
 
       // ── GoAPI (Kling / Veo3.1 / Sora 2 / Seedance / Hailuo / Wan / ...) ─────
       let externalUrl: string;
-      if (spec.goapiModel === 'kling') {
-        const klingDuration = duration === '4s' ? 5 : 10;
-        externalUrl = await generateVideoKling(prompt, {
-          duration: klingDuration,
-          aspectRatio,
-          enableAudio,
-          imageUrl: imageUrl ?? undefined,
-          negativePrompt: negativePrompt || undefined,
-          cameraPreset: cameraPreset || undefined,
-          mode: spec.klingMode,
-          version: spec.klingVersion,
-        });
-      } else if (spec.goapiModel === 'veo3.1') {
-        const veoModel: 'standard' | 'pro' = spec.goapiTaskType === 'veo3.1-video' ? 'pro' : 'standard';
-        externalUrl = await generateVideoVeo3(prompt, {
-          model: veoModel,
-          duration,
-          aspectRatio,
-          generateAudio: enableAudio,
-          resolution,
-          imageUrl: imageUrl ?? undefined,
-          negativePrompt: negativePrompt || undefined,
-        });
-      } else {
-        externalUrl = await generateVideoGeneric(spec.goapiModel, {
+      try {
+        externalUrl = await generateViaGoapi(spec, {
           prompt, duration, aspectRatio, enableAudio, resolution,
-          imageUrl: imageUrl ?? undefined,
-          negativePrompt,
+          imageUrl: imageUrl ?? undefined, negativePrompt, cameraPreset,
+        });
+      } catch (err) {
+        // 2026-08-29: Sora/Veo — единственные видео-модели без fallbackModelId (пока
+        // не было прецедента их нестабильности) — по прямому указанию Александра
+        // после реального падения Sora/Veo от перегрузки GoAPI ("нельзя терять
+        // клиентов"): при сбое подставляем Kling Pro/Std того же ценового уровня
+        // (см. fallbackModelId в config/models.ts), тем же промптом. Списание уже
+        // произошло по цене ИСХОДНОЙ модели (routes/generate.ts, до постановки в
+        // очередь) — пользователь платит и видит в истории как за Sora/Veo,
+        // независимо от того, кто реально сгенерировал ролик. Редкий путь: если
+        // упадёт и резервная модель — ошибка уйдёт наверх как обычно, с полным
+        // возвратом Caspers (worker.on('failed') ниже).
+        if (!spec.fallbackModelId) throw err;
+        const fallbackSpec = findModel('video', spec.fallbackModelId);
+        if (!fallbackSpec) throw err;
+        console.warn(`[ReelWorker] ${spec.id} failed, falling back to ${fallbackSpec.id}:`, (err as Error).message);
+        externalUrl = await generateViaGoapi(fallbackSpec, {
+          prompt, duration, aspectRatio, enableAudio, resolution,
+          imageUrl: imageUrl ?? undefined, negativePrompt, cameraPreset,
         });
       }
 
       // Сразу помечаем done с внешним URL — не ждём фоновой докачки, чтобы
-      // пользователь увидел результат как можно раньше.
+      // пользователь увидел результат как можно раньше. modelId — ВСЕГДА исходно
+      // запрошенный spec.id (не usedSpec) — фолбэк невидим для пользователя/биллинга,
+      // тот же принцип, что у ImageModelSpec.fallbackModel в vision.worker.ts.
       const messageId = await finalizeJob(jobId, chatId, userId, prompt, spec.id, externalUrl, mediaCacheMode, !imageUrl);
 
       // Скачиваем видео на сервер в фоне (GoAPI хранит только 3 дня!)

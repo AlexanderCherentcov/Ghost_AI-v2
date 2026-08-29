@@ -120,6 +120,14 @@ export interface VideoModelSpec extends BaseModelSpec {
   // относительно cost() без звука — только там, где звук у провайдера НЕ бесплатный
   // (см. комментарии у конкретных моделей). undefined/1 — звук не меняет цену.
   audioCostMultiplier?: number;
+  // id другой модели из этого же VIDEO_MODELS — подстраховка на случай сбоя
+  // провайдера у дорогих/менее стабильных моделей (Sora/Veo — прямые интеграции
+  // без собственного даунтайм-SLA с нашей стороны). Списание всегда идёт по цене
+  // ИСХОДНОЙ модели (см. reel.worker.ts:generateViaGoapi) — фолбэк невидим для
+  // пользователя и биллинга, тот же принцип, что у ImageModelSpec.fallbackModel.
+  // 2026-08-29: добавлено по прямому указанию Александра после реального падения
+  // Veo/Sora от перегрузки GoAPI — "нельзя терять клиентов".
+  fallbackModelId?: string;
 }
 
 export type ModelSpec = ChatModelSpec | ImageModelSpec | VideoModelSpec;
@@ -369,6 +377,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // в минус по марже. Раньше звук был просто жёстко запрещён в routes/generate.ts
     // именно из-за этой недостающей надбавки — теперь считаем честно.
     audioCostMultiplier: 2,
+    // См. комментарий у sora-2 — Kling Pro ближе всего по реальному $-тарифу
+    // к Veo Pro (audio off $0.12/с×8с=$0.96 ≈ Kling pro $0.92/10с).
+    fallbackModelId: 'kling-v2.5-pro',
     autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     ui: {
       durationLabels: { '4s': '4с', '8s': '8с' },
@@ -390,6 +401,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'sora-2', domain: 'video', label: 'Sora 2', blurb: 'OpenAI · синхронный звук', minPlan: 'PRO',
     provider: 'goapi', goapiModel: 'sora2',
     cost: (d) => secondsOf(d) * 32,
+    // Kling Pro (см. её комментарий по цене — pro-режим $0.46/5с-$0.92/10с) ближе
+    // к реальному $-тарифу Sora ($0.08/с×8с=$0.64), чем дешёвый std-режим Kling.
+    fallbackModelId: 'kling-v2.5-pro',
     autoEligible: false, capabilities: { imageToVideo: true },
     // goapi.ai/docs/sora2-api/text-to-video — duration: 4/8/12с (у нас 2 корзины,
     // совпадают напрямую), aspect_ratio: 16:9/9:16, только 720p, audio отдельным
@@ -448,6 +462,10 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // 2026-08-29: goapi.ai/docs/veo31-api/text-to-video — audio OFF $0.06/с,
     // audio ON $0.09/с (×1.5). См. подробный комментарий у veo-3.1-pro.
     audioCostMultiplier: 1.5,
+    // См. комментарий у sora-2/veo-3.1-pro — тут наоборот дешёвый std-режим Kling
+    // ближе по $-тарифу (Veo Fast audio off $0.06/с×8с=$0.48 ≈ Kling std $0.52/10с),
+    // чем Kling Pro (тот подходит для Veo Pro/Sora, не для Fast).
+    fallbackModelId: 'kling-v2.5',
     autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/veo31-api/text-to-video — duration: 4s/6s/8s, aspect_ratio: 16:9/9:16, resolution: 720p/1080p.
     ui: {

@@ -11,6 +11,7 @@ import { InputBar, type ChatMode } from '@/components/chat/InputBar';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { modelParticleShape } from '@/lib/model-icons';
+import { MODEL_DESCRIPTIONS } from '@/lib/model-descriptions';
 import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, CasperCoin } from '@/components/icons';
 import { cn, capitalizeFirst } from '@/lib/utils';
 
@@ -79,17 +80,22 @@ function TypingDemo({ text, active }: { text: string; active: boolean }) {
 // не подменяют друг друга.
 const CARD_SIZE = 184;
 
-function DiscoveryCard({ item, domain, onPick }: { item: DiscoveryItem; domain: DiscoveryDomain; onPick: (id: string) => void }) {
+function DiscoveryCard({ item, domain, onPick, onDetails }: { item: DiscoveryItem; domain: DiscoveryDomain; onPick: (id: string) => void; onDetails: (item: DiscoveryItem) => void }) {
   const [hover, setHover] = useState(false);
   const style = DOMAIN_STYLE[domain];
   const shape = modelParticleShape(item.id);
+  const hasDetails = !!MODEL_DESCRIPTIONS[item.id];
   return (
-    <button
-      type="button"
+    // div, не button — внутри своя кнопка "Подробнее", вложенные <button> невалидны.
+    // role/tabIndex/onKeyDown возвращают ту же клавиатурную доступность, что была у button.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onPick(item.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(item.id); } }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="relative flex-shrink-0 snap-start rounded-2xl overflow-hidden text-left transition-transform duration-200 hover:-translate-y-0.5"
+      className="relative flex-shrink-0 snap-start rounded-2xl overflow-hidden text-left transition-transform duration-200 hover:-translate-y-0.5 cursor-pointer"
       style={{ width: 'var(--discovery-card-size, 184px)', height: 'var(--discovery-card-size, 184px)', background: style.gradient, border: '1px solid var(--panel-glass-border)' }}
     >
       {/* Реальный пример вывода модели, когда он есть в реестре — заменяет цветную заглушку
@@ -108,6 +114,20 @@ function DiscoveryCard({ item, domain, onPick }: { item: DiscoveryItem; domain: 
         >
           {item.cost}<CasperCoin size={9} />
         </span>
+      )}
+
+      {/* Подробнее — только если для модели реально есть описание (model-descriptions.ts),
+          честная деградация вместо пустого попапа. stopPropagation — иначе клик по кнопке
+          ещё и выбрал бы модель через onPick на родителе. */}
+      {hasDetails && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDetails(item); }}
+          className="absolute top-2.5 left-2.5 z-10 text-[10px] font-semibold px-2 py-1 rounded-md transition-colors hover:brightness-125"
+          style={{ background: 'rgba(5,3,17,.55)', color: 'rgba(255,255,255,.85)' }}
+        >
+          Подробнее
+        </button>
       )}
 
       {/* Центр карточки. bottom: 58 — высота подписи снизу, чтобы typing-текст при
@@ -146,7 +166,121 @@ function DiscoveryCard({ item, domain, onPick }: { item: DiscoveryItem; domain: 
           {item.blurb && <div className="text-[10.5px] truncate" style={{ color: 'rgba(255,255,255,.62)' }}>{item.blurb}</div>}
         </div>
       </div>
-    </button>
+    </div>
+  );
+}
+
+// Попап "Подробнее" — превью крупнее, человеческое описание + сильные стороны,
+// кнопка "Попробовать" делает то же самое, что клик по самой карточке (onPick),
+// только сначала закрывает попап. По образцу ImageViewer.tsx (тот же паттерн
+// затемнённого фона на весь экран + AnimatePresence), но с карточкой контента
+// по центру вместо самого медиа на весь экран.
+function ModelDetailsModal({
+  item, domain, onClose, onTry,
+}: {
+  item: DiscoveryItem | null;
+  domain: DiscoveryDomain;
+  onClose: () => void;
+  onTry: (id: string) => void;
+}) {
+  useEffect(() => {
+    if (!item) return;
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [item, onClose]);
+
+  const info = item ? MODEL_DESCRIPTIONS[item.id] : undefined;
+  const style = DOMAIN_STYLE[domain];
+
+  return (
+    <AnimatePresence>
+      {item && info && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
+          style={{ background: 'rgba(0,0,0,0.72)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.94, opacity: 0, y: 12 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.94, opacity: 0, y: 12 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[420px] max-h-[88vh] overflow-y-auto rounded-2xl"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--panel-glass-border)' }}
+          >
+            {/* Превью крупнее — та же картинка/видео, что на карточке */}
+            <div className="relative w-full aspect-[16/10]" style={{ background: style.gradient }}>
+              {domain === 'image' && item.previewImageUrl && (
+                <img src={item.previewImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              )}
+              {domain === 'video' && item.previewVideoUrl && (
+                <video src={item.previewVideoUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+              )}
+              {domain === 'chat' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <ParticleAvatar shape={modelParticleShape(item.id)} size={64} spinSpeed={0.014} />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Закрыть"
+                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(5,3,17,.6)', color: 'white' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              {item.cost > 0 && (
+                <span
+                  className="absolute bottom-3 right-3 flex items-center gap-1 text-[12px] font-semibold px-2 py-1 rounded-md"
+                  style={{ background: 'rgba(5,3,17,.65)', color: 'var(--accent)' }}
+                >
+                  {item.cost}<CasperCoin size={11} />
+                </span>
+              )}
+            </div>
+
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <ParticleAvatar shape={modelParticleShape(item.id)} size={20} spinSpeed={0.01} />
+                <h3 className="text-[17px] font-semibold" style={{ color: 'var(--text-primary)' }}>{item.label}</h3>
+              </div>
+              {item.blurb && <p className="text-[12px] mb-3" style={{ color: 'var(--text-muted)' }}>{item.blurb}</p>}
+
+              <p className="text-[13.5px] leading-relaxed mb-4" style={{ color: 'var(--text-secondary)' }}>
+                {info.description}
+              </p>
+
+              <ul className="space-y-1.5 mb-5">
+                {info.strengths.map((s) => (
+                  <li key={s} className="flex items-start gap-2 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: style.accent }} />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => { onTry(item.id); onClose(); }}
+                className="w-full h-11 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ background: 'var(--accent)', color: 'white' }}
+              >
+                Попробовать →
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -172,7 +306,7 @@ function SliderArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => v
 
 // Карточки крупнее — если ряд не помещается по ширине, докручиваем стрелками/свайпом
 // вместо переноса на новую строку (по прямому указанию Александра — «слайдер»).
-function ModelDiscoveryRow({ title, items, domain, onPick }: { title: string; items: DiscoveryItem[]; domain: DiscoveryDomain; onPick: (id: string) => void }) {
+function ModelDiscoveryRow({ title, items, domain, onPick, onDetails }: { title: string; items: DiscoveryItem[]; domain: DiscoveryDomain; onPick: (id: string) => void; onDetails: (item: DiscoveryItem) => void }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -209,7 +343,7 @@ function ModelDiscoveryRow({ title, items, domain, onPick }: { title: string; it
       </div>
       <div ref={scrollerRef} className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-proximity pb-5">
         {items.map((item) => (
-          <DiscoveryCard key={item.id} item={item} domain={domain} onPick={onPick} />
+          <DiscoveryCard key={item.id} item={item} domain={domain} onPick={onPick} onDetails={onDetails} />
         ))}
       </div>
       {canLeft && <SliderArrow dir="left" onClick={() => scrollByPage(-1)} />}
@@ -274,6 +408,16 @@ export default function ChatPage() {
   // через пропс presetImageModel/presetVideoModel (см. InputBar.tsx).
   const [presetImageModel, setPresetImageModel] = useState<string | undefined>();
   const [presetVideoModel, setPresetVideoModel] = useState<string | undefined>();
+
+  // Попап "Подробнее" — модель + домен, к которому она относится (нужен для
+  // правильного onPick при клике "Попробовать" внутри попапа).
+  const [detailsItem, setDetailsItem] = useState<{ item: DiscoveryItem; domain: DiscoveryDomain } | null>(null);
+  function pickModel(domain: DiscoveryDomain, id: string) {
+    if (domain === 'chat') setModel(id);
+    else if (domain === 'image') setPresetImageModel(id);
+    else setPresetVideoModel(id);
+    setShowDiscovery(false);
+  }
 
   const name = user?.name?.split(' ')[0] ?? 'Ghost';
   const firstName = capitalizeFirst(name);
@@ -464,13 +608,15 @@ export default function ChatPage() {
                 title="Чат"
                 domain="chat"
                 items={models.chat.filter((m) => m.id !== 'llama-3.1-fast')}
-                onPick={(id) => { setModel(id); setShowDiscovery(false); }}
+                onPick={(id) => pickModel('chat', id)}
+                onDetails={(item) => setDetailsItem({ item, domain: 'chat' })}
               />
               <ModelDiscoveryRow
                 title="Картинки"
                 domain="image"
                 items={models.image}
-                onPick={(id) => { setPresetImageModel(id); setShowDiscovery(false); }}
+                onPick={(id) => pickModel('image', id)}
+                onDetails={(item) => setDetailsItem({ item, domain: 'image' })}
               />
               <ModelDiscoveryRow
                 title="Видео"
@@ -479,12 +625,20 @@ export default function ChatPage() {
                 // (DiscoveryItem) показывает один бейдж — берём цену за короткий ролик
                 // (4с) как отправную «от», как и в других местах UI.
                 items={models.video.map((m) => ({ ...m, cost: m.cost['4s'] }))}
-                onPick={(id) => { setPresetVideoModel(id); setShowDiscovery(false); }}
+                onPick={(id) => pickModel('video', id)}
+                onDetails={(item) => setDetailsItem({ item, domain: 'video' })}
               />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ModelDetailsModal
+        item={detailsItem?.item ?? null}
+        domain={detailsItem?.domain ?? 'chat'}
+        onClose={() => setDetailsItem(null)}
+        onTry={(id) => pickModel(detailsItem!.domain, id)}
+      />
     </div>
   );
 }

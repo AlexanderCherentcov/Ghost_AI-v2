@@ -17,40 +17,39 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changed services
-        id: changes
-        run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          echo "Changed files:"
-          echo "$CHANGED"
-          BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
-          FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
-          BOT=$(echo "$CHANGED" | grep -q '^bot/' && echo true || echo false)
-          echo "backend=$BACKEND" >> $GITHUB_OUTPUT
-          echo "frontend=$FRONTEND" >> $GITHUB_OUTPUT
-          echo "bot=$BOT" >> $GITHUB_OUTPUT
-          echo "Changed services — backend: $BACKEND, frontend: $FRONTEND, bot: $BOT"
-
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 178.253.55.232
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_BACKEND,DEPLOY_FRONTEND,DEPLOY_BOT
           command_timeout: 15m
           script: |
             set -e
             cd /root/ghostline_v2
 
+            # Изменённые сервисы считаем ОТ РЕАЛЬНО ЗАДЕПЛОЕННОГО коммита (текущий
+            # HEAD сервера ДО reset), а не HEAD~1 — раньше при пуше нескольких
+            # коммитов разом (`git push` после пары `git commit`) HEAD~1 сравнивал
+            # только последний коммит с его непосредственным родителем, и изменения
+            # из более ранних коммитов того же пуша молча терялись — например правка
+            # backend/ в первом коммите не пересобиралась, если второй коммит того
+            # же пуша трогал только frontend/ (см. inc. c38121c, разбор 2026-08-29).
+            OLD_SHA=$(git rev-parse HEAD)
+
             # Fix any broken remote refs, then hard-reset to latest master
             git remote prune origin
             git fetch origin master
             git reset --hard origin/master
+            NEW_SHA=$(git rev-parse HEAD)
+
+            CHANGED=$(git diff --name-only "$OLD_SHA" "$NEW_SHA")
+            echo "Changed files ($OLD_SHA -> $NEW_SHA):"
+            echo "$CHANGED"
+            DEPLOY_BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
+            DEPLOY_FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
+            DEPLOY_BOT=$(echo "$CHANGED" | grep -q '^bot/' && echo true || echo false)
+            echo "Changed services — backend: $DEPLOY_BACKEND, frontend: $DEPLOY_FRONTEND, bot: $DEPLOY_BOT"
 
             cd infra
 
@@ -77,7 +76,3 @@ jobs:
 
             docker image prune -f
             echo "✅ Deploy done: $(date)"
-        env:
-          DEPLOY_BACKEND: ${{ steps.changes.outputs.backend }}
-          DEPLOY_FRONTEND: ${{ steps.changes.outputs.frontend }}
-          DEPLOY_BOT: ${{ steps.changes.outputs.bot }}

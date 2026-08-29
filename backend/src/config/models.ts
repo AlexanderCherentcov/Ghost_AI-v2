@@ -532,6 +532,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: false,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/seedance-2.mp4',
   },
   {
     // 2026-08-21: сверено вживую по goapi.ai/docs/hailuo-api/generate-video —

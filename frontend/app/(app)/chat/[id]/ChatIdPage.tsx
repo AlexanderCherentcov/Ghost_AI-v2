@@ -185,39 +185,42 @@ export default function ChatConversationPage() {
         if (!stored) return;
         try {
           const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'voice' | 'sound'; prompt: string };
-          // Если результат уже попал в сообщения из БД — просто убираем след
-          const alreadyDone = messages.some(
-            (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
-          );
-          if (alreadyDone) { localStorage.removeItem(`pending_gen_${id}`); return; }
-
-          // Добавляем плейсхолдер и возобновляем опрос
-          const placeholder: Message = {
-            id: `resumed-${Date.now()}`, role: 'assistant', content: '', mode,
-            tokensCost: 0, cacheHit: false, mediaUrl: '__loading__', createdAt: new Date().toISOString(),
-          };
-          useChatStore.getState().addMessage(placeholder);
-          if (mode === 'vision') setGeneratingImage(true);
-          else if (mode === 'reel') setGeneratingVideo(true);
-          else if (mode === 'voice') setGeneratingVoice(true);
-          else setGeneratingMusic(true);
+          // Раньше "уже готово" проверялось эвристикой по messages (любое сообщение
+          // этого режима с реальным медиа) — в чате с несколькими прошлыми видео это
+          // ложно срабатывало на СВЕЖЕЙ ещё не готовой генерации (совпадение по mode,
+          // не по конкретному jobId), резюме тихо отменялось, индикатор не показывался.
+          // Спрашиваем сам job по id — источник истины, а не гадаем по сообщениям.
+          let placeholder: Message | null = null;
 
           const pollResume = async (): Promise<void> => {
             if (!mountedRef.current) return;
             const job = await api.generate.status(jobId);
             if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
-              if (mode === 'voice') {
-                patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
-              } else {
-                patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
+              if (placeholder) {
+                if (mode === 'voice') {
+                  patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
+                } else {
+                  patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
+                }
               }
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
-              patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
+              if (placeholder) patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
               if (mode !== 'voice') triggerAutoTitle(prompt);
               localStorage.removeItem(`pending_gen_${id}`);
             } else {
+              if (!placeholder) {
+                placeholder = {
+                  id: `resumed-${Date.now()}`, role: 'assistant', content: '', mode,
+                  tokensCost: 0, cacheHit: false, mediaUrl: '__loading__', createdAt: new Date().toISOString(),
+                };
+                useChatStore.getState().addMessage(placeholder);
+                if (mode === 'vision') setGeneratingImage(true);
+                else if (mode === 'reel') setGeneratingVideo(true);
+                else if (mode === 'voice') setGeneratingVoice(true);
+                else setGeneratingMusic(true);
+              }
               await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : mode === 'voice' ? 1500 : 2000));
               return pollResume();
             }

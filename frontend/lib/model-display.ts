@@ -62,13 +62,14 @@ export function loadFeatureModelPreviews(): Promise<FeatureModelPreview[]> {
     previewCache = api.payments.plans().then((data) => {
       const seen = new Set<string>();
       const out: FeatureModelPreview[] = [];
-      const collect = (models: Array<{ id: string; label: string; previewImageUrl?: string }>, domain: 'image' | 'video') => {
+      const collect = (models: Array<{ id: string; label: string; previewImageUrl?: string; previewVideoUrl?: string }>, domain: 'image' | 'video') => {
         for (const m of models) {
-          if (!m.previewImageUrl) continue;
+          const preview = domain === 'video' ? m.previewVideoUrl : m.previewImageUrl;
+          if (!preview) continue;
           const name = displayName(m.id, m.label);
           if (seen.has(name)) continue;
           seen.add(name);
-          out.push({ name, domain, previewUrl: m.previewImageUrl });
+          out.push({ name, domain, previewUrl: preview });
         }
       };
       collect(data.models.image, 'image');

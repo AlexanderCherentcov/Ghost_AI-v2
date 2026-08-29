@@ -341,62 +341,44 @@ export default function LandingPage() {
             </div>
           </motion.div>
 
-          {/* Витрина генераций — плейсхолдер-плитки, см. комментарий у SHOWCASE_ITEMS.
-              Скрыта до lg: на узких экранах места под неё нет рядом с текстом. */}
+          {/* Витрина моделей — плейсхолдер-плитки с превью, см. комментарий у SHOWCASE_ITEMS.
+              Реальные работы из галереи показываются ниже, в отдельной секции #gallery —
+              здесь всегда модели, не подменяем одно другим (по прямому указанию Александра:
+              в hero — витрина моделей, "как раньше", а не топ галереи). Скрыта до lg:
+              на узких экранах места под неё нет рядом с текстом. */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
             className="hidden lg:grid grid-cols-2 gap-4 w-[380px] shrink-0"
           >
-            {galleryFeatured.length > 0 ? (
-              galleryFeatured.slice(0, 6).map((item) => (
-                <Link
-                  key={item.id}
-                  href="/gallery"
-                  className={`group relative rounded-2xl overflow-hidden block ${SHOWCASE_TILE_HEIGHT}`}
-                  style={{ border: '1px solid rgba(255,255,255,.12)' }}
+            {SHOWCASE_ITEMS.map((item, i) => (
+              <div
+                key={`${item.domain}-${item.name}`}
+                className={`relative rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 ${SHOWCASE_TILE_HEIGHT}`}
+                style={
+                  item.previewUrl
+                    ? { border: '1px solid rgba(255,255,255,.12)' }
+                    : { background: SHOWCASE_GRADIENTS[i], border: '1px dashed rgba(255,255,255,.18)' }
+                }
+              >
+                {item.previewUrl && item.domain === 'video' ? (
+                  <video src={item.previewUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                ) : item.previewUrl ? (
+                  <img src={item.previewUrl} alt={item.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                ) : item.domain === 'video' ? (
+                  <ReelIcon size={22} className="opacity-40" />
+                ) : (
+                  <VisionIcon size={22} className="opacity-40" />
+                )}
+                <span
+                  className="absolute bottom-2 left-2 right-2 truncate text-[11px] px-2 py-1 rounded-lg text-center"
+                  style={{ background: 'rgba(6,5,14,0.65)', color: 'rgba(255,255,255,.7)' }}
                 >
-                  {item.domain === 'video' ? (
-                    <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
-                  ) : (
-                    <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                  )}
-                  <div
-                    className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[11px] truncate opacity-0 group-hover:opacity-100 transition-opacity"
-                    style={{ background: 'linear-gradient(180deg, transparent, rgba(6,5,14,.85))', color: 'rgba(255,255,255,.85)' }}
-                  >
-                    {item.modelLabel} · {capitalizeFirst(item.authorName)}
-                  </div>
-                </Link>
-              ))
-            ) : (
-              SHOWCASE_ITEMS.map((item, i) => (
-                <div
-                  key={`${item.domain}-${item.name}`}
-                  className={`relative rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 ${SHOWCASE_TILE_HEIGHT}`}
-                  style={
-                    item.previewUrl
-                      ? { border: '1px solid rgba(255,255,255,.12)' }
-                      : { background: SHOWCASE_GRADIENTS[i], border: '1px dashed rgba(255,255,255,.18)' }
-                  }
-                >
-                  {item.previewUrl ? (
-                    <img src={item.previewUrl} alt={item.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-                  ) : item.domain === 'video' ? (
-                    <ReelIcon size={22} className="opacity-40" />
-                  ) : (
-                    <VisionIcon size={22} className="opacity-40" />
-                  )}
-                  <span
-                    className="absolute bottom-2 left-2 right-2 truncate text-[11px] px-2 py-1 rounded-lg text-center"
-                    style={{ background: 'rgba(6,5,14,0.65)', color: 'rgba(255,255,255,.7)' }}
-                  >
-                    {item.name}
-                  </span>
-                </div>
-              ))
-            )}
+                  {item.name}
+                </span>
+              </div>
+            ))}
           </motion.div>
           </div>
 

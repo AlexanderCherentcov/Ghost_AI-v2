@@ -169,8 +169,6 @@ export default function ChatConversationPage() {
     loadedChatIdRef.current = id;
     setMessagesReady(false);
     localStorage.setItem('lastChatId', id);
-    const chat = chats.find((c) => c.id === id);
-    if (chat) setActiveChat(chat);
     api.chats.messages(id)
       .then(({ messages }) => {
         setMessages(messages);
@@ -231,6 +229,18 @@ export default function ChatConversationPage() {
       .catch(() => { localStorage.removeItem('lastChatId'); router.replace('/chat'); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, accessToken]);
+
+  // Подсветка активного чата в сайдбаре — отдельным эффектом от эффекта выше:
+  // список chats грузится асинхронно (не в этом компоненте) и на момент первого
+  // рендера после перезагрузки страницы обычно ещё пуст. Раньше поиск чата в
+  // chats.find(...) стоял внутри эффекта с зависимостями [id, accessToken] —
+  // на пустом списке ничего не находил и, что важнее, не перезапускался, когда
+  // chats всё же догружался (chats не было в зависимостях) — подсветка молча
+  // терялась до следующей смены чата.
+  useEffect(() => {
+    const chat = chats.find((c) => c.id === id);
+    if (chat) setActiveChat(chat);
+  }, [id, chats, setActiveChat]);
 
   // Автоотправка начального промта — ждёт загрузки истории (messagesReady), чтобы избежать гонки
   useEffect(() => {

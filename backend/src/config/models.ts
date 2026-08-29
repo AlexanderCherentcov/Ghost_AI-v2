@@ -626,6 +626,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: false,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/hunyuan-video.mp4',
   },
   // SkyReels — УБРАНА 2026-08-29 по прямому указанию Александра. Контракт был
   // goapi.ai/docs/skyreels-api/create-task, provider 'Qubico/skyreels', $0.15

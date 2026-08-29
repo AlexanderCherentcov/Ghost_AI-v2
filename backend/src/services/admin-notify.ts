@@ -13,18 +13,20 @@ const notifyAxios = axios.create({ proxy: false });
 const TOKEN  = process.env.ADMIN_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
 const ADMINS = (process.env.ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
-async function send(chatId: string, text: string): Promise<void> {
+type InlineKeyboard = { inline_keyboard: { text: string; callback_data: string }[][] };
+
+async function send(chatId: string, text: string, replyMarkup?: InlineKeyboard): Promise<void> {
   if (!TOKEN) return;
   await notifyAxios.post(
     `https://api.telegram.org/bot${TOKEN}/sendMessage`,
-    { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true },
+    { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) },
     { timeout: 5000 },
   ).catch(err => console.error(`[AdminNotify] Failed to notify ${chatId}:`, err.message));
 }
 
-export async function notifyAdmins(text: string): Promise<void> {
+export async function notifyAdmins(text: string, replyMarkup?: InlineKeyboard): Promise<void> {
   if (!TOKEN || ADMINS.length === 0) return;
-  await Promise.allSettled(ADMINS.map(id => send(id, text)));
+  await Promise.allSettled(ADMINS.map(id => send(id, text, replyMarkup)));
 }
 
 // ─── Typed helpers ────────────────────────────────────────────────────────────
@@ -83,6 +85,10 @@ export async function notifyAbuse(info: {
     `🆔 User ID: <code>${info.userId}</code>\n` +
     `${typeLabel}: <b>${info.count}/${info.limit}</b> за час\n\n` +
     `Управление: /user ${info.userId}`,
+    // callback_data 'ban:<id>' — уже обрабатывается admin-bot.ts (показывает подтверждение
+    // "Забанить?"/"Отмена" перед реальным баном, см. bot.callbackQuery(/^ban:(.+)$/)) —
+    // тут только добавляем кнопку к уже существующему флоу, не заводим новый.
+    { inline_keyboard: [[{ text: '🚫 Заблокировать', callback_data: `ban:${info.userId}` }]] },
   );
 }
 

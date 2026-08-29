@@ -513,6 +513,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // поддерживается ("No audio generated if false", default true), цена не зависит
     // от звука вообще (только от resolution/duration, уже учтено в cost() выше) —
     // audioCostMultiplier не нужен.
+    // Kling 2.1 Master, не Pro — реальная себестоимость Seedance на 720p/10с (после
+    // фикса длительности выше) ≈$2.00, ближе к Master ($1.92/10с), чем к Pro ($0.92).
+    fallbackModelId: 'kling-2.1-master',
     autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/seedance-api/seedance-2 — duration: 4-15с произвольно (у нас 2 корзины),
     // aspect_ratio: 21:9/16:9/4:3/1:1/3:4/9:16. Negative prompt и camera control в доках
@@ -538,6 +541,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'hailuo-v2.3', domain: 'video', label: 'Hailuo v2.3', blurb: 'MiniMax', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'hailuo',
     cost: (d) => (d === '4s' ? 22 : 36),
+    fallbackModelId: 'kling-v2.5',
     autoEligible: true, capabilities: { imageToVideo: true },
     ui: {
       durationLabels: { '4s': '6с', '8s': '10с' },
@@ -556,6 +560,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'wan-2.6', domain: 'video', label: 'Wan 2.6', blurb: 'Alibaba · со звуком', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Wan',
     cost: (d) => (d === '4s' ? 25 : 50),
+    fallbackModelId: 'kling-v2.5',
     autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/wan-api/wan26-text-to-video — duration: 5|10|15, aspect_ratio:
     // 16:9/9:16/1:1/4:3/3:4, audio: нативная генерация звука/диалогов.
@@ -576,6 +581,10 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'luma-ray2', domain: 'video', label: 'Luma Ray 2', blurb: 'Dream Machine · нативный HDR', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'luma',
     cost: (d) => (d === '4s' ? 80 : 160),
+    // 2026-08-29: живое падение (Александр, "Internal upstream is busy") — тот же
+    // класс перегрузки апстрима, что был у Veo. Kling std ближе всего по реальному
+    // $-тарифу ($0.4/9с у Luma ≈ $0.52/10с у Kling std).
+    fallbackModelId: 'kling-v2.5',
     autoEligible: true, capabilities: { imageToVideo: true },
     // goapi.ai/docs/dream-machine/create-task — duration: 5|9, aspect_ratio: 21:9/9:21/16:9/
     // 9:16/4:3/3:4/1:1. Resolution/audio/negative prompt не поддерживаются.
@@ -597,6 +606,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'hunyuan-video', domain: 'video', label: 'Hunyuan Video', blurb: 'Tencent · бюджетный вариант', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/hunyuan',
     cost: () => 36,
+    fallbackModelId: 'kling-v2.5',
     autoEligible: true, capabilities: { imageToVideo: true },
     // goapi.ai/docs/hunyuan-video/txt2video-api — duration провайдером не настраивается вообще,
     // aspect_ratio: 16:9/9:16/1:1. Resolution/audio/negative prompt не поддерживаются.
@@ -616,6 +626,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'skyreels', domain: 'video', label: 'SkyReels', blurb: 'По вашей фотографии', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/skyreels',
     cost: () => 19,
+    fallbackModelId: 'kling-v2.5',
     autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
     ui: {
       durationLabels: null,
@@ -633,6 +644,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'framepack', domain: 'video', label: 'Framepack', blurb: 'По вашей фотографии · длинные ролики', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/framepack',
     cost: (d) => (d === '4s' ? 38 : 75),
+    fallbackModelId: 'kling-v2.5',
     autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
     ui: {
       durationLabels: { '4s': '10с', '8s': '20с' },

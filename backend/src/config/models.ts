@@ -595,6 +595,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: false,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/luma-ray2.mp4',
   },
   {
     // Реальная цена GoAPI: $0.09 (txt2video/img2video-replace, 20 шагов, 480x848).

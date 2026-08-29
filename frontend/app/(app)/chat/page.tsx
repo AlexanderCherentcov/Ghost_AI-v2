@@ -423,9 +423,13 @@ export default function ChatPage() {
   // правильного onPick при клике "Попробовать" внутри попапа).
   const [detailsItem, setDetailsItem] = useState<{ item: DiscoveryItem; domain: DiscoveryDomain } | null>(null);
   function pickModel(domain: DiscoveryDomain, id: string) {
-    if (domain === 'chat') setModel(id);
-    else if (domain === 'image') setPresetImageModel(id);
-    else setPresetVideoModel(id);
+    // chatMode тоже переставляем, не только сам id модели — иначе если он остался
+    // с прошлого визита (localStorage:ghostline_last_chat_mode) не тем доменом,
+    // композер откроется в чужом режиме, молча игнорируя только что выбранную
+    // карточку (например выбрали чат-модель, а InputBar остался в видео-режиме).
+    if (domain === 'chat') { setModel(id); setChatMode('chat'); }
+    else if (domain === 'image') { setPresetImageModel(id); setChatMode('images'); }
+    else { setPresetVideoModel(id); setChatMode('video'); }
     setShowDiscovery(false);
   }
 
@@ -535,110 +539,120 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Заголовок, режимные пилюли и поле ввода — единый блок, который framer-motion
-          плавно переставляет по layout при исчезновении витрины ниже. Пока витрина
-          видна — блок держится сверху (структура GPTunneL: composer сразу под шапкой).
-          Как только витрина пропала (отправили/выбрали модель) — блоку некуда больше
-          прижиматься сверху, отдаём ему flex-1 justify-end, и он плавно уезжает к низу
-          экрана, как обычный чат — по прямому указанию Александра. */}
-      <motion.div layout transition={{ type: 'spring', stiffness: 300, damping: 32 }} className={showDiscovery && chatMode === 'chat' ? 'flex-shrink-0 px-6 pt-8 [@media(max-height:560px)]:pt-3' : 'flex-1 min-h-0 flex flex-col justify-end px-6 pb-6'}>
-        <div className="w-full max-w-[480px] mx-auto text-center">
-          {/* На низких экранах (телефон в альбомной ориентации) приветствие скрываем —
-              оно чисто декоративное, а место критично нужно под витрину карточек ниже,
-              которая иначе сжимается в непроходимую щель. */}
-          <div className="[@media(max-height:560px)]:hidden">
-            <h1 className="font-display text-[clamp(22px,5vw,36px)] font-semibold tracking-tight mb-1" style={{ color: 'var(--text-primary)' }}>
-              Здравствуйте, {firstName}!
-            </h1>
-            <p className="text-lg mb-6" style={{ color: 'var(--text-secondary)' }}>
-              С чего начнём?
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
-            {QUICK_MODES.map(({ mode, label, Icon }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setChatMode((m) => (m === mode ? 'chat' : mode))}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium transition-all"
-                style={
-                  chatMode === mode
-                    ? { background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', color: '#e3ddfa' }
-                    : { background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-secondary)' }
-                }
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <InputBar
-          onSend={handleSend}
-          onVoiceRecording={handleVoiceRecording}
-          placeholder={placeholder}
-          model={model}
-          setModel={setModel}
-          userPlan={user?.plan}
-          onUpgradeRequired={() => router.push('/billing')}
-          chatMode={chatMode}
-          setChatMode={setChatMode}
-          presetImageModel={presetImageModel}
-          presetVideoModel={presetVideoModel}
-          userImages={user?.images_this_week}
-          userMusic={user?.music_this_week}
-          userVideos={user?.videos_this_month}
-        />
-      </motion.div>
-
-      {/* Витрина возможностей под инпутом — реальные модели с бэкенда, видны сразу,
-          не спрятаны за пилюлями (структура GPTunneL). Только для режима «Чат» — это
-          стартовое меню для того, кто ещё не решил, что делать. Как только выбрана
-          Картинка/Видео — цель уже понятна, и модель выбирается прямо в поле ввода
-          (виджет с пикером модели + панель настроек), витрина снизу там просто дублирует
-          то же самое и только мешает. Раньше показывался ряд по активному режиму (менялся
-          при переключении пилюль), но для картинок/видео это выглядело как «карточки не
-          пропадают» — по прямому указанию Александра теперь для них витрины нет вовсе. */}
-      <AnimatePresence>
-        {models && showDiscovery && chatMode === 'chat' && (
+      {/* Два раздельных экрана, не наложение композера и витрины — по прямому
+          уточнению Александра: пока не решил, что делать, виден ТОЛЬКО грид моделей
+          с кнопкой "Начать творить" наверху (поле ввода спрятано); как только
+          нажал "Начать творить", выбрал карточку или "Попробовать" в попапе —
+          витрина исчезает и её место навсегда (до следующего явного "Ознакомиться"
+          в сайдбаре) занимает обычный композер, независимо от выбранного режима. */}
+      <AnimatePresence mode="wait">
+        {showDiscovery ? (
           <motion.div
             key="discovery"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.15 } }}
-            transition={{ duration: 0.3 }}
-            className="flex-1 min-h-0 overflow-y-auto px-6 pt-5 pb-6 [@media(max-height:560px)]:pt-2 [@media(max-height:560px)]:pb-3 [@media(max-height:560px)]:[--discovery-card-size:128px]"
+            transition={{ duration: 0.25 }}
+            className="flex-1 min-h-0 flex flex-col"
           >
-            {/* Без max-w — секция растягивается на весь доступный контейнер (по прямому
-                указанию Александра), а не зажата в узкую колонку под заголовком. */}
-            <div className="w-full space-y-10 [@media(max-height:560px)]:space-y-4">
-              <ModelDiscoveryRow
-                title="Чат"
-                domain="chat"
-                items={models.chat.filter((m) => m.id !== 'llama-3.1-fast')}
-                onPick={(id) => pickModel('chat', id)}
-                onDetails={(item) => setDetailsItem({ item, domain: 'chat' })}
-              />
-              <ModelDiscoveryRow
-                title="Картинки"
-                domain="image"
-                items={models.image}
-                onPick={(id) => pickModel('image', id)}
-                onDetails={(item) => setDetailsItem({ item, domain: 'image' })}
-              />
-              <ModelDiscoveryRow
-                title="Видео"
-                domain="video"
-                // VideoModelOption.cost зависит от длительности ({'4s','8s'}), а витрина
-                // (DiscoveryItem) показывает один бейдж — берём цену за короткий ролик
-                // (4с) как отправную «от», как и в других местах UI.
-                items={models.video.map((m) => ({ ...m, cost: m.cost['4s'] }))}
-                onPick={(id) => pickModel('video', id)}
-                onDetails={(item) => setDetailsItem({ item, domain: 'video' })}
-              />
+            <div className="w-full max-w-[480px] mx-auto text-center flex-shrink-0 px-6 pt-8 [@media(max-height:560px)]:pt-3">
+              <div className="[@media(max-height:560px)]:hidden">
+                <h1 className="font-display text-[clamp(22px,5vw,36px)] font-semibold tracking-tight mb-1" style={{ color: 'var(--text-primary)' }}>
+                  Здравствуйте, {firstName}!
+                </h1>
+                <p className="text-lg mb-5" style={{ color: 'var(--text-secondary)' }}>
+                  С чего начнём?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscovery(false)}
+                className="inline-flex items-center gap-2 px-6 h-11 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ background: 'var(--accent)', color: 'white' }}
+              >
+                Начать творить →
+              </button>
             </div>
+
+            {/* Витрина возможностей — реальные модели с бэкенда, все домены сразу
+                (структура GPTunneL), не спрятаны за пилюлями. */}
+            {models && (
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-6 pb-6 [@media(max-height:560px)]:pt-2 [@media(max-height:560px)]:pb-3 [@media(max-height:560px)]:[--discovery-card-size:128px]">
+                <div className="w-full space-y-10 [@media(max-height:560px)]:space-y-4">
+                  <ModelDiscoveryRow
+                    title="Чат"
+                    domain="chat"
+                    items={models.chat.filter((m) => m.id !== 'llama-3.1-fast')}
+                    onPick={(id) => pickModel('chat', id)}
+                    onDetails={(item) => setDetailsItem({ item, domain: 'chat' })}
+                  />
+                  <ModelDiscoveryRow
+                    title="Картинки"
+                    domain="image"
+                    items={models.image}
+                    onPick={(id) => pickModel('image', id)}
+                    onDetails={(item) => setDetailsItem({ item, domain: 'image' })}
+                  />
+                  <ModelDiscoveryRow
+                    title="Видео"
+                    domain="video"
+                    // VideoModelOption.cost зависит от длительности ({'4s','8s'}), а витрина
+                    // (DiscoveryItem) показывает один бейдж — берём цену за короткий ролик
+                    // (4с) как отправную «от», как и в других местах UI.
+                    items={models.video.map((m) => ({ ...m, cost: m.cost['4s'] }))}
+                    onPick={(id) => pickModel('video', id)}
+                    onDetails={(item) => setDetailsItem({ item, domain: 'video' })}
+                  />
+                </div>
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="composer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            transition={{ duration: 0.25, delay: 0.1 }}
+            className="flex-1 min-h-0 flex flex-col justify-end px-6 pb-6"
+          >
+            <div className="w-full max-w-[480px] mx-auto text-center mb-2">
+              <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
+                {QUICK_MODES.map(({ mode, label, Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setChatMode((m) => (m === mode ? 'chat' : mode))}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium transition-all"
+                    style={
+                      chatMode === mode
+                        ? { background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', color: '#e3ddfa' }
+                        : { background: 'var(--panel-glass)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-secondary)' }
+                    }
+                  >
+                    <Icon size={14} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <InputBar
+              onSend={handleSend}
+              onVoiceRecording={handleVoiceRecording}
+              placeholder={placeholder}
+              model={model}
+              setModel={setModel}
+              userPlan={user?.plan}
+              onUpgradeRequired={() => router.push('/billing')}
+              chatMode={chatMode}
+              setChatMode={setChatMode}
+              presetImageModel={presetImageModel}
+              presetVideoModel={presetVideoModel}
+              userImages={user?.images_this_week}
+              userMusic={user?.music_this_week}
+              userVideos={user?.videos_this_month}
+            />
           </motion.div>
         )}
       </AnimatePresence>

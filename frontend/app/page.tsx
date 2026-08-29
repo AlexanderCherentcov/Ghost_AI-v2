@@ -200,9 +200,26 @@ export default function LandingPage() {
   // самой модели (см. previewImageUrl в config/models.ts), иначе — честная
   // градиентная заглушка с иконкой и названием (для моделей без превью).
   const previewByName = new Map(modelPreviews.map((p) => [p.name, p.previewUrl]));
+  // Имена с уже загруженным превью — вперёд списка, иначе topNames(3) берёт просто
+  // первые 3 по порядку регистрации в реестре и почти всегда промахивается мимо
+  // моделей, для которых превью реально есть (несколько раз за сессию превью
+  // добавлялось, а в hero всё равно продолжали показываться заглушки).
+  function withPreviewFirst(names: string[], priority: string[] = []): string[] {
+    const rank = (name: string) => {
+      const p = priority.indexOf(name);
+      if (p !== -1) return p; // из priority — в её порядке, раньше всего остального
+      return priority.length + (previewByName.has(name) ? 0 : 1); // затем остальные с превью, потом без
+    };
+    return [...names].sort((a, b) => rank(a) - rank(b));
+  }
+  // Видео вручную приоритизировано на "флагманские" модели (Kling/Veo/Sora) — из
+  // 5 видео-моделей с превью 3 первые по порядку регистрации в реестре — варианты
+  // Kling (2.5/Pro/Master), просто has-preview-сортировки недостаточно для
+  // разнообразия витрины, нужен явный список.
+  const VIDEO_SHOWCASE_PRIORITY = ['Kling', 'Veo', 'Sora'];
   const SHOWCASE_ITEMS = [
-    ...topNames(modelNames?.image ?? [], 3).map((name) => ({ name, domain: 'image' as const, previewUrl: previewByName.get(name) })),
-    ...topNames(modelNames?.video ?? [], 3).map((name) => ({ name, domain: 'video' as const, previewUrl: previewByName.get(name) })),
+    ...topNames(withPreviewFirst(modelNames?.image ?? []), 3).map((name) => ({ name, domain: 'image' as const, previewUrl: previewByName.get(name) })),
+    ...topNames(withPreviewFirst(modelNames?.video ?? [], VIDEO_SHOWCASE_PRIORITY), 3).map((name) => ({ name, domain: 'video' as const, previewUrl: previewByName.get(name) })),
   ];
 
   return (

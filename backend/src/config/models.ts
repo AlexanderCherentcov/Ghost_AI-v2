@@ -437,6 +437,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: false,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/sora-2.mp4',
   },
   {
     // 2026-08-20: та же модель, что GhostLine Reality, но mode: 'pro' форсирован

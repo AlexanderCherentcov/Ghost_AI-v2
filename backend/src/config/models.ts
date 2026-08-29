@@ -379,6 +379,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: true,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/veo-3.1-pro.mp4',
   },
   {
     // ⚠️ ЦЕНА-ЗАГЛУШКА. Реальный тариф OpenAI — $0.10/сек, но перевод в Caspers

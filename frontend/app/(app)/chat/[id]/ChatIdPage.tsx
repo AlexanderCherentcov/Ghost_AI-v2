@@ -186,7 +186,7 @@ export default function ChatConversationPage() {
         const stored = localStorage.getItem(`pending_gen_${id}`);
         if (!stored) return;
         try {
-          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel'; prompt: string };
+          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'voice' | 'sound'; prompt: string };
           // Если результат уже попал в сообщения из БД — просто убираем след
           const alreadyDone = messages.some(
             (m) => m.role === 'assistant' && m.mode === mode && m.mediaUrl && m.mediaUrl !== '__loading__'
@@ -200,24 +200,30 @@ export default function ChatConversationPage() {
           };
           useChatStore.getState().addMessage(placeholder);
           if (mode === 'vision') setGeneratingImage(true);
-          else setGeneratingVideo(true);
+          else if (mode === 'reel') setGeneratingVideo(true);
+          else if (mode === 'voice') setGeneratingVoice(true);
+          else setGeneratingMusic(true);
 
           const pollResume = async (): Promise<void> => {
             if (!mountedRef.current) return;
             const job = await api.generate.status(jobId);
             if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
-              patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
+              if (mode === 'voice') {
+                patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
+              } else {
+                patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
+              }
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
               patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
               localStorage.removeItem(`pending_gen_${id}`);
             } else {
-              await new Promise((r) => setTimeout(r, mode === 'reel' ? 3000 : 2000));
+              await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : mode === 'voice' ? 1500 : 2000));
               return pollResume();
             }
           };
-          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); });
+          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); setGeneratingVoice(false); setGeneratingMusic(false); });
         } catch {
           localStorage.removeItem(`pending_gen_${id}`);
         }
@@ -558,6 +564,7 @@ export default function ChatConversationPage() {
 
     try {
       const { jobId } = await api.generate.sound({ prompt, chatId: id, musicMode, musicDuration, lyrics, sunoStyle, sunoTitle, sunoInstrumental });
+      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'sound', prompt }));
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
@@ -588,6 +595,7 @@ export default function ChatConversationPage() {
         showToast(err.message ?? 'Ошибка генерации музыки', 'error');
       }
     } finally {
+      localStorage.removeItem(`pending_gen_${id}`);
       generatingMusicRef.current = false;
       setGeneratingMusic(false);
     }

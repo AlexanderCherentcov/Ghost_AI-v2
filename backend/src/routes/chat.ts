@@ -131,7 +131,29 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       // Расшифровываем содержимое (мягко — старые незашифрованные сообщения возвращаются как есть)
       const decrypted = messages.map((m) => ({ ...m, content: safeDecrypt(m.content) }));
 
-      return { messages: decrypted };
+      // Подставляем jobId для картинок/видео — нужен на фронте для кнопки "В галерею"
+      // (см. lib/api.ts:Message.jobId). Раньше jobId был только у сообщений,
+      // сгенерированных в текущей сессии (in-memory), из истории кнопка не показывалась
+      // вообще. Message.jobId в БД нет и не будет — mediaUrl уникален и совпадает
+      // 1:1 с GenerateJob.mediaUrl (воркер пишет оба в одном ран, см. vision.worker.ts/
+      // reel.worker.ts), этого достаточно для join без миграции схемы.
+      const mediaUrls = decrypted
+        .filter((m) => m.role === 'assistant' && (m.mode === 'vision' || m.mode === 'reel') && m.mediaUrl && m.mediaUrl !== '__loading__')
+        .map((m) => m.mediaUrl as string);
+      let jobIdByMediaUrl = new Map<string, string>();
+      if (mediaUrls.length > 0) {
+        const jobs = await prisma.generateJob.findMany({
+          where: { userId, mode: { in: ['vision', 'reel'] }, status: 'done', mediaUrl: { in: mediaUrls } },
+          select: { id: true, mediaUrl: true },
+        });
+        jobIdByMediaUrl = new Map(jobs.map((j) => [j.mediaUrl as string, j.id]));
+      }
+      const withJobId = decrypted.map((m) => ({
+        ...m,
+        jobId: m.mediaUrl ? jobIdByMediaUrl.get(m.mediaUrl) : undefined,
+      }));
+
+      return { messages: withJobId };
     },
   });
 

@@ -403,6 +403,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: true,
       cameraPresets: ['static', 'zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'tilt_up', 'tilt_down', 'orbit'],
     },
+    previewVideoUrl: '/previews/kling-2.1-master.mp4',
   },
   {
     id: 'veo-3.1-standard', domain: 'video', label: 'Veo 3.1 Fast', blurb: 'Google · быстро', minPlan: 'BASIC',

@@ -383,7 +383,17 @@ export default function ChatPage() {
   // Восстанавливаем последний режим после монтирования (не лениво в initial-state,
   // чтобы не разойтись с серверным рендером — hydration mismatch). См. тот же
   // приём и подробный комментарий в ChatIdPage.tsx.
+  // "Ознакомиться" в сайдбаре (под "Галерея") ставит этот флаг перед переходом на
+  // /chat — иначе последний использованный режим (например "видео") молча
+  // подменил бы витрину моделей на видео-композер, и кнопка ничего не показывала
+  // бы. sessionStorage, не query-параметр — тот же приём, что уже используется
+  // для initialPrompt/initialImageUrl и т.п. (см. handleSend ниже), без возни
+  // с useSearchParams/Suspense в App Router.
   useEffect(() => {
+    if (sessionStorage.getItem('forceDiscovery')) {
+      sessionStorage.removeItem('forceDiscovery');
+      return; // остаёмся на дефолтном chatMode:'chat', localStorage не читаем
+    }
     const stored = localStorage.getItem('ghostline_last_chat_mode') as ChatMode | null;
     if (stored) setChatMode(stored);
   }, []);

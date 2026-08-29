@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  PlusIcon, SettingsIcon, TrashIcon, EditIcon, ImageIcon,
+  PlusIcon, SettingsIcon, TrashIcon, EditIcon, ImageIcon, SparkleIcon,
 } from '@/components/icons';
 import { CasperCoin } from '@/components/icons';
 import { useAuthStore } from '@/store/auth.store';
@@ -56,6 +56,16 @@ export function Sidebar() {
 
   function handleNewChat() {
     // Сбрасываем стор, чтобы сайдбар не продолжал подсвечивать старый чат
+    useChatStore.getState().setActiveChat(null);
+    useChatStore.getState().setMessages([]);
+    router.push('/chat');
+  }
+
+  // "Ознакомиться" — витрина всех моделей с превью на /chat (та же, что открывается
+  // сама, если ещё ничего не выбрано) — forceDiscovery гарантирует, что она реально
+  // покажется, а не подменится последним использованным режимом (см. chat/page.tsx).
+  function handleExplore() {
+    sessionStorage.setItem('forceDiscovery', '1');
     useChatStore.getState().setActiveChat(null);
     useChatStore.getState().setMessages([]);
     router.push('/chat');
@@ -254,6 +264,23 @@ export function Sidebar() {
           <ImageIcon size={16} className="flex-shrink-0" />
           {sidebarOpen && <span className="text-[13.5px] font-medium">Галерея</span>}
         </Link>
+      </div>
+
+      {/* Ознакомиться — витрина моделей с превью на /chat, по прямому запросу Александра */}
+      <div className="px-3 mb-4">
+        <button
+          type="button"
+          onClick={handleExplore}
+          className={cn(
+            'w-full flex items-center transition-all hover:opacity-100 opacity-70',
+            sidebarOpen ? 'gap-2 justify-start px-2.5 py-2' : 'justify-center p-2.5'
+          )}
+          style={{ color: 'var(--text-primary)' }}
+          aria-label="Ознакомиться с моделями"
+        >
+          <SparkleIcon size={16} className="flex-shrink-0" />
+          {sidebarOpen && <span className="text-[13.5px] font-medium">Ознакомиться</span>}
+        </button>
       </div>
 
       {/* Разделитель */}

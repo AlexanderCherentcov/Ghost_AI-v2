@@ -606,7 +606,10 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'hunyuan-video', domain: 'video', label: 'Hunyuan Video', blurb: 'Tencent · бюджетный вариант', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/hunyuan',
     cost: () => 36,
-    fallbackModelId: 'kling-v2.5',
+    // 2026-08-29: Kling std ($0.52/10с) для этой модели ($0.09 флэт) — почти ×6 к
+    // родной себестоимости, слишком дорогой резерв для самой дешёвой модели каталога
+    // (замечание Александра). Hailuo дешевле и ближе ($0.23-0.45) — лучший budget-фолбэк.
+    fallbackModelId: 'hailuo-v2.3',
     autoEligible: true, capabilities: { imageToVideo: true },
     // goapi.ai/docs/hunyuan-video/txt2video-api — duration провайдером не настраивается вообще,
     // aspect_ratio: 16:9/9:16/1:1. Resolution/audio/negative prompt не поддерживаются.
@@ -626,7 +629,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'skyreels', domain: 'video', label: 'SkyReels', blurb: 'По вашей фотографии', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/skyreels',
     cost: () => 19,
-    fallbackModelId: 'kling-v2.5',
+    // См. комментарий у hunyuan-video — Hailuo ближе по цене, чем Kling, для
+    // самых дешёвых моделей каталога.
+    fallbackModelId: 'hailuo-v2.3',
     autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
     ui: {
       durationLabels: null,
@@ -644,7 +649,8 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'framepack', domain: 'video', label: 'Framepack', blurb: 'По вашей фотографии · длинные ролики', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'Qubico/framepack',
     cost: (d) => (d === '4s' ? 38 : 75),
-    fallbackModelId: 'kling-v2.5',
+    // См. комментарий у hunyuan-video — Hailuo ближе по цене, чем Kling.
+    fallbackModelId: 'hailuo-v2.3',
     autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
     ui: {
       durationLabels: { '4s': '10с', '8s': '20с' },

@@ -385,6 +385,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: true,
       cameraPresets: ['static', 'zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'tilt_up', 'tilt_down', 'orbit'],
     },
+    previewVideoUrl: '/previews/kling-v2.5-pro.mp4',
   },
   {
     // 2026-08-20: старшая версия Kling — goapi.ai/docs/kling-api/create-task

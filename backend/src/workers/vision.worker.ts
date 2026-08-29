@@ -6,6 +6,7 @@ import { findModel } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
 import { refundCaspers } from '../services/tokens.js';
+import { friendlyGenerationError } from '../lib/generation-error.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -111,7 +112,7 @@ export function startVisionWorker() {
     if (job) {
       await prisma.generateJob.update({
         where: { id: job.data.jobId },
-        data: { status: 'failed', error: err.message },
+        data: { status: 'failed', error: friendlyGenerationError(err.message) },
       });
       await refundCaspers(job.data.userId, job.data.caspersSpent, job.data.modelId).catch(() => {});
     }

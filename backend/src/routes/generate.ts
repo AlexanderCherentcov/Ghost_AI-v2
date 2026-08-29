@@ -370,7 +370,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: `Модель «${spec.label}» не поддерживает разрешение ${videoResolution}`, code: 'MODEL_UNSUPPORTED_RESOLUTION' });
       }
 
-      const cost = spec.cost(effectiveDuration);
+      // Доверяем клиентскому videoEnableAudio только там, где модель реально заявлена
+      // как поддерживающая звук в реестре — иначе запрос со звуком ушёл бы провайдеру
+      // для модели, где мы это даже не тестировали.
+      const audioEnabled = spec.capabilities?.audio ? (videoEnableAudio ?? false) : false;
+      // audioCostMultiplier — только там, где звук у провайдера реально дороже (Veo:
+      // ×1.5/×2, см. комментарий в models.ts). У остальных моделей звук либо бесплатный
+      // (Kling <2.6), либо не меняет цену (Seedance/Wan) — multiplier не задан, cost как есть.
+      const cost = Math.round(spec.cost(effectiveDuration) * (audioEnabled && spec.audioCostMultiplier ? spec.audioCostMultiplier : 1));
 
       // Сбрасываем счётчики, если период закончился
       await checkResets(userId);
@@ -386,8 +393,14 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
       }
 
-      // Проверка кэша только для text-to-video (image-to-video кэш не использует)
-      const mediaCacheMode = `reel:${modelId}:${effectiveDuration}`;
+      // Проверка кэша только для text-to-video (image-to-video кэш не использует).
+      // Звук — часть ключа у моделей, где он реально переключаем (capabilities.audio):
+      // иначе пользователю, попросившему видео со звуком, могла прилететь из кэша
+      // немая версия того же промпта (и наоборот) — контент реально разный, а не
+      // только цена (это касается не только Veo — тот же риск был и у Wan/Kling
+      // с самого начала поддержки audio, просто раньше цена не зависела от звука
+      // и баг был незаметен по чеку, хотя пользователь мог получить не то, что просил).
+      const mediaCacheMode = `reel:${modelId}:${effectiveDuration}${spec.capabilities?.audio ? `:audio${audioEnabled ? 1 : 0}` : ''}`;
       if (!videoImageUrl) {
         const mediaCached = await getMediaCached(mediaCacheMode, prompt);
         if (mediaCached.hit) {
@@ -435,10 +448,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         mediaCacheMode,
         duration: effectiveDuration,
         aspectRatio: videoAspectRatio ?? '16:9',
-        // GoAPI берёт за звук отдельно (у Kling/Veo — 2x надбавка) — наша Caspers-цена
-        // это не учитывает, поэтому доверять клиентскому videoEnableAudio нельзя: включаем
-        // звук только там, где модель реально заявлена как поддерживающая его в реестре.
-        enableAudio: spec.capabilities?.audio ? (videoEnableAudio ?? false) : false,
+        enableAudio: audioEnabled,
         resolution: videoResolution ?? '720p',
         imageUrl: videoImageUrl ?? null,
         negativePrompt,

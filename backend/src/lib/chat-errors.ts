@@ -32,5 +32,5 @@ export function shouldRefundCaspers(code: string | undefined): boolean {
 /** Текст, который увидит пользователь — точная причина для лимитов, иначе общий текст. */
 export function resolveChatErrorMessage(code: string | undefined, rawMessage: string | undefined): string {
   if (isChatLimitCode(code)) return rawMessage ?? 'Лимит исчерпан';
-  return 'Генерация провалась, попробуйте позже';
+  return 'Сервера перегружены, попробуйте другую модель или повторите чуть позже';
 }

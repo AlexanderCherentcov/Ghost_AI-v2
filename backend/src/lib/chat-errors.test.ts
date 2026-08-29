@@ -40,6 +40,6 @@ describe('chat-errors — классификация кодов ошибок WS-
 
   it('resolveChatErrorMessage: для НЕ-лимита всегда общий текст (не раскрываем детали провайдера)', () => {
     expect(resolveChatErrorMessage('SERVER_ERROR', 'connection reset by OpenRouter at 1.2.3.4'))
-      .toBe('Генерация провалась, попробуйте позже');
+      .toBe('Сервера перегружены, попробуйте другую модель или повторите чуть позже');
   });
 });

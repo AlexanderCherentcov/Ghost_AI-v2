@@ -118,6 +118,10 @@ export interface VideoModelSpec extends BaseModelSpec {
   ui: VideoModelUiParams;
   /** Пример вывода модели — заглушка, пока Александр не пришлёт реальные сэмплы. */
   previewVideoUrl?: string;
+  // Во сколько раз реально дороже у провайдера ролик СО звуком (capabilities.audio:true)
+  // относительно cost() без звука — только там, где звук у провайдера НЕ бесплатный
+  // (см. комментарии у конкретных моделей). undefined/1 — звук не меняет цену.
+  audioCostMultiplier?: number;
 }
 
 export type ModelSpec = ChatModelSpec | ImageModelSpec | VideoModelSpec;
@@ -218,6 +222,13 @@ const GEMINI_IMAGE_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', 
 
 export const IMAGE_MODELS: ImageModelSpec[] = [
   {
+    // TODO(2026-08-29): в отличие от nano-banana-2-lite/classic ниже, цена этой модели
+    // никогда не сверялась с реальным $-тарифом OpenRouter по ×400-формуле (см. header
+    // файла) — просто исторический стартовый номер. OpenRouter отдаёт image_output
+    // $0.00006/токен для google/gemini-3.1-flash-image, но точное число output-токенов
+    // на одну картинку у Gemini не задокументировано (в отличие от GPT, где OpenAI
+    // прямо называет 4160 токенов на "high") — посчитать честную цену без гадания
+    // сейчас нельзя, проверить на реальном трафике перед стартом продаж.
     id: 'gemini-flash-image', domain: 'image', label: 'Gemini Flash Image', blurb: 'Google', minPlan: 'FREE',
     provider: 'openrouter', providerModel: 'google/gemini-3.1-flash-image',
     fallbackModel: 'google/gemini-3-pro-image',
@@ -226,6 +237,11 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     previewImageUrl: '/previews/gemini-flash-image.jpg',
   },
   {
+    // TODO(2026-08-29): та же оговорка, что у gemini-flash-image выше — не сверено.
+    // OpenRouter: image_output $0.00012/токен для google/gemini-3-pro-image (ровно
+    // 2× цены flash-варианта) — итоговое отношение gemini-pro-image/gemini-flash-image
+    // в реестре (22/10 ≈ 2.2×) как минимум близко к реальному соотношению провайдеров,
+    // но абсолютное число всё равно не проверено.
     id: 'gemini-pro-image', domain: 'image', label: 'Gemini Pro Image', blurb: 'Google', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'google/gemini-3-pro-image',
     cost: 22, autoEligible: true, capabilities: { edit: true },
@@ -325,7 +341,11 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // живым запросом к докам) — фикс только честности бренда, маржа не меняется.
     klingVersion: '2.5',
     cost: (d) => (d === '4s' ? 25 : 40),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // 2026-08-29: сверено вживую по goapi.ai/docs/kling-api/create-task — enable_audio
+    // поддерживается, и "enable_audio for version<2.6 is currently free" (прямая цитата
+    // доков). Версия 2.5 — надбавка ×2 действует только у 2.6+ в pro-режиме, нас не
+    // касается, поэтому audioCostMultiplier не задаём (звук не меняет цену).
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/kling-api/create-task — duration: 5|10, aspect_ratio: 16:9/9:16/1:1
     // (только text-to-video), resolution провайдером не поддерживается вообще.
     ui: {
@@ -340,8 +360,18 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
   {
     id: 'veo-3.1-pro', domain: 'video', label: 'Veo 3.1 Pro', blurb: 'Google · высокое качество', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'veo3.1', goapiTaskType: 'veo3.1-video',
+    // ⚠️ ЦЕНА-ЗАГЛУШКА, не сверена по ×400-формуле (см. header файла) в отличие от
+    // большинства моделей ниже — нет отметки "сверено вживую". Раньше это не было
+    // видно, потому что звук был жёстко выключен (см. комментарий про audioCostMultiplier).
     cost: (d) => (d === '4s' ? 50 : 90),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // 2026-08-29: сверено вживую по goapi.ai/docs/veo31-api/text-to-video —
+    // generate_audio поддерживается, "It cost less if false": audio OFF $0.12/с,
+    // audio ON $0.24/с (ровно ×2). audioCostMultiplier применяется к cost() выше
+    // (который уже посчитан на audio OFF) при enableAudio — иначе звук уходил бы
+    // в минус по марже. Раньше звук был просто жёстко запрещён в routes/generate.ts
+    // именно из-за этой недостающей надбавки — теперь считаем честно.
+    audioCostMultiplier: 2,
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     ui: {
       durationLabels: { '4s': '4с', '8s': '8с' },
       aspectRatios: ['16:9', '9:16'],
@@ -377,7 +407,8 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     provider: 'goapi', goapiModel: 'kling',
     klingMode: 'pro', klingVersion: '2.5', // см. комментарий у kling-v2.5 выше — тот же фикс честности версии
     cost: (d) => (d === '4s' ? 42 : 83),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // См. комментарий у kling-v2.5 — версия <2.6, звук бесплатный у провайдера.
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     ui: {
       durationLabels: { '4s': '5с', '8s': '10с' },
       aspectRatios: ['16:9', '9:16', '1:1'],
@@ -395,7 +426,8 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     provider: 'goapi', goapiModel: 'kling',
     klingMode: 'pro', klingVersion: '2.1-master',
     cost: (d) => (d === '4s' ? 120 : 240),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // См. комментарий у kling-v2.5 — версия <2.6, звук бесплатный у провайдера.
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     ui: {
       durationLabels: { '4s': '5с', '8s': '10с' },
       aspectRatios: ['16:9', '9:16', '1:1'],
@@ -408,8 +440,12 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
   {
     id: 'veo-3.1-standard', domain: 'video', label: 'Veo 3.1 Fast', blurb: 'Google · быстро', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'veo3.1', goapiTaskType: 'veo3.1-video-fast',
+    // ⚠️ ЦЕНА-ЗАГЛУШКА, см. тот же комментарий у veo-3.1-pro — не сверена по ×400-формуле.
     cost: (d) => (d === '4s' ? 25 : 40),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // 2026-08-29: goapi.ai/docs/veo31-api/text-to-video — audio OFF $0.06/с,
+    // audio ON $0.09/с (×1.5). См. подробный комментарий у veo-3.1-pro.
+    audioCostMultiplier: 1.5,
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/veo31-api/text-to-video — duration: 4s/6s/8s, aspect_ratio: 16:9/9:16, resolution: 720p/1080p.
     ui: {
       durationLabels: { '4s': '4с', '8s': '8с' },
@@ -429,7 +465,11 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     id: 'seedance-2', domain: 'video', label: 'Seedance 2', blurb: 'ByteDance', minPlan: 'BASIC',
     provider: 'goapi', goapiModel: 'seedance',
     cost: (d) => (d === '4s' ? 60 : 115),
-    autoEligible: true, capabilities: { imageToVideo: true },
+    // 2026-08-29: сверено вживую по goapi.ai/docs/seedance-api/seedance-2 — audio
+    // поддерживается ("No audio generated if false", default true), цена не зависит
+    // от звука вообще (только от resolution/duration, уже учтено в cost() выше) —
+    // audioCostMultiplier не нужен.
+    autoEligible: true, capabilities: { imageToVideo: true, audio: true },
     // goapi.ai/docs/seedance-api/seedance-2 — duration: 4-15с произвольно (у нас 2 корзины),
     // aspect_ratio: 21:9/16:9/4:3/1:1/3:4/9:16. Negative prompt и camera control в доках
     // не задокументированы вообще.

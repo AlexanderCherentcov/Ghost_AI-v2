@@ -24,8 +24,8 @@ describe('calcCaspers — стоимость операции по данным 
 
   const noUiParams = { durationLabels: null, aspectRatios: [], resolutions: [], supportsNegativePrompt: false, cameraPresets: [] };
   const videoModels: VideoModelOption[] = [
-    { id: 'kling-v2.5', label: 'GhostLine Reality', minPlan: 'FREE', capabilities: {}, cost: { '4s': 25, '8s': 40 }, ui: noUiParams },
-    { id: 'veo-3.1-pro', label: 'GhostLine Cinema', minPlan: 'BASIC', capabilities: {}, cost: { '4s': 50, '8s': 90 }, ui: noUiParams },
+    { id: 'kling-v2.5', label: 'GhostLine Reality', minPlan: 'FREE', capabilities: { audio: true }, cost: { '4s': 25, '8s': 40 }, ui: noUiParams },
+    { id: 'veo-3.1-pro', label: 'GhostLine Cinema', minPlan: 'BASIC', capabilities: { audio: true }, cost: { '4s': 50, '8s': 90 }, audioCostMultiplier: 2, ui: noUiParams },
   ];
 
   const imageModel: ImageModelOption = { id: 'gemini-flash-image', label: 'Gemini Flash Image', minPlan: 'FREE', capabilities: {}, cost: 10 };
@@ -47,6 +47,16 @@ describe('calcCaspers — стоимость операции по данным 
       .toBe(50);
     expect(calcCaspers('video', { ...baseVideoOptions, videoModel: 'veo-3.1-pro', duration: '8s' }, DEFAULT_CASPER_COSTS, undefined, videoModels))
       .toBe(90);
+  });
+
+  it('видео: включённый звук у модели с audioCostMultiplier — цена умножается (Veo: ×2)', () => {
+    expect(calcCaspers('video', { ...baseVideoOptions, videoModel: 'veo-3.1-pro', duration: '8s', enableAudio: true }, DEFAULT_CASPER_COSTS, undefined, videoModels))
+      .toBe(180);
+  });
+
+  it('видео: включённый звук у модели БЕЗ audioCostMultiplier — цена не меняется (Kling: звук бесплатный)', () => {
+    expect(calcCaspers('video', { ...baseVideoOptions, videoModel: 'kling-v2.5', duration: '8s', enableAudio: true }, DEFAULT_CASPER_COSTS, undefined, videoModels))
+      .toBe(40);
   });
 
   it('видео: неизвестная/ещё не загруженная модель — 0, а не крэш', () => {

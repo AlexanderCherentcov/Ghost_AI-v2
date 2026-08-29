@@ -513,6 +513,8 @@ export interface VideoModelOption {
   minPlan: string;
   capabilities: ModelCapabilities;
   cost: { '4s': number; '8s': number };
+  /** Во сколько раз дороже с включённым звуком — см. комментарий у VideoModelSpec.audioCostMultiplier в бэкенде. Отсутствует/1 — звук цену не меняет. */
+  audioCostMultiplier?: number;
   /** Единый источник реальных настраиваемых параметров — см. backend/src/config/models.ts. */
   ui: VideoModelUiParams;
   previewVideoUrl?: string;

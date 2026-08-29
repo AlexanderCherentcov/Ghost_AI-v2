@@ -29,7 +29,15 @@ export function calcCaspers(
   if (mode === 'images') return imageModel?.cost ?? 0;
   if (mode === 'video') {
     const spec = videoModels?.find((m) => m.id === videoOpts.videoModel);
-    return spec ? spec.cost[videoOpts.duration] : 0;
+    if (!spec) return 0;
+    const base = spec.cost[videoOpts.duration];
+    // Звук у части провайдеров (Veo) реально дороже — см. audioCostMultiplier
+    // в backend/src/config/models.ts. У остальных моделей (Kling/Seedance/Wan)
+    // undefined/1 — звук бесплатный или не влияет на цену.
+    const withAudio = videoOpts.enableAudio && spec.capabilities.audio && spec.audioCostMultiplier
+      ? Math.round(base * spec.audioCostMultiplier)
+      : base;
+    return withAudio;
   }
   return 0;
 }

@@ -10,6 +10,7 @@ import { resolveChatModel } from '../services/ai-router.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import { refundCaspers } from '../services/tokens.js';
+import { friendlyGenerationError } from '../lib/generation-error.js';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'audio');
 
@@ -118,7 +119,7 @@ export function startVoiceWorker() {
     if (job) {
       await prisma.generateJob.update({
         where: { id: job.data.jobId },
-        data: { status: 'failed', error: err.message },
+        data: { status: 'failed', error: friendlyGenerationError(err.message) },
       });
       await refundCaspers(job.data.userId, job.data.caspersSpent, 'voice_exchange').catch(() => {});
     }

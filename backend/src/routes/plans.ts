@@ -20,6 +20,7 @@ function publicModels() {
     video: VIDEO_MODELS.map((m) => ({
       id: m.id, label: m.label, blurb: m.blurb, minPlan: m.minPlan, capabilities: m.capabilities ?? {},
       cost: { '4s': m.cost('4s'), '8s': m.cost('8s') },
+      audioCostMultiplier: m.audioCostMultiplier,
       ui: m.ui, previewVideoUrl: m.previewVideoUrl,
     })),
   };

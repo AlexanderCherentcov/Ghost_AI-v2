@@ -53,6 +53,7 @@ const MODEL_ICON_MAP: Record<string, ModelIconEntry> = {
   'hailuo-v2.3': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
   'wan-2.6': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
   'skyreels': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
+  'framepack': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
   'sora-2': { icon: '/models/sora.svg', particleShape: 'sora' },
 };
 

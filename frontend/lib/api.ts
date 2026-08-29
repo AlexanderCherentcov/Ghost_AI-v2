@@ -474,7 +474,7 @@ export interface ModelCapabilities {
   edit?: boolean;
   imageToVideo?: boolean;
   audio?: boolean;
-  /** Модель работает только по фото (SkyReels) — чистого text-to-video у неё нет. */
+  /** Модель работает только по фото (SkyReels, Framepack) — чистого text-to-video у неё нет. */
   imageRequired?: boolean;
 }
 export interface ChatModelOption {

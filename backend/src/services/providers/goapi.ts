@@ -262,7 +262,7 @@ function buildGenericVideoInput(
       // 2026-08-29: живой баг — провайдер принимает duration только 5|10|15
       // (см. models.ts:wan-2.6, durationLabels '4s':'5с' / '8s':'10с'), а сюда
       // уходил общий `seconds` (4 или 8, буквально) без ремаппинга под конкретные
-      // значения Wan, как это уже сделано для Kling/Luma ниже. GoAPI,
+      // значения Wan, как это уже сделано для Kling/Luma/Framepack ниже. GoAPI,
       // получив невалидные 4/8, молча откатывался к дефолту 5с — пользователь
       // выбирал "10с" в UI, а получал 5с. Правильный ремаппинг — как у остальных.
       return {
@@ -306,11 +306,24 @@ function buildGenericVideoInput(
           aspect_ratio: opts.aspectRatio,
         },
       };
+    case 'Qubico/framepack':
+      // Контракт подтверждён по goapi.ai/docs/framepack-api/create-task — тоже
+      // только image-to-video, длительность провайдер принимает диапазоном
+      // 10-30с (наши корзины 4s/8s маппятся на 10с/20с, как Luma маппит на 5с/9с).
+      return {
+        taskType: 'img2video',
+        input: {
+          prompt: opts.prompt,
+          start_image: opts.imageUrl,
+          duration: opts.duration === '4s' ? 10 : 20,
+          ...(opts.negativePrompt?.trim() ? { negative_prompt: opts.negativePrompt.trim() } : {}),
+        },
+      };
     case 'sora2':
       // Контракт подтверждён по goapi.ai/docs/sora2-api/text-to-video (2026-08-29) —
       // модель "sora2", task_type "sora2-video", $0.08/с (720p — единственное доступное
       // разрешение). duration принимает 4/8/12с — наши корзины 4s/8s совпадают напрямую,
-      // ремаппинга не нужно (в отличие от Luma выше). image_url — первый кадр
+      // ремаппинга не нужно (в отличие от Luma/Framepack выше). image_url — первый кадр
       // (image-to-video), опционально. Дешевле и без отдельного OpenAI-ключа в отличие
       // от прежней прямой интеграции с OpenAI — Sora 2 Pro убрана из реестра
       // по прямому указанию Александра (не нужна).

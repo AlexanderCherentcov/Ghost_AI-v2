@@ -103,7 +103,7 @@ export interface VideoModelSpec extends BaseModelSpec {
   // что выглядело так, будто оно на что-то влияет — не заполняем там, где оно
   // не используется, чтобы не вводить в заблуждение при следующем чтении реестра.
   goapiTaskType?: string;
-  // imageRequired — модель работает ТОЛЬКО как image-to-video (SkyReels:
+  // imageRequired — модель работает ТОЛЬКО как image-to-video (SkyReels, Framepack:
   // провайдер обязательно требует image, чистого text-to-video у него нет) —
   // routes/generate.ts отклоняет запрос без videoImageUrl для таких моделей,
   // а не отправляет заведомо невалидный запрос в GoAPI.
@@ -642,11 +642,25 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       cameraPresets: [],
     },
   },
-  // Framepack — УБРАНА 2026-08-29 по прямому указанию Александра: "непонятно
-  // что делает" — неочевидная нишевая модель (image-to-video, 10-30с ролики),
-  // не несла понятной пользователю ценности рядом с SkyReels/Kling. Если решим
-  // вернуть — контракт был goapi.ai/docs/framepack-api/create-task, provider
-  // 'Qubico/framepack', $0.03/с, только image-to-video.
+  {
+    // 2026-08-20: goapi.ai/docs/framepack-api/create-task — тоже только
+    // image-to-video. Провайдер принимает произвольную длительность 10-30с
+    // (30fps) — наши корзины «4s»/«8s» маппим на 10с/20с (см. buildGenericVideoInput
+    // в services/providers/goapi.ts), цена $0.03/с.
+    id: 'framepack', domain: 'video', label: 'Framepack', blurb: 'По вашей фотографии · длинные ролики', minPlan: 'BASIC',
+    provider: 'goapi', goapiModel: 'Qubico/framepack',
+    cost: (d) => (d === '4s' ? 38 : 75),
+    // См. комментарий у hunyuan-video — Hailuo ближе по цене, чем Kling.
+    fallbackModelId: 'hailuo-v2.3',
+    autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
+    ui: {
+      durationLabels: { '4s': '10с', '8s': '20с' },
+      aspectRatios: ['16:9', '9:16', '4:3', '3:4', '1:1'],
+      resolutions: [],
+      supportsNegativePrompt: true,
+      cameraPresets: [],
+    },
+  },
 ];
 
 // ─── Доступ ─────────────────────────────────────────────────────────────────

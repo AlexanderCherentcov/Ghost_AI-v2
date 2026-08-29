@@ -215,6 +215,7 @@ export default function ChatConversationPage() {
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
               patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
+              if (mode !== 'voice') triggerAutoTitle(prompt);
               localStorage.removeItem(`pending_gen_${id}`);
             } else {
               await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : mode === 'voice' ? 1500 : 2000));
@@ -378,6 +379,7 @@ export default function ChatConversationPage() {
           // Счётчик обновляется на бэкенде; локально баланс обновлять не нужно
         } else if (job.status === 'failed') {
           patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать изображение'}`, mediaUrl: null });
+          triggerAutoTitle(prompt);
         } else {
           await new Promise((r) => setTimeout(r, 2000));
           return poll();
@@ -388,6 +390,7 @@ export default function ChatConversationPage() {
     } catch (err: any) {
       patchOrAppendMessage(placeholder, { content: 'Ошибка генерации', mediaUrl: null });
       showToast(err.message ?? 'Ошибка генерации изображения', 'error');
+      triggerAutoTitle(prompt);
     } finally {
       localStorage.removeItem(`pending_gen_${id}`);
       setGeneratingImage(false);
@@ -448,6 +451,7 @@ export default function ChatConversationPage() {
           triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
           patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать видео'}`, mediaUrl: null });
+          triggerAutoTitle(prompt);
         } else {
           await new Promise((r) => setTimeout(r, 3000));
           return poll();
@@ -464,6 +468,7 @@ export default function ChatConversationPage() {
       } else {
         showToast(err.message ?? 'Ошибка генерации видео', 'error');
       }
+      triggerAutoTitle(prompt);
     } finally {
       localStorage.removeItem(`pending_gen_${id}`);
       generatingVideoRef.current = false;
@@ -585,6 +590,7 @@ export default function ChatConversationPage() {
           triggerAutoTitle(prompt);
         } else if (job.status === 'failed') {
           patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать трек'}`, mediaUrl: null });
+          triggerAutoTitle(prompt);
         } else {
           await new Promise((r) => setTimeout(r, 3000));
           return poll();
@@ -604,6 +610,7 @@ export default function ChatConversationPage() {
       } else {
         showToast(err.message ?? 'Ошибка генерации музыки', 'error');
       }
+      triggerAutoTitle(prompt);
     } finally {
       localStorage.removeItem(`pending_gen_${id}`);
       generatingMusicRef.current = false;

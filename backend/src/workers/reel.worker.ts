@@ -34,6 +34,21 @@ async function saveVideoUrlToDisk(url: string): Promise<string> {
   return filename;
 }
 
+// Стилевая подсказка для промпта — ТОЛЬКО на пути фолбэка (см. fallbackModelId в
+// config/models.ts), никогда на основной модели. Kling принимает тот же свободный
+// текстовый промпт, что и Sora/Veo, поэтому переписывать его целиком не нужно —
+// достаточно короткой добавки, компенсирующей то, в чём конкретно силён
+// провайдер, который сейчас недоступен (пользователь писал промпт под него).
+function fallbackStyleHint(originalModelId: string): string {
+  if (originalModelId.startsWith('sora')) {
+    return ', photorealistic detail, natural physics and object permanence, cinematic film look';
+  }
+  if (originalModelId.startsWith('veo')) {
+    return ', precise cinematic camera work, coherent scene composition, high production quality, natural lighting';
+  }
+  return '';
+}
+
 interface ReelJob {
   jobId: string;
   userId: string;
@@ -138,7 +153,10 @@ export function startReelWorker() {
         // не было прецедента их нестабильности) — по прямому указанию Александра
         // после реального падения Sora/Veo от перегрузки GoAPI ("нельзя терять
         // клиентов"): при сбое подставляем Kling Pro/Std того же ценового уровня
-        // (см. fallbackModelId в config/models.ts), тем же промптом. Списание уже
+        // (см. fallbackModelId в config/models.ts) с тем же промптом + короткой
+        // стилевой подсказкой (fallbackStyleHint — только тут, не на основной
+        // модели). В истории/БД остаётся оригинальный prompt без добавки (см.
+        // finalizeJob ниже) — подсказка нужна только провайдеру. Списание уже
         // произошло по цене ИСХОДНОЙ модели (routes/generate.ts, до постановки в
         // очередь) — пользователь платит и видит в истории как за Sora/Veo,
         // независимо от того, кто реально сгенерировал ролик. Редкий путь: если
@@ -149,7 +167,7 @@ export function startReelWorker() {
         if (!fallbackSpec) throw err;
         console.warn(`[ReelWorker] ${spec.id} failed, falling back to ${fallbackSpec.id}:`, (err as Error).message);
         externalUrl = await generateViaGoapi(fallbackSpec, {
-          prompt, duration, aspectRatio, enableAudio, resolution,
+          prompt: prompt + fallbackStyleHint(spec.id), duration, aspectRatio, enableAudio, resolution,
           imageUrl: imageUrl ?? undefined, negativePrompt, cameraPreset,
         });
       }

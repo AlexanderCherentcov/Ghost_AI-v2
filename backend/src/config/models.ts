@@ -250,6 +250,11 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // но абсолютное число всё равно не проверено.
     id: 'gemini-pro-image', domain: 'image', label: 'Gemini Pro Image', blurb: 'Google', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'google/gemini-3-pro-image',
+    // Кросс-провайдерный фолбэк (не другая модель Google) — по прямому указанию
+    // Александра после сбоев Sora/Veo: "нам нужна защита" на все модели, не только
+    // видео. Если недоступен именно Google (не конкретный запрос) — фолбэк в
+    // пределах того же провайдера не спас бы вообще.
+    fallbackModel: 'openai/gpt-5-image',
     cost: 22, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
     previewImageUrl: '/previews/gemini-pro-image.jpg',
@@ -259,6 +264,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // каталога) — цена ниже грубая оценка, не факт.
     id: 'gpt-image-mini', domain: 'image', label: 'GPT Image mini', blurb: 'OpenAI', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5-image-mini',
+    fallbackModel: 'google/gemini-3.1-flash-lite-image',
     cost: 14, autoEligible: true, capabilities: { edit: false },
     previewImageUrl: '/previews/gpt-image-mini.jpg',
   },
@@ -272,6 +278,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // сырой цены API, не покрывает эквайринг/поддержку на дешёвых операциях).
     id: 'nano-banana-2-lite', domain: 'image', label: 'Nano Banana 2 Lite', blurb: 'Google', minPlan: 'FREE',
     provider: 'openrouter', providerModel: 'google/gemini-3.1-flash-lite-image',
+    fallbackModel: 'openai/gpt-5-image-mini',
     cost: 5, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
     previewImageUrl: '/previews/nano-banana-2-lite.jpg',
@@ -292,6 +299,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // это предположение по умолчанию "high", не факт. Сверить на реальном трафике.
     id: 'gpt-image', domain: 'image', label: 'GPT Image', blurb: 'OpenAI · выше качеством, чем mini', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5-image',
+    fallbackModel: 'google/gemini-3-pro-image',
     cost: 70, autoEligible: true, capabilities: { edit: true },
     previewImageUrl: '/previews/gpt-image.jpg',
   },
@@ -301,6 +309,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // ⚠️ ЦЕНА-ОЦЕНКА: та же оговорка про качество "high", что у gpt-image выше.
     id: 'gpt-5.4-image-2', domain: 'image', label: 'GPT-5.4 Image 2', blurb: 'OpenAI · новейшая модель', minPlan: 'BASIC',
     provider: 'openrouter', providerModel: 'openai/gpt-5.4-image-2',
+    fallbackModel: 'google/gemini-3-pro-image',
     cost: 52, autoEligible: true, capabilities: { edit: true },
     previewImageUrl: '/previews/gpt-5.4-image-2.jpg',
   },
@@ -312,6 +321,7 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // версия, которую держим для совместимости/привычки, не флагман.
     id: 'nano-banana-classic', domain: 'image', label: 'Nano Banana Classic', blurb: 'Google · оригинальная версия', minPlan: 'FREE',
     provider: 'openrouter', providerModel: 'google/gemini-2.5-flash-image',
+    fallbackModel: 'openai/gpt-5-image-mini',
     cost: 6, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
     previewImageUrl: '/previews/nano-banana-classic.jpg',

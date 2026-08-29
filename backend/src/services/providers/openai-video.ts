@@ -12,8 +12,14 @@
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 
+// 2026-08-29: намеренно ОТДЕЛЬНАЯ переменная от OPENAI_API_KEY — та зарезервирована
+// под providers/openai.ts (чат через Groq, OpenAI-совместимый API, см. OPENAI_BASE_URL
+// в env), сама Groq и ключ к ней никакого отношения к настоящему OpenAI/Sora не имеют.
+// Баг был обнаружен вживую: Sora получала ключ Groq (префикс "gsk_") и падала на
+// каждой попытке с 401 "Incorrect API key" — сразу после постановки задачи, ещё до
+// обращения к реальному Sora API.
 function apiKey(): string {
-  return process.env.OPENAI_API_KEY ?? '';
+  return process.env.SORA_API_KEY ?? '';
 }
 
 export type SoraModel = 'sora-2' | 'sora-2-pro';

@@ -108,6 +108,16 @@ export interface VideoModelSpec extends BaseModelSpec {
   // routes/generate.ts отклоняет запрос без videoImageUrl для таких моделей,
   // а не отправляет заведомо невалидный запрос в GoAPI.
   capabilities?: { imageToVideo?: boolean; audio?: boolean; imageRequired?: boolean };
+  // true — звук у провайдера встроен нативно, БЕЗ переключателя (сейчас только
+  // Sora: capabilities.audio не задан у неё специально, потому что у неё нет
+  // отдельного параметра audio в запросе — звук просто всегда есть, см. её
+  // комментарий). Из-за этого enableAudio для job'а Sora всегда false (гейт в
+  // routes/generate.ts включает звук только при capabilities.audio:true) — не
+  // страшно для самой Sora (она его игнорирует), но при фолбэке на Kling
+  // (реальный переключатель) это молча даёт немое видео там, где пользователь
+  // ожидал звук по умолчанию. См. reel.worker.ts — на фолбэке с nativeAudio:true
+  // enableAudio форсируется в true.
+  nativeAudio?: boolean;
   // Только для goapiModel === 'kling' — форсирует режим/версию независимо от
   // остальных опций (см. services/providers/goapi.ts:KlingVideoOptions). У
   // остальных провайдеров эти поля не используются.
@@ -415,6 +425,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     // Kling Pro (см. её комментарий по цене — pro-режим $0.46/5с-$0.92/10с) ближе
     // к реальному $-тарифу Sora ($0.70/8с), чем дешёвый std-режим Kling.
     fallbackModelId: 'kling-v2.5-pro',
+    nativeAudio: true,
     autoEligible: false, capabilities: { imageToVideo: true },
     // goapi.ai/docs/sora2-api/text-to-video — duration: 4/8/12с (у нас 2 корзины,
     // совпадают напрямую), aspect_ratio: 16:9/9:16, только 720p, audio отдельным

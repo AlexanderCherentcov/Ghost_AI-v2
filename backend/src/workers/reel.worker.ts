@@ -166,9 +166,15 @@ export function startReelWorker() {
         const fallbackSpec = findModel('video', spec.fallbackModelId);
         if (!fallbackSpec) throw err;
         console.warn(`[ReelWorker] ${spec.id} failed, falling back to ${fallbackSpec.id}:`, (err as Error).message);
+        // nativeAudio (сейчас только Sora) — у исходной модели звук встроен без
+        // переключателя, поэтому enableAudio для job'а всегда false (гейт в
+        // routes/generate.ts трогает звук только при capabilities.audio:true).
+        // Kling это честно уважает и молча делает немое видео — форсируем звук
+        // на фолбэке, раз пользователь ожидал его от исходной модели по умолчанию.
         externalUrl = await generateViaGoapi(fallbackSpec, {
-          prompt: prompt + fallbackStyleHint(spec.id), duration, aspectRatio, enableAudio, resolution,
-          imageUrl: imageUrl ?? undefined, negativePrompt, cameraPreset,
+          prompt: prompt + fallbackStyleHint(spec.id), duration, aspectRatio,
+          enableAudio: spec.nativeAudio ? true : enableAudio,
+          resolution, imageUrl: imageUrl ?? undefined, negativePrompt, cameraPreset,
         });
       }
 

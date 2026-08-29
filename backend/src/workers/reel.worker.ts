@@ -1,5 +1,5 @@
 import { Worker, type Job } from 'bullmq';
-import { createWriteStream, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, unlinkSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import path from 'node:path';
@@ -7,7 +7,6 @@ import { randomUUID } from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { generateVideoVeo3, generateVideoKling, generateVideoGeneric, type VideoAspectRatio, type VideoResolution } from '../services/providers/goapi.js';
-import { generateVideoSora, type SoraModel } from '../services/providers/openai-video.js';
 import { findModel, type VideoDurationChoice } from '../config/models.js';
 import { setMediaCached } from '../services/cache.js';
 import { encrypt } from '../lib/crypto.js';
@@ -32,15 +31,6 @@ async function saveVideoUrlToDisk(url: string): Promise<string> {
     try { unlinkSync(filepath); } catch {}
     throw err;
   }
-  return filename;
-}
-
-/** Sora отдаёт готовые байты сразу (нет промежуточного внешнего URL от GoAPI) — пишем напрямую. */
-function saveVideoBufferToDisk(buffer: Buffer): string {
-  const dir = path.join(process.cwd(), 'uploads', 'videos');
-  mkdirSync(dir, { recursive: true });
-  const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.mp4`;
-  writeFileSync(path.join(dir, filename), buffer);
   return filename;
 }
 
@@ -84,26 +74,7 @@ export function startReelWorker() {
       const genMode = imageUrl ? 'img2video' : 'txt2video';
       console.info(`[ReelWorker] ${spec.id} | ${genMode} | ${duration} | ${resolution} | audio=${enableAudio}`);
 
-      // Sora — прямой провайдер OpenAI, отдаёт готовые байты, а не URL у GoAPI.
-      // Локальный путь сразу окончательный, фонового докачивания не требуется.
-      if (spec.provider === 'openai-direct') {
-        const soraModel = spec.providerModel as SoraModel | undefined;
-        if (soraModel !== 'sora-2' && soraModel !== 'sora-2-pro') {
-          throw new Error(`[ReelWorker] ${spec.id}: providerModel не задан или не Sora`);
-        }
-        // Sora реально поддерживает только 16:9/9:16 (см. openai-video.ts) — наш общий
-        // тип соотношений шире (для других моделей), сужаем здесь с безопасным дефолтом.
-        const soraAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
-        const buffer = await generateVideoSora(soraModel, prompt, { duration, aspectRatio: soraAspectRatio });
-        const filename = saveVideoBufferToDisk(buffer);
-        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
-        const localUrl = `${API_BASE}/videos/${filename}`;
-
-        await finalizeJob(jobId, chatId, userId, prompt, spec.id, localUrl, mediaCacheMode, !imageUrl);
-        return { mediaUrl: localUrl };
-      }
-
-      // ── GoAPI (Kling / Veo3.1 / Seedance / Hailuo / Wan) ────────────────────
+      // ── GoAPI (Kling / Veo3.1 / Sora 2 / Seedance / Hailuo / Wan / ...) ─────
       let externalUrl: string;
       if (spec.goapiModel === 'kling') {
         const klingDuration = duration === '4s' ? 5 : 10;

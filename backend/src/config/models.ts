@@ -91,8 +91,8 @@ export interface VideoModelSpec extends BaseModelSpec {
   domain: 'video';
   /** Caspers за ролик в зависимости от выбранной длительности. */
   cost: (duration: VideoDurationChoice) => number;
-  provider: 'goapi' | 'openai-direct';
-  /** Значение поля "model" в теле запроса GoAPI (пусто для openai-direct). */
+  provider: 'goapi';
+  /** Значение поля "model" в теле запроса GoAPI. */
   goapiModel: string;
   // goapiTaskType реально ЧИТАЕТСЯ только у goapiModel === 'veo3.1' (reel.worker.ts
   // различает standard/pro по этому полю). У Kling режим/версию задают klingMode/
@@ -103,8 +103,6 @@ export interface VideoModelSpec extends BaseModelSpec {
   // что выглядело так, будто оно на что-то влияет — не заполняем там, где оно
   // не используется, чтобы не вводить в заблуждение при следующем чтении реестра.
   goapiTaskType?: string;
-  /** id модели у провайдера напрямую — сейчас только для provider === 'openai-direct' (Sora). */
-  providerModel?: string;
   // imageRequired — модель работает ТОЛЬКО как image-to-video (SkyReels, Framepack:
   // провайдер обязательно требует image, чистого text-to-video у него нет) —
   // routes/generate.ts отклоняет запрос без videoImageUrl для таких моделей,
@@ -382,16 +380,20 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     previewVideoUrl: '/previews/veo-3.1-pro.mp4',
   },
   {
-    // ⚠️ ЦЕНА-ЗАГЛУШКА. Реальный тариф OpenAI — $0.10/сек, но перевод в Caspers
-    // зависит от курса и желаемой маржи — это решение бизнеса, не может быть
-    // выведено автоматически. НЕ запускать в продакшн без подтверждения цены.
+    // 2026-08-29: переведено с прямой интеграции OpenAI (нужен был отдельный ключ)
+    // на GoAPI — тем же общим GOAPI_API_KEY, что и остальные видео-модели (по прямому
+    // уточнению Александра: "ключ одинаковый для всех моделей"). Sora 2 Pro убрана
+    // из реестра по его же прямому указанию — не нужна. Сверено вживую по
+    // goapi.ai/docs/sora2-api/text-to-video:
+    // модель "sora2", $0.08/с (дешевле прежнего предположения в $0.10/с) — цена
+    // ниже по проверенной ×400-формуле (см. header файла), реальная, не заглушка.
     id: 'sora-2', domain: 'video', label: 'Sora 2', blurb: 'OpenAI · синхронный звук', minPlan: 'PRO',
-    provider: 'openai-direct', goapiModel: '', providerModel: 'sora-2',
-    cost: (d) => secondsOf(d) * 40,
-    autoEligible: false, capabilities: {},
-    // developers.openai.com/api/reference/resources/videos — seconds: 4/8/12 (у нас 2 корзины),
-    // size: 720x1280/1280x720 (текущая интеграция — только 16:9/9:16, см. openai-video.ts).
-    // Resolution/audio/negative_prompt отдельными полями не поддерживаются.
+    provider: 'goapi', goapiModel: 'sora2',
+    cost: (d) => secondsOf(d) * 32,
+    autoEligible: false, capabilities: { imageToVideo: true },
+    // goapi.ai/docs/sora2-api/text-to-video — duration: 4/8/12с (у нас 2 корзины,
+    // совпадают напрямую), aspect_ratio: 16:9/9:16, только 720p, audio отдельным
+    // полем не документирован (в видео Sora включён нативно, без переключателя).
     ui: {
       durationLabels: { '4s': '4с', '8s': '8с' },
       aspectRatios: ['16:9', '9:16'],
@@ -521,20 +523,6 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
       resolutions: ['720p'],
       supportsNegativePrompt: true,
-      cameraPresets: [],
-    },
-  },
-  {
-    // ⚠️ ЦЕНА-ЗАГЛУШКА, см. комментарий у sora-2. Тариф OpenAI — $0.30/сек.
-    id: 'sora-2-pro', domain: 'video', label: 'Sora 2 Pro', blurb: 'OpenAI · максимум качества', minPlan: 'VIP',
-    provider: 'openai-direct', goapiModel: '', providerModel: 'sora-2-pro',
-    cost: (d) => secondsOf(d) * 120,
-    autoEligible: false, capabilities: {},
-    ui: {
-      durationLabels: { '4s': '4с', '8s': '8с' },
-      aspectRatios: ['16:9', '9:16'],
-      resolutions: [],
-      supportsNegativePrompt: false,
       cameraPresets: [],
     },
   },

@@ -55,7 +55,6 @@ const MODEL_ICON_MAP: Record<string, ModelIconEntry> = {
   'skyreels': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
   'framepack': { icon: FALLBACK_ICON, particleShape: FALLBACK_PARTICLE_SHAPE },
   'sora-2': { icon: '/models/sora.svg', particleShape: 'sora' },
-  'sora-2-pro': { icon: '/models/sora.svg', particleShape: 'sora' },
 };
 
 /** SVG-версия лого GhostLine для пункта «Авто» — растровый /ghostline-logo-icon.png

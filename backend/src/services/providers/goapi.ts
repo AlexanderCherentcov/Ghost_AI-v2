@@ -303,6 +303,23 @@ function buildGenericVideoInput(
           ...(opts.negativePrompt?.trim() ? { negative_prompt: opts.negativePrompt.trim() } : {}),
         },
       };
+    case 'sora2':
+      // Контракт подтверждён по goapi.ai/docs/sora2-api/text-to-video (2026-08-29) —
+      // модель "sora2", task_type "sora2-video", $0.08/с (720p — единственное доступное
+      // разрешение). duration принимает 4/8/12с — наши корзины 4s/8s совпадают напрямую,
+      // ремаппинга не нужно (в отличие от Luma/Framepack выше). image_url — первый кадр
+      // (image-to-video), опционально. Дешевле и без отдельного OpenAI-ключа в отличие
+      // от прежней прямой интеграции с OpenAI — Sora 2 Pro убрана из реестра
+      // по прямому указанию Александра (не нужна).
+      return {
+        taskType: 'sora2-video',
+        input: {
+          prompt: opts.prompt,
+          aspect_ratio: opts.aspectRatio,
+          duration: seconds,
+          ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
+        },
+      };
     case 'Qubico/hunyuan':
       // Контракт подтверждён по goapi.ai/docs/hunyuan-video/txt2video-api. Длительность
       // не настраивается провайдером — параметр duration из наших опций не передаётся.

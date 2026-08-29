@@ -355,7 +355,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       if (videoImageUrl && !spec.capabilities?.imageToVideo) {
         return reply.code(400).send({ error: `Модель «${spec.label}» не поддерживает image-to-video`, code: 'MODEL_NO_IMG2VIDEO' });
       }
-      // SkyReels/Framepack у провайдера вообще не имеют text-to-video режима —
+      // SkyReels у провайдера вообще не имеет text-to-video режима —
       // без этой проверки запрос без картинки долетел бы до GoAPI и упал там
       // с невнятной 4xx вместо понятного сообщения пользователю здесь.
       if (!videoImageUrl && spec.capabilities?.imageRequired) {

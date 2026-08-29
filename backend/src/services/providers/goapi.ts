@@ -220,11 +220,16 @@ function buildGenericVideoInput(
 
   switch (goapiModel) {
     case 'seedance':
+      // 2026-08-29: тот же класс бага, что найден у Wan/Hailuo ниже — UI-подпись
+      // (models.ts:seedance-2, durationLabels '4s':'5с' / '8s':'10с') обещает 5/10с,
+      // а сюда уходил общий `seconds` (4/8) без ремаппинга. У Seedance провайдер
+      // формально принимает произвольную длительность 4-15с, так что 4/8 не
+      // отклонялись — но пользователь получал не то, что было подписано в UI.
       return {
         taskType: 'seedance-2',
         input: {
           prompt: opts.prompt,
-          duration: seconds,
+          duration: opts.duration === '4s' ? 5 : 10,
           aspect_ratio: opts.aspectRatio,
           resolution: opts.resolution,
           ...(opts.imageUrl ? { image_urls: [opts.imageUrl] } : {}),
@@ -234,13 +239,17 @@ function buildGenericVideoInput(
       // Провайдер принимает числовое разрешение (768/1080), не строку с "p" — см.
       // goapi.ai/docs/hailuo-api/generate-video. "1080p+10s" провайдером не поддерживается,
       // но это уже прикладная валидация UI (video-model-params.ts), не делаем её здесь дважды.
+      //
+      // 2026-08-29: тот же класс бага, что у Wan — реальные значения провайдера 6с/10с
+      // (см. models.ts:hailuo-v2.3, цены "6с $0.23, 10с $0.45"), а сюда уходил общий
+      // `seconds` (4/8), которых у Hailuo не существует вообще.
       return {
         taskType: 'video_generation',
         input: {
           prompt: opts.prompt,
           model: 'v2.3',
           expand_prompt: true,
-          duration: seconds,
+          duration: opts.duration === '4s' ? 6 : 10,
           resolution: parseInt(opts.resolution, 10) || 768,
           ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
         },
@@ -249,6 +258,13 @@ function buildGenericVideoInput(
       // Отдельный task_type для image-to-video — по паттерну из доков
       // (wan26-text-to-video / wan26-image-to-video), точная строка НЕ
       // подтверждена вызовом API. Проверить при первом реальном запуске.
+      //
+      // 2026-08-29: живой баг — провайдер принимает duration только 5|10|15
+      // (см. models.ts:wan-2.6, durationLabels '4s':'5с' / '8s':'10с'), а сюда
+      // уходил общий `seconds` (4 или 8, буквально) без ремаппинга под конкретные
+      // значения Wan, как это уже сделано для Kling/Luma/Framepack ниже. GoAPI,
+      // получив невалидные 4/8, молча откатывался к дефолту 5с — пользователь
+      // выбирал "10с" в UI, а получал 5с. Правильный ремаппинг — как у остальных.
       return {
         taskType: opts.imageUrl ? 'wan26-img2video' : 'wan26-txt2video',
         input: {
@@ -257,7 +273,7 @@ function buildGenericVideoInput(
           ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
           resolution: opts.resolution,
           aspect_ratio: opts.aspectRatio,
-          duration: seconds,
+          duration: opts.duration === '4s' ? 5 : 10,
           audio: opts.enableAudio,
           watermark: false,
         },

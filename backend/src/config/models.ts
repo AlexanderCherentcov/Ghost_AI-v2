@@ -566,6 +566,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: true,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/wan-2.6.mp4',
   },
   {
     // Реальная цена GoAPI: $0.2 за 5с, $0.4 за 9с — Luma отдаёт видео по 5/9 секунд,

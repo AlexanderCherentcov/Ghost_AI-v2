@@ -127,6 +127,11 @@ export function VideoWidget({
           📎 Эта модель работает только по фото — прикрепите изображение кнопкой ниже
         </p>
       )}
+      {selectedSpec?.capabilities.slowGeneration && (
+        <p className="px-4 pb-2.5 -mt-1 text-[11px] font-medium" style={{ color: 'var(--accent)' }}>
+          ⏳ Генерация у этой модели заметно дольше обычной — наберитесь терпения
+        </p>
+      )}
 
       <SettingsPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={`Настройки — ${selectedSpec?.label ?? 'видео'}`}>
         {params.durationLabels && (

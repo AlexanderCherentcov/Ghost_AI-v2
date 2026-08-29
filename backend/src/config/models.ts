@@ -107,7 +107,12 @@ export interface VideoModelSpec extends BaseModelSpec {
   // провайдер обязательно требует image, чистого text-to-video у него нет) —
   // routes/generate.ts отклоняет запрос без videoImageUrl для таких моделей,
   // а не отправляет заведомо невалидный запрос в GoAPI.
-  capabilities?: { imageToVideo?: boolean; audio?: boolean; imageRequired?: boolean };
+  // slowGeneration — предупредить пользователя в UI, что эта модель генерирует
+  // заметно дольше остальных (сейчас только Framepack — покадровая генерация
+  // длинных 10-30с роликов, реально медленнее типичных 5-10с клипов у прочих
+  // провайдеров). Не влияет на таймаут поллинга — тот уже общий и достаточно
+  // щедрый (pollTask(taskId, 180, 5_000) = до 15 минут, см. goapi.ts).
+  capabilities?: { imageToVideo?: boolean; audio?: boolean; imageRequired?: boolean; slowGeneration?: boolean };
   // true — звук у провайдера встроен нативно, БЕЗ переключателя (сейчас только
   // Sora: capabilities.audio не задан у неё специально, потому что у неё нет
   // отдельного параметра audio в запросе — звук просто всегда есть, см. её
@@ -635,7 +640,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
     cost: (d) => (d === '4s' ? 38 : 75),
     // См. комментарий у hunyuan-video — Hailuo ближе по цене, чем Kling.
     fallbackModelId: 'hailuo-v2.3',
-    autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
+    autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true, slowGeneration: true },
     ui: {
       durationLabels: { '4s': '10с', '8s': '20с' },
       aspectRatios: ['16:9', '9:16', '4:3', '3:4', '1:1'],
@@ -643,6 +648,7 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       supportsNegativePrompt: true,
       cameraPresets: [],
     },
+    previewVideoUrl: '/previews/framepack.mp4',
   },
 ];
 

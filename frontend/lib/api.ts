@@ -476,6 +476,8 @@ export interface ModelCapabilities {
   audio?: boolean;
   /** Модель работает только по фото (Framepack) — чистого text-to-video у неё нет. */
   imageRequired?: boolean;
+  /** Генерация заметно дольше обычной (сейчас только Framepack) — показать предупреждение в UI. */
+  slowGeneration?: boolean;
 }
 export interface ChatModelOption {
   id: string;

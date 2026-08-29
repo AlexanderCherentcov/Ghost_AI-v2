@@ -292,20 +292,6 @@ function buildGenericVideoInput(
           loop: false,
         },
       };
-    case 'Qubico/skyreels':
-      // Контракт подтверждён по goapi.ai/docs/skyreels-api/create-task — модель
-      // ТОЛЬКО image-to-video (prompt и image оба обязательны у провайдера),
-      // длительность не настраивается вообще, цена — $0.15 фиксированно за
-      // генерацию. Наличие opts.imageUrl проверяется раньше, в routes/generate.ts
-      // (capabilities.imageRequired), сюда долетает уже гарантированно с картинкой.
-      return {
-        taskType: 'img2video',
-        input: {
-          prompt: opts.prompt,
-          image: opts.imageUrl,
-          aspect_ratio: opts.aspectRatio,
-        },
-      };
     case 'Qubico/framepack':
       // Контракт подтверждён по goapi.ai/docs/framepack-api/create-task — тоже
       // только image-to-video, длительность провайдер принимает диапазоном

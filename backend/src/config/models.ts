@@ -103,7 +103,7 @@ export interface VideoModelSpec extends BaseModelSpec {
   // что выглядело так, будто оно на что-то влияет — не заполняем там, где оно
   // не используется, чтобы не вводить в заблуждение при следующем чтении реестра.
   goapiTaskType?: string;
-  // imageRequired — модель работает ТОЛЬКО как image-to-video (SkyReels, Framepack:
+  // imageRequired — модель работает ТОЛЬКО как image-to-video (Framepack:
   // провайдер обязательно требует image, чистого text-to-video у него нет) —
   // routes/generate.ts отклоняет запрос без videoImageUrl для таких моделей,
   // а не отправляет заведомо невалидный запрос в GoAPI.
@@ -622,26 +622,9 @@ export const VIDEO_MODELS: VideoModelSpec[] = [
       cameraPresets: [],
     },
   },
-  {
-    // 2026-08-20: goapi.ai/docs/skyreels-api/create-task — модель ТОЛЬКО
-    // image-to-video (prompt и image оба обязательны у провайдера, чистого
-    // text-to-video не существует — см. capabilities.imageRequired ниже).
-    // Длительность не настраивается вообще, цена фиксированная $0.15/генерацию.
-    id: 'skyreels', domain: 'video', label: 'SkyReels', blurb: 'По вашей фотографии', minPlan: 'BASIC',
-    provider: 'goapi', goapiModel: 'Qubico/skyreels',
-    cost: () => 19,
-    // См. комментарий у hunyuan-video — Hailuo ближе по цене, чем Kling, для
-    // самых дешёвых моделей каталога.
-    fallbackModelId: 'hailuo-v2.3',
-    autoEligible: false, capabilities: { imageToVideo: true, imageRequired: true },
-    ui: {
-      durationLabels: null,
-      aspectRatios: ['16:9', '9:16', '1:1'],
-      resolutions: [],
-      supportsNegativePrompt: false,
-      cameraPresets: [],
-    },
-  },
+  // SkyReels — УБРАНА 2026-08-29 по прямому указанию Александра. Контракт был
+  // goapi.ai/docs/skyreels-api/create-task, provider 'Qubico/skyreels', $0.15
+  // фиксированно за генерацию, только image-to-video, длительность не настраивается.
   {
     // 2026-08-20: goapi.ai/docs/framepack-api/create-task — тоже только
     // image-to-video. Провайдер принимает произвольную длительность 10-30с

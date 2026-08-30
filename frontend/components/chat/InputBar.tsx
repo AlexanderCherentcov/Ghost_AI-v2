@@ -111,6 +111,66 @@ export function InputBar({
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [generatingLyrics, setGeneratingLyrics] = useState(false);
 
+  // Диктовка в поле ввода — браузерный Web Speech API (бесплатно, без бэкенда).
+  // По прямому запросу Александра: "нажимал микрофон диктовала, а в чате при
+  // этом печатался текст" — распознавание идёт ЖИВЬЁМ прямо в textarea, это
+  // НЕ то же самое, что режим "Голос" (VoiceWidget) — тот отправляет готовый
+  // аудио-файл на бэкенд и ждёт полного ответа ИИ, диктовка просто печатает.
+  //
+  // speechSupported стартует false и обновляется только в эффекте (не читаем
+  // window при рендере) — тот же приём, что и восстановление imageModel из
+  // localStorage выше, иначе серверный рендер разойдётся с клиентским
+  // (hydration mismatch). Только Chrome/Edge (webkitSpeechRecognition) —
+  // честная деградация: Safari/Firefox просто не увидят кнопку вообще.
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  // Текст ДО начала надиктовки — новые фразы дописываются поверх него, а не
+  // затирают то, что пользователь уже успел напечатать вручную.
+  const dictationBaseRef = useRef('');
+  useEffect(() => {
+    setSpeechSupported(!!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition);
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  function toggleDictation() {
+    if (dictating) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    dictationBaseRef.current = value.trim() ? `${value.trim()} ` : '';
+    recognition.onresult = (e: any) => {
+      let finalChunk = '';
+      let interimChunk = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalChunk += transcript;
+        else interimChunk += transcript;
+      }
+      if (finalChunk) dictationBaseRef.current += `${finalChunk} `;
+      setValue(dictationBaseRef.current + interimChunk);
+      requestAnimationFrame(adjustHeight);
+    };
+    recognition.onerror = (e: any) => {
+      setDictating(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        show('Нет доступа к микрофону — разрешите доступ в настройках браузера', 'error');
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        show('Не удалось распознать речь, попробуйте ещё раз', 'error');
+      }
+    };
+    recognition.onend = () => setDictating(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setDictating(true);
+  }
+
   // Стоимость операций в Caspers — с бэкенда (GET /plans), DEFAULT_CASPER_COSTS
   // используется только как запасной вариант, пока запрос не завершился.
   const [casperCosts, setCasperCosts] = useState<CasperCosts>(DEFAULT_CASPER_COSTS);
@@ -519,21 +579,43 @@ export function InputBar({
             onChange={handleFileChange}
           />
 
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => { setValue(e.target.value); adjustHeight(); onInputChange?.(e.target.value); }}
-            onKeyDown={handleKeyDown}
-            placeholder={activePlaceholder}
-            disabled={disabled}
-            rows={1}
-            spellCheck={true}
-            style={{ fontSize: '16px', minHeight: '36px', color: 'var(--text-primary)' }}
-            className={cn(
-              'w-full bg-transparent resize-none outline-none leading-[1.75] max-h-[200px] placeholder:opacity-30',
-              disabled && 'opacity-50 cursor-not-allowed'
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => { setValue(e.target.value); adjustHeight(); onInputChange?.(e.target.value); }}
+              onKeyDown={handleKeyDown}
+              placeholder={dictating ? 'Слушаю...' : activePlaceholder}
+              disabled={disabled}
+              rows={1}
+              spellCheck={true}
+              style={{ fontSize: '16px', minHeight: '36px', color: 'var(--text-primary)' }}
+              className={cn(
+                'w-full bg-transparent resize-none outline-none leading-[1.75] max-h-[200px] placeholder:opacity-30',
+                speechSupported && 'pr-8',
+                disabled && 'opacity-50 cursor-not-allowed'
+              )}
+            />
+            {/* Диктовка — только Chrome/Edge (Web Speech API), честная деградация
+                для остальных браузеров: кнопка просто не рендерится вообще. */}
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleDictation}
+                disabled={disabled}
+                title={dictating ? 'Остановить диктовку' : 'Диктовать голосом'}
+                aria-label={dictating ? 'Остановить диктовку' : 'Диктовать голосом'}
+                className={cn(
+                  'absolute top-0.5 right-0 w-7 h-7 flex items-center justify-center rounded-md transition-colors',
+                  dictating ? 'text-red-400 animate-pulse' : 'opacity-35 hover:opacity-80',
+                  disabled && 'opacity-20 cursor-not-allowed'
+                )}
+                style={!dictating ? { color: 'var(--text-primary)' } : {}}
+              >
+                <MicIcon size={15} />
+              </button>
             )}
-          />
+          </div>
 
           {/* Тулбар — на мобильном разбит на 2 строки (иначе не помещается: прикрепить +
               режим + модель + отправка физически не влезают в один ряд на узком экране,

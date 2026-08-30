@@ -230,12 +230,17 @@ export async function generateImageFlux(
 }
 
 // ─── Голос: распознавание и синтез речи (gpt-audio-mini через chat completions) ──
-// ⚠️ Формат запроса/ответа собран по документированному API OpenAI для
-// audio-модальности (modalities:['text','audio'], input_audio/audio в content,
-// message.audio.data в ответе) — НЕ проверен живым вызовом (нет доступа к
-// реальному ключу в момент написания). Если формат отличается, упадёт с понятной
-// ошибкой в voice.worker.ts, а не тихо вернёт мусор — но перед продакшном
-// нужен один реальный тестовый вызов.
+// 2026-08-30: живым вызовом проверено и найдено, что синтез речи (не распознавание)
+// был СЛОМАН в проде — OpenAI в какой-то момент после написания этого файла стал
+// требовать stream:true для audio-модальности в Chat Completions ("400 Audio output
+// requires stream: true"), а при stream:true формат ОБЯЗАН быть 'pcm16' (mp3/wav
+// отклоняются: "Unsupported value: 'audio.format' does not support 'mp3' when
+// stream=true. Supported values are: 'pcm16'"). pcm16 — сырой поток без заголовка,
+// 24kHz/mono/16-bit little-endian (подтверждено и документацией OpenAI, и математикой
+// живого ответа: 256000 base64-символов ≈ 192000 байт / (24000×2 байт/с) ≈ 4с для
+// "Hello world! It's..." — сходится). Раз браузер не проигрывает голый PCM без
+// контейнера, оборачиваем в минимальный WAV-заголовок (pcm16ToWav ниже) вместо
+// прежнего mp3.
 
 export const VOICE_MODEL = 'openai/gpt-audio-mini';
 
@@ -281,22 +286,57 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
   return text.trim();
 }
 
-/** Озвучивает текст и возвращает аудио как data URI (mp3, base64). */
-export async function synthesizeSpeech(text: string): Promise<string> {
+/** Оборачивает сырой PCM16 (24kHz, mono, 16-bit little-endian, без заголовка) в минимальный WAV-контейнер. */
+function pcm16ToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16): Buffer {
+  const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16); // размер PCM-подчанка fmt
+  header.writeUInt16LE(1, 20);  // audio format = 1 (PCM без сжатия)
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+/**
+ * Озвучивает текст и возвращает аудио как data URI (WAV, base64).
+ * @param voice OpenAI-голос — см. полный список в docs (alloy/echo/fable/onyx/nova/
+ *   shimmer/ash/ballad/coral/sage/verse/marin/cedar). По умолчанию 'alloy' — тот же,
+ *   что использовался всегда, менять поведение существующего голосового чата не нужно.
+ */
+export async function synthesizeSpeech(text: string, voice: string = 'alloy'): Promise<string> {
   const client = getClient();
-  const resp = await client.chat.completions.create({
+  // stream:true ОБЯЗАТЕЛЕН для audio-модальности (см. комментарий выше), при
+  // stream:true формат ОБЯЗАН быть 'pcm16' — эти два требования не опциональны,
+  // проверено живым вызовом, не выбор дизайна.
+  const stream = await client.chat.completions.create({
     model: VOICE_MODEL,
     modalities: ['text', 'audio'] as any,
-    audio: { voice: 'alloy', format: 'mp3' } as any,
+    audio: { voice, format: 'pcm16' } as any,
+    stream: true,
     messages: [
       { role: 'system', content: 'Read the following text aloud naturally, exactly as written. Do not add anything.' },
       { role: 'user', content: text },
     ] as OpenAI.ChatCompletionMessageParam[],
   });
 
-  const audioData = (resp.choices[0]?.message as any)?.audio?.data;
-  if (!audioData || typeof audioData !== 'string') {
-    throw new Error('[synthesizeSpeech] No audio in model response');
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream as any) {
+    const data = chunk.choices?.[0]?.delta?.audio?.data;
+    if (data) chunks.push(Buffer.from(data, 'base64'));
   }
-  return `data:audio/mp3;base64,${audioData}`;
+  if (chunks.length === 0) {
+    throw new Error('[synthesizeSpeech] No audio data in stream response');
+  }
+  const wav = pcm16ToWav(Buffer.concat(chunks));
+  return `data:audio/wav;base64,${wav.toString('base64')}`;
 }

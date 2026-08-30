@@ -4,7 +4,8 @@ import { prisma } from '../lib/prisma.js';
 import { checkResets, checkAndDeduct, refundCaspers } from '../services/tokens.js';
 import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
 import { findModel, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID, type VideoDurationChoice } from '../config/models.js';
-import { visionQueue, soundQueue, reelQueue, voiceQueue } from '../lib/bullmq.js';
+import { visionQueue, soundQueue, reelQueue, voiceQueue, ttsQueue } from '../lib/bullmq.js';
+import { TTS_VOICE_IDS, DEFAULT_TTS_VOICE } from '../config/tts-voices.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
@@ -32,6 +33,7 @@ const STALE_JOB_MINUTES: Record<string, number> = {
   sound: 5,
   reel: 15,
   voice: 3,
+  tts: 3,
 };
 
 async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTES) {
@@ -79,7 +81,17 @@ const generateSchema = z.object({
   sunoInstrumental: z.boolean().optional(),
   // Голосовой чат: URL записанного голосового сообщения (уже загружен через /upload/audio)
   audioUrl: z.string().url().optional(),
+  // Режим "Озвучка" (text-to-speech, отдельный от голосового чата) — текст для
+  // озвучки идёт в общем поле prompt (см. TTS_TEXT_MAX_LENGTH ниже), voice —
+  // id голоса из TTS_VOICES (config/tts-voices.ts), проверяется в самом хендлере.
+  ttsVoice: z.string().optional(),
 });
+
+// Отдельный лимит от generateSchema.prompt (до 2000 симв. для чата/картинок/видео) —
+// та же граница, что у промпта Suno в custom mode (providers/suno.ts) и у самого
+// голосового чата (VoiceWidget записывает реплику, не эссе) — озвучка длинного
+// текста стоила бы непропорционально долго и не укладывается в UX "быстро озвучить фразу".
+const TTS_TEXT_MAX_LENGTH = 500;
 
 /**
  * Имитирует задержку генерации при попадании в кэш, чтобы UI показал анимацию загрузки.
@@ -525,6 +537,78 @@ export default async function generateRoutes(fastify: FastifyInstance) {
           userId,
           userName: userInfo?.name,
           operation: 'voice_gen',
+          error: err.message,
+        }).catch(() => {});
+        throw err;
+      });
+
+      await prisma.generateJob.update({
+        where: { id: job.id },
+        data: { bullJobId: bullJob.id },
+      });
+
+      return reply.code(202).send({ jobId: job.id });
+    },
+  });
+
+  // ── TTS (озвучка текста, отдельный режим — не голосовой чат) ────────────────
+  fastify.post('/generate/tts', {
+    preHandler: [fastify.authenticate],
+    handler: async (request, reply) => {
+      const { userId } = request.user;
+      const { prompt: text, chatId, ttsVoice } = generateSchema.parse(request.body);
+
+      if (!text?.trim()) return reply.code(400).send({ error: 'Текст обязателен', code: 'INVALID_REQUEST' });
+      if (text.length > TTS_TEXT_MAX_LENGTH) {
+        return reply.code(400).send({ error: `Текст длиннее ${TTS_TEXT_MAX_LENGTH} символов`, code: 'INVALID_REQUEST' });
+      }
+      const voice = ttsVoice && TTS_VOICE_IDS.has(ttsVoice) ? ttsVoice : DEFAULT_TTS_VOICE;
+
+      // Сбрасываем счётчики, если период закончился
+      await checkResets(userId);
+
+      // Rate limit — тот же лимит, что у картинок/голоса (3/мин)
+      if (!await checkGenRateLimit(userId)) {
+        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
+      }
+
+      const activeJob = await findActiveJob(userId, 'tts');
+      if (activeJob) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
+      }
+
+      let deductResult;
+      try {
+        deductResult = await checkAndDeduct(userId, 'tts', CASPER_COSTS.tts_generate, 'tts_generate');
+      } catch (err: any) {
+        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_TTS' });
+      }
+
+      // Сохраняем сообщение пользователя (сам текст на озвучку) в историю чата
+      if (chatId) {
+        await prisma.message.create({
+          data: { chatId, userId, role: 'user', content: encrypt(text), mode: 'tts', tokensCost: 0, mediaUrl: null },
+        }).catch((e) => console.error('[generate/tts] Failed to save user message:', e.message));
+      }
+
+      const job = await prisma.generateJob.create({
+        data: { userId, mode: 'tts', prompt: text },
+      });
+
+      const bullJob = await ttsQueue.add('generate-tts', {
+        jobId: job.id,
+        userId,
+        chatId: chatId ?? null,
+        text,
+        voice,
+        caspersSpent: deductResult.caspersSpent,
+      }).catch(async (err: any) => {
+        await refundCaspers(userId, deductResult.caspersSpent, 'tts_generate').catch(() => {});
+        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+        notifyApiError({
+          userId,
+          userName: userInfo?.name,
+          operation: 'tts_gen',
           error: err.message,
         }).catch(() => {});
         throw err;

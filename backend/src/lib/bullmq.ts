@@ -40,5 +40,6 @@ export const visionQueue = new Queue('vision', mediaQueueOptions);
 export const soundQueue = new Queue('sound', mediaQueueOptions);
 export const reelQueue = new Queue('reel', mediaQueueOptions);
 export const voiceQueue = new Queue('voice', mediaQueueOptions);
+export const ttsQueue = new Queue('tts', mediaQueueOptions);
 
 export { connection as bullmqConnection };

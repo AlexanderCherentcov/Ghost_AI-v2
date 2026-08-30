@@ -1,7 +1,4 @@
 import { Worker, type Job } from 'bullmq';
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import { bullmqConnection } from '../lib/bullmq.js';
 import { prisma } from '../lib/prisma.js';
 import { transcribeAudio, synthesizeSpeech, callOpenRouterJSON, type ChatMessage } from '../services/providers/openrouter.js';
@@ -11,18 +8,7 @@ import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
 import { refundCaspers } from '../services/tokens.js';
 import { friendlyGenerationError } from '../lib/generation-error.js';
-
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'audio');
-
-/** Сохраняет data:audio/... URI на диск, возвращает публичный URL — как saveDataUri в vision.worker.ts, но для аудио. */
-function saveAudioDataUri(dataUri: string): string {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  const [header, base64] = dataUri.split(',');
-  const ext = header.includes('mp3') || header.includes('mpeg') ? 'mp3' : header.includes('wav') ? 'wav' : 'mp3';
-  const filename = `${crypto.randomUUID()}.${ext}`;
-  fs.writeFileSync(path.join(UPLOADS_DIR, filename), Buffer.from(base64, 'base64'));
-  return `${process.env.API_URL ?? 'http://localhost:4000'}/audio/${filename}`;
-}
+import { saveAudioDataUri } from '../lib/audio-storage.js';
 
 // Голосовые ответы читаются вслух — markdown/списки/код там неуместны, ответ должен
 // быть коротким и звучать как реплика в разговоре, а не как текстовый документ.

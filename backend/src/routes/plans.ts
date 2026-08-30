@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { PLANS, PLAN_KEYS, FREE_LIMITS, FREE_WELCOME_CASPERS, CASPER_COSTS, CASPER_PRICE_TIERS } from '../config/plans.js';
 import { AUTO_MIN_COST, AUTO_MODEL_ID, CHAT_MODELS, IMAGE_MODELS, VIDEO_MODELS } from '../config/models.js';
+import { TTS_VOICES } from '../config/tts-voices.js';
 
 /**
  * Публичная проекция реестра моделей — без provider/providerModel/goapiModel и т.п.
@@ -57,6 +58,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
       casper_costs: CASPER_COSTS,
       casper_price_tiers: CASPER_PRICE_TIERS,
       models: publicModels(),
+      tts_voices: TTS_VOICES,
     });
   });
 }

@@ -15,6 +15,7 @@ const SYSTEM_REASON_LABELS: Record<string, string> = {
   topup: 'Пополнение баланса',
   music_generate: 'Генерация музыки',
   voice_exchange: 'Голосовое сообщение',
+  tts_generate: 'Озвучка текста',
   lipsync: 'Синхронизация губ (Lip Sync)',
 };
 

@@ -90,6 +90,7 @@ export default function ChatConversationPage() {
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [generatingVoice, setGeneratingVoice] = useState(false);
+  const [generatingTts, setGeneratingTts] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
   // Восстанавливаем последний режим композера ПОСЛЕ монтирования, не в
@@ -154,6 +155,7 @@ export default function ChatConversationPage() {
   // Синхронные ref-guards против двойного запуска генерации (state-updates async, refs sync)
   const generatingVideoRef = useRef(false);
   const generatingMusicRef = useRef(false);
+  const generatingTtsRef = useRef(false);
   // Предотвращает повторный auto-send для того же чата
   const autoSentChatRef = useRef<string | null>(null);
 
@@ -184,7 +186,7 @@ export default function ChatConversationPage() {
         const stored = localStorage.getItem(`pending_gen_${id}`);
         if (!stored) return;
         try {
-          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'voice' | 'sound'; prompt: string };
+          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'voice' | 'sound' | 'tts'; prompt: string };
           // Раньше "уже готово" проверялось эвристикой по messages (любое сообщение
           // этого режима с реальным медиа) — в чате с несколькими прошлыми видео это
           // ложно срабатывало на СВЕЖЕЙ ещё не готовой генерации (совпадение по mode,
@@ -219,13 +221,14 @@ export default function ChatConversationPage() {
                 if (mode === 'vision') setGeneratingImage(true);
                 else if (mode === 'reel') setGeneratingVideo(true);
                 else if (mode === 'voice') setGeneratingVoice(true);
+                else if (mode === 'tts') setGeneratingTts(true);
                 else setGeneratingMusic(true);
               }
               await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : mode === 'voice' ? 1500 : 2000));
               return pollResume();
             }
           };
-          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); setGeneratingVoice(false); setGeneratingMusic(false); });
+          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); setGeneratingVoice(false); setGeneratingMusic(false); setGeneratingTts(false); });
         } catch {
           localStorage.removeItem(`pending_gen_${id}`);
         }
@@ -276,13 +279,15 @@ export default function ChatConversationPage() {
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
     const initialVoiceAudioUrl  = sessionStorage.getItem('initialVoiceAudioUrl');
     const initialVoiceAudioType = sessionStorage.getItem('initialVoiceAudioType') ?? 'audio/webm';
+    const initialTtsText  = sessionStorage.getItem('initialTtsText');
+    const initialTtsVoice = sessionStorage.getItem('initialTtsVoice') ?? undefined;
 
-    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl || initialVoiceAudioUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialTtsText || initialImageUrl || initialFileContent || initialBinaryUrl || initialVoiceAudioUrl;
     if (!hasAny) return;
 
     autoSentChatRef.current = id; // помечаем чат как автоотправленный до начала асинхронной работы
     ['initialPrompt','initialImagePrompt','initialImageModel','initialImageAspectRatio','initialVideoPrompt','initialVideoOptions','initialMusicPrompt','initialMusicMode','initialMusicDuration',
-     'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
+     'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental','initialTtsText','initialTtsVoice',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
      'initialVoiceAudioUrl','initialVoiceAudioType',
     ].forEach((k) => sessionStorage.removeItem(k));
@@ -306,6 +311,9 @@ export default function ChatConversationPage() {
       } else if (initialMusicPrompt) {
         setChatMode('music');
         handleGenerateMusic(initialMusicPrompt, initialMusicMode, initialMusicDuration, initialSunoStyle, initialSunoTitle, initialSunoInstrumental, initialLyrics);
+      } else if (initialTtsText) {
+        setChatMode('tts');
+        handleGenerateTts(initialTtsText, initialTtsVoice);
       } else if (initialImagePrompt) {
         setChatMode('images');
         if (initialImageModel) setPresetImageModel(initialImageModel);
@@ -621,6 +629,73 @@ export default function ChatConversationPage() {
     }
   }, [accessToken, messagesReady, triggerAutoTitle]);
 
+  // ── Озвучка текста (TTS) — отдельный от голосового чата режим, тот же паттерн,
+  // что и handleGenerateMusic выше, только без title/style и с выбором голоса. ──
+  const handleGenerateTts = useCallback(async (text: string, ttsVoice?: string) => {
+    if (!accessToken || !messagesReady) return;
+    if (generatingTtsRef.current) return;
+    generatingTtsRef.current = true;
+    setGeneratingTts(true);
+
+    addMessage({
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      role: 'user',
+      content: text,
+      mode: 'tts',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    const placeholder: Message = {
+      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      role: 'assistant',
+      content: '',
+      mode: 'tts',
+      tokensCost: 0,
+      cacheHit: false,
+      mediaUrl: '__loading__',
+      createdAt: new Date().toISOString(),
+    };
+    addMessage(placeholder);
+
+    try {
+      const { jobId } = await api.generate.tts({ prompt: text, chatId: id, ttsVoice });
+      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'tts', prompt: text }));
+
+      const poll = async (): Promise<void> => {
+        if (!mountedRef.current) return;
+        const job = await api.generate.status(jobId);
+        if (!mountedRef.current) return;
+        if (job.status === 'done' && job.mediaUrl) {
+          patchOrAppendMessage(placeholder, { content: text, mediaUrl: job.mediaUrl, tokensCost: 0 });
+          triggerAutoTitle(text);
+        } else if (job.status === 'failed') {
+          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось озвучить текст'}`, mediaUrl: null });
+          triggerAutoTitle(text);
+        } else {
+          await new Promise((r) => setTimeout(r, 2000));
+          return poll();
+        }
+      };
+
+      await poll();
+    } catch (err: any) {
+      patchOrAppendMessage(placeholder, { content: 'Ошибка озвучки текста', mediaUrl: null });
+      if (err.code === 'LIMIT_TTS') {
+        showToast(err.message ?? 'Недостаточно Caspers для озвучки текста', 'error');
+      } else {
+        showToast(err.message ?? 'Ошибка озвучки текста', 'error');
+      }
+      triggerAutoTitle(text);
+    } finally {
+      localStorage.removeItem(`pending_gen_${id}`);
+      generatingTtsRef.current = false;
+      setGeneratingTts(false);
+    }
+  }, [accessToken, messagesReady, triggerAutoTitle]);
+
   // ── Диспетчер — определение намерения по вводу пользователя с задержкой ────────
   const handleInputChange = useCallback((text: string) => {
     // Автоопределение только в режиме чата; пропускаем, если пользователь уже открыл виджет
@@ -668,8 +743,8 @@ export default function ChatConversationPage() {
   }, [handleSetChatMode]);
 
   // ── Главный обработчик отправки ─────────────────────────────────────────────────
-  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, imageModel?: string, imageAspectRatio?: string) => {
-    if ((isStreaming || generatingImage || generatingVideo || generatingMusic) || !accessToken || !messagesReady) return;
+  const handleSend = useCallback(async (prompt: string, file?: File, videoOptions?: VideoOptions, musicMode?: MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, imageModel?: string, imageAspectRatio?: string, ttsVoice?: string) => {
+    if ((isStreaming || generatingImage || generatingVideo || generatingMusic || generatingTts) || !accessToken || !messagesReady) return;
     // Сбрасываем предложение диспетчера при каждой отправке
     setDispatchResult(null);
 
@@ -748,6 +823,10 @@ export default function ChatConversationPage() {
         return;
       }
       return handleGenerateMusic(prompt, musicMode ?? 'short', musicDuration, sunoStyle, sunoTitle, sunoInstrumental, lyrics);
+    }
+    if (chatMode === 'tts') {
+      if (!prompt.trim()) return;
+      return handleGenerateTts(prompt, ttsVoice);
     }
 
     // Режим чата — отправленное сообщение всегда идёт в чат, без угадывания
@@ -877,9 +956,9 @@ export default function ChatConversationPage() {
         showToast(err.message ?? 'Не удалось отправить сообщение', 'error');
       }
     }
-  }, [id, messages, model, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
+  }, [id, messages, model, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, generatingTts, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, handleGenerateTts, showToast]);
 
-  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || generatingVoice || !messagesReady;
+  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || generatingVoice || generatingTts || !messagesReady;
 
   // isLoading = true, пока ждём токен ИЛИ ждём сообщения с сервера
   const isLoading = !accessToken || !messagesReady;
@@ -890,7 +969,9 @@ export default function ChatConversationPage() {
       ? 'Опишите видео...'
       : chatMode === 'music'
         ? 'Опишите стиль или настроение музыки...'
-        : 'Продолжайте диалог...';
+        : chatMode === 'tts'
+          ? 'Введите текст для озвучки...'
+          : 'Продолжайте диалог...';
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

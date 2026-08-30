@@ -32,6 +32,7 @@ import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
 import { startVoiceWorker } from './workers/voice.worker.js';
+import { startTtsWorker } from './workers/tts.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Сборка приложения ──────────────────────────────────────────────────────
@@ -330,6 +331,7 @@ async function start() {
   startSoundWorker();
   startReelWorker();
   startVoiceWorker();
+  startTtsWorker();
 
   // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();

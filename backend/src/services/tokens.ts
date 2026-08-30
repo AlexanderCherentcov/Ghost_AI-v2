@@ -9,7 +9,7 @@ import { FREE_LIMITS, CASPER_COSTS } from '../config/plans.js';
  * моделей, цена берётся из статического CASPER_COSTS.music_generate,
  * как и раньше.
  */
-export type SpendDomain = 'chat' | 'image' | 'video' | 'music' | 'voice' | 'tts';
+export type SpendDomain = 'chat' | 'image' | 'video' | 'music' | 'voice';
 
 export { CASPER_COSTS };
 
@@ -229,7 +229,6 @@ export async function checkAndDeduct(
       video: { code: 'LIMIT_VIDEOS', message: 'Недостаточно Caspers для генерации видео' },
       music: { code: 'LIMIT_MUSIC', message: 'Недостаточно Caspers для генерации музыки' },
       voice: { code: 'LIMIT_VOICE', message: 'Недостаточно Caspers для голосового сообщения' },
-      tts: { code: 'LIMIT_TTS', message: 'Недостаточно Caspers для озвучки текста' },
     };
     const { code, message } = errorMap[domain as Exclude<SpendDomain, 'chat'>];
     await deductCaspersOrThrow(tx, userId, cost, reason, code, message);

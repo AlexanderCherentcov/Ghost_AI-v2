@@ -13,7 +13,7 @@ import { getFileCategory } from '@/components/chat/InputBar';
 import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { modelParticleShape } from '@/lib/model-icons';
 import { MODEL_DESCRIPTIONS } from '@/lib/model-descriptions';
-import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, SoundIcon, CasperCoin } from '@/components/icons';
+import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, CasperCoin } from '@/components/icons';
 import { cn, capitalizeFirst } from '@/lib/utils';
 
 // Мокап (Chat.dc.html: quickModeKeys) показывает 4 пилюли включая активный текущий
@@ -26,7 +26,6 @@ const QUICK_MODES: { mode: ChatMode; label: string; Icon: typeof ChatIcon }[] = 
   { mode: 'video',  label: 'Видео',    Icon: VideoIcon },
   { mode: 'music',  label: 'Музыка',   Icon: MusicIcon },
   { mode: 'voice',  label: 'Голос',    Icon: MicIcon },
-  { mode: 'tts',    label: 'Озвучка',  Icon: SoundIcon },
 ];
 
 interface DiscoveryItem {
@@ -493,7 +492,7 @@ export default function ChatPage() {
     useChatStore.getState().setMessages([]);
   }, []);
 
-  async function handleSend(prompt: string, file?: File, videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, imageModel?: string, imageAspectRatio?: string, ttsVoice?: string) {
+  async function handleSend(prompt: string, file?: File, videoOptions?: import('@/components/chat/InputBar').VideoOptions, musicMode?: import('@/components/chat/InputBar').MusicMode, musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string, imageModel?: string, imageAspectRatio?: string) {
     setShowDiscovery(false);
     let chat: Awaited<ReturnType<typeof api.chats.create>>;
     try {
@@ -521,14 +520,6 @@ export default function ChatPage() {
       if (sunoStyle) sessionStorage.setItem('initialSunoStyle', sunoStyle);
       if (sunoTitle) sessionStorage.setItem('initialSunoTitle', sunoTitle);
       if (sunoInstrumental !== undefined) sessionStorage.setItem('initialSunoInstrumental', String(sunoInstrumental));
-      router.push(`/chat/${chat.id}`);
-      return;
-    }
-
-    // Режим озвучки — сохраняем текст и переходим
-    if (chatMode === 'tts') {
-      sessionStorage.setItem('initialTtsText', prompt);
-      if (ttsVoice) sessionStorage.setItem('initialTtsVoice', ttsVoice);
       router.push(`/chat/${chat.id}`);
       return;
     }

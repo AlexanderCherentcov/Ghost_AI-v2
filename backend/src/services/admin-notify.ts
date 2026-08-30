@@ -103,7 +103,6 @@ export async function notifyApiError(info: {
     image_gen: '🖼 Генерация изображения',
     video_gen: '🎬 Генерация видео',
     music_gen: '🎵 Генерация музыки',
-    tts_gen:   '🔊 Озвучка текста',
     chat:      '💬 Чат',
   };
   const label = opLabel[info.operation] ?? `⚙️ ${info.operation}`;

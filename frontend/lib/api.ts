@@ -290,14 +290,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    // Режим "Озвучка" (text-to-speech) — отдельный от голосового чата (voice выше):
-    // тот отправляет аудио-файл и получает распознавание+ответ+озвучку целиком,
-    // этот просто озвучивает готовый текст выбранным голосом.
-    tts: (data: { prompt: string; chatId?: string; ttsVoice?: string }) =>
-      request<{ jobId: string }>('/generate/tts', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
     lyrics: (data: { topic: string; style?: string; instrumental?: boolean }) =>
       request<{ lyrics: string }>('/generate/lyrics', {
         method: 'POST',
@@ -530,13 +522,6 @@ export interface VideoModelOption {
   previewVideoUrl?: string;
 }
 
-export interface TtsVoiceOption {
-  id: string;
-  label: string;
-  recommended?: boolean;
-  previewUrl: string;
-}
-
 export interface PlansResponse {
   plans: PlanInfo[];
   free: PlanInfo & { limits: FreeLimits; welcome_caspers: number };
@@ -547,6 +532,4 @@ export interface PlansResponse {
     image: ImageModelOption[];
     video: VideoModelOption[];
   };
-  /** Голоса для режима "Озвучка" (text-to-speech) — см. backend/src/config/tts-voices.ts. */
-  tts_voices: TtsVoiceOption[];
 }

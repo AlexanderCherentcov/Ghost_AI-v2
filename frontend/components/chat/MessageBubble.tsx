@@ -238,11 +238,10 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
   const isMusic = mode === 'sound';
   const isVoice = mode === 'voice';
-  const isTts = mode === 'tts';
   return (
     <div
       className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-4 ${
-        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : (isMusic || isVoice || isTts) ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
+        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : (isMusic || isVoice) ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
       }`}
     >
       {/* Оверлей мерцания */}
@@ -272,12 +271,6 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
           <circle cx="6" cy="24" r="3" stroke="currentColor" strokeWidth="1.5"/>
           <circle cx="22" cy="21" r="3" stroke="currentColor" strokeWidth="1.5"/>
         </svg>
-      ) : isTts ? (
-        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
-          <path d="M4 13v6h5l7 6V7l-7 6H4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-          <path d="M22 11a7 7 0 0 1 0 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          <path d="M25.5 8a12 12 0 0 1 0 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
       ) : (
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="3" y="3" width="26" height="26" rx="4" stroke="currentColor" strokeWidth="1.5"/>
@@ -297,7 +290,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
       </div>
       <div className="flex flex-col items-center gap-1 px-4 text-center">
         <span className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {isVideo ? 'Генерирую видео...' : isMusic ? 'Создаю трек...' : isVoice ? 'Думаю и озвучиваю ответ...' : isTts ? 'Озвучиваю текст...' : 'Генерирую картинку...'}
+          {isVideo ? 'Генерирую видео...' : isMusic ? 'Создаю трек...' : isVoice ? 'Думаю и озвучиваю ответ...' : 'Генерирую картинку...'}
         </span>
         {isVideo && (
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
@@ -309,7 +302,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
             Обычно занимает 1–2 минуты
           </span>
         )}
-        {!isVideo && !isMusic && !isVoice && !isTts && (
+        {!isVideo && !isMusic && !isVoice && (
           // Большинство картиночных моделей укладываются в 10-30 секунд, но у
           // тяжёлых reasoning-моделей (напр. gpt-image) реально бывает и 6+ минут
           // (живое подтверждение по логам OpenRouter) — таймаут на бэкенде теперь
@@ -413,7 +406,7 @@ function MediaContent({
     );
   }
 
-  if (mode === 'sound' || mode === 'voice' || mode === 'tts') {
+  if (mode === 'sound' || mode === 'voice') {
     return <AudioCard mediaUrl={mediaUrl} />;
   }
 

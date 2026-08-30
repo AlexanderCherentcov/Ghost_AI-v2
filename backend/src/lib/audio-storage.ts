@@ -4,11 +4,7 @@ import crypto from 'node:crypto';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'audio');
 
-/**
- * Сохраняет data:audio/... URI на диск, возвращает публичный URL.
- * Вынесено из voice.worker.ts (было там как приватная saveAudioDataUri) — тот же
- * код нужен и tts.worker.ts (тот же провайдер, тот же формат ответа synthesizeSpeech).
- */
+/** Сохраняет data:audio/... URI на диск, возвращает публичный URL. */
 export function saveAudioDataUri(dataUri: string): string {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   const [header, base64] = dataUri.split(',');

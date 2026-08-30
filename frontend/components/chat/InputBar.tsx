@@ -2,9 +2,9 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SendIcon, ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, AttachIcon, SoundIcon } from '@/components/icons';
+import { SendIcon, ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, AttachIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
-import { api, type ChatModelOption, type ImageModelOption, type VideoModelOption, type TtsVoiceOption } from '@/lib/api';
+import { api, type ChatModelOption, type ImageModelOption, type VideoModelOption } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
 
 import { ACCEPT, getFileCategory, fileIconFor, formatSize } from './inputbar/fileHelpers';
@@ -17,7 +17,6 @@ import { VideoWidget } from './inputbar/VideoWidget';
 import { MusicWidget } from './inputbar/MusicWidget';
 import { ImageWidget } from './inputbar/ImageWidget';
 import { VoiceWidget } from './inputbar/VoiceWidget';
-import { SpeechWidget } from './inputbar/SpeechWidget';
 import { ModelPill } from './inputbar/ModelPill';
 
 // Реэкспорт — компонент раньше был одним файлом, снаружи на эти имена
@@ -41,8 +40,6 @@ const FALLBACK_IMAGE_MODEL_ID = 'gemini-flash-image';
 // дефолт молча, без обратной связи — выглядело как "модель сама поменялась".
 const IMAGE_MODEL_STORAGE_KEY = 'ghostline_last_image_model';
 const VIDEO_MODEL_STORAGE_KEY = 'ghostline_last_video_model';
-const TTS_VOICE_STORAGE_KEY = 'ghostline_last_tts_voice';
-const FALLBACK_TTS_VOICE = 'alloy';
 
 // Диспетчер (/dispatch) предлагает видео в упрощённом трёхуровневом словаре
 // motion/cinema/reality — это его собственная классификация "на глаз", не список
@@ -68,7 +65,6 @@ interface InputBarProps {
     lyrics?: string,
     imageModel?: string,
     imageAspectRatio?: string,
-    ttsVoice?: string,
   ) => void;
   /** Голосовой чат: получает записанный файл, сам занимается загрузкой/распознаванием/ответом/озвучкой. */
   onVoiceRecording?: (file: File) => Promise<void>;
@@ -181,14 +177,12 @@ export function InputBar({
   const [chatModels, setChatModels] = useState<ChatModelOption[]>([]);
   const [videoModels, setVideoModels] = useState<VideoModelOption[]>([]);
   const [imageModels, setImageModels] = useState<ImageModelOption[]>([]);
-  const [ttsVoices, setTtsVoices] = useState<TtsVoiceOption[]>([]);
   useEffect(() => {
     api.payments.plans().then((data) => {
       setCasperCosts(data.casper_costs);
       setChatModels(data.models.chat);
       setVideoModels(data.models.video);
       setImageModels(data.models.image);
-      setTtsVoices(data.tts_voices);
     }).catch(() => {});
   }, []);
   const [videoOptions, setVideoOptions] = useState<VideoOptions>({
@@ -204,7 +198,6 @@ export function InputBar({
   // Реально применяется только у Gemini-семейства (см. lib/image-model-params.ts) —
   // undefined для остальных моделей, провайдер сам выбирает соотношение.
   const [imageAspectRatio, setImageAspectRatio] = useState<string | undefined>(undefined);
-  const [ttsVoice, setTtsVoice] = useState(FALLBACK_TTS_VOICE);
 
   // Восстанавливаем последний выбор модели ПОСЛЕ монтирования (не в initial-state
   // лениво) — иначе серверный рендер (дефолт) разойдётся с клиентским (значение
@@ -215,8 +208,6 @@ export function InputBar({
     if (storedImageModel) setImageModel(storedImageModel);
     const storedVideoModel = localStorage.getItem(VIDEO_MODEL_STORAGE_KEY);
     if (storedVideoModel) setVideoOptions((prev) => ({ ...prev, videoModel: storedVideoModel }));
-    const storedTtsVoice = localStorage.getItem(TTS_VOICE_STORAGE_KEY);
-    if (storedTtsVoice) setTtsVoice(storedTtsVoice);
   }, []);
   useEffect(() => {
     localStorage.setItem(IMAGE_MODEL_STORAGE_KEY, imageModel);
@@ -224,9 +215,6 @@ export function InputBar({
   useEffect(() => {
     localStorage.setItem(VIDEO_MODEL_STORAGE_KEY, videoOptions.videoModel);
   }, [videoOptions.videoModel]);
-  useEffect(() => {
-    localStorage.setItem(TTS_VOICE_STORAGE_KEY, ttsVoice);
-  }, [ttsVoice]);
 
   const [musicOptions, setMusicOptions] = useState<MusicOptions>({
     title: '',
@@ -363,8 +351,6 @@ export function InputBar({
       );
     } else if (chatMode === 'images') {
       onSend(trimmed, attachedFile ?? undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, imageModel, imageAspectRatio);
-    } else if (chatMode === 'tts') {
-      onSend(trimmed, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, ttsVoice);
     } else {
       onSend(trimmed, attachedFile ?? undefined);
     }
@@ -434,9 +420,7 @@ export function InputBar({
       ? 'Опишите сцену для видео...'
       : chatMode === 'music'
         ? 'Опишите настроение или стиль...'
-        : chatMode === 'tts'
-          ? 'Введите текст для озвучки...'
-          : placeholder ?? 'Напишите что-нибудь...';
+        : placeholder ?? 'Напишите что-нибудь...';
 
   const modeSelector = (
     <CustomSelect<ChatMode>
@@ -448,7 +432,6 @@ export function InputBar({
         { value: 'video',  label: 'Видео',    icon: <VideoIcon size={13}/> },
         { value: 'music',  label: 'Музыка',   icon: <MusicIcon size={13}/> },
         { value: 'voice',  label: 'Голос',    icon: <MicIcon   size={13}/> },
-        { value: 'tts',    label: 'Озвучка',  icon: <SoundIcon size={13}/> },
       ]}
     />
   );
@@ -506,16 +489,6 @@ export function InputBar({
               casperCosts={casperCosts}
               disabled={disabled}
               onRecordingComplete={onVoiceRecording ?? (async () => {})}
-            />
-          )}
-          {chatMode === 'tts' && (
-            <SpeechWidget
-              key="speech-widget"
-              voices={ttsVoices}
-              voice={ttsVoice}
-              setVoice={setTtsVoice}
-              casperCosts={casperCosts}
-              userPlan={userPlan}
             />
           )}
         </AnimatePresence>
@@ -654,13 +627,13 @@ export function InputBar({
 
             {/* Строка 1 (моб.): прикрепить … отправка */}
             <div className="flex items-center gap-1.5 sm:contents">
-              {/* Прикрепить — скрыто в режиме музыки и озвучки (там нет смысла для файла).
+              {/* Прикрепить — скрыто в режиме музыки (там нет смысла для файла).
                   В режимах "Картинка"/"Видео" вложение — это единственный смысл кнопки
                   (источник для редактирования/image-to-video), поэтому там при несовместимой
                   модели блокируем клик целиком, а не ждём отдельного тоста после выбора
                   файла. В чате документы разрешены всегда (не требуют vision) — там
                   блокировка точечная, только для картинок, см. handleFileChange. */}
-              {chatMode !== 'music' && chatMode !== 'tts' && (() => {
+              {chatMode !== 'music' && (() => {
                 const blockedReason = chatMode === 'images' ? imageAttachBlockedReason
                   : chatMode === 'video' ? videoAttachBlockedReason
                   : null;

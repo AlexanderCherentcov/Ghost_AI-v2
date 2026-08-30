@@ -46,6 +46,10 @@ export interface SunoOptions {
 export async function generateMusicSuno(
   prompt: string,
   options: SunoOptions = {},
+  // Вызывается сразу после создания задачи, ДО начала опроса — воркер сохраняет
+  // taskId в БД немедленно (не дожидаясь результата), на случай сбоя провайдера
+  // (см. Audio Recovery API — комментарий у GenerateJob.providerTaskId в schema.prisma).
+  onTaskCreated?: (taskId: string) => void,
 ): Promise<string> {
   const {
     style,
@@ -118,6 +122,7 @@ export async function generateMusicSuno(
   }
 
   console.info(`[Suno] Task created: ${taskId} (model=${model}, customMode=${customMode}, instrumental=${instrumental})`);
+  onTaskCreated?.(taskId);
 
   // ── Опрашиваем до завершения ──────────────────────────────────────────────
   // Suno генерирует за ~20–60 с; опрашиваем каждые 5 с, сдаёмся через 10 мин.

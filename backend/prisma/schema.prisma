@@ -235,6 +235,13 @@ model GenerateJob {
   modelId   String?
   error     String?
   bullJobId String?
+  // id задачи у провайдера (сейчас проставляется только для Suno, см. sound.worker.ts) —
+  // нужен для Audio Recovery API (docs.sunoapi.org/suno-api/recovery-audio): 2026-08-28
+  // Suno на несколько часов начал отдавать зашифрованные аудио-ссылки без ошибки на
+  // уровне HTTP (сама генерация "успешна", но файл на диске оказывался нерабочим),
+  // и без сохранённого taskId восстановить такой трек через recovery-эндпоинт нечем —
+  // тот принимает только исходный taskId, не URL и не наш jobId.
+  providerTaskId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

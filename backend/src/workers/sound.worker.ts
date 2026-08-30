@@ -112,6 +112,11 @@ export function startSoundWorker() {
             instrumental: sunoInstrArg,
             lyrics,
             model: 'V5_5',
+          }, (taskId) => {
+            // Fire-and-forget: пишем сразу, не дожидаясь результата генерации — если
+            // сама генерация потом упадёт/зависнет, taskId для Audio Recovery API
+            // всё равно останется сохранён.
+            prisma.generateJob.update({ where: { id: jobId }, data: { providerTaskId: taskId } }).catch(() => {});
           });
         } catch (sunoErr: any) {
           // Резерв на DiffRhythm только если Suno упал и текста песни нет

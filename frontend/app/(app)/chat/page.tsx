@@ -40,7 +40,7 @@ interface DiscoveryItem {
   previewVideoUrl?: string;
 }
 
-type DiscoveryDomain = 'chat' | 'image' | 'video';
+type DiscoveryDomain = 'chat' | 'image' | 'video' | 'music';
 
 // Пока нет реальных сэмплов вывода моделей (Александр пришлёт позже) — честная заглушка:
 // фон окрашен по домену (чат/картинки/видео), а не выдаёт себя за настоящий output модели.
@@ -48,6 +48,7 @@ const DOMAIN_STYLE: Record<DiscoveryDomain, { gradient: string; accent: string }
   chat:  { gradient: 'linear-gradient(155deg, rgba(123,92,240,.32), rgba(14,10,26,.94))', accent: '#a78bfa' },
   image: { gradient: 'linear-gradient(155deg, rgba(45,212,191,.28), rgba(9,22,23,.94))', accent: '#2dd4bf' },
   video: { gradient: 'linear-gradient(155deg, rgba(251,191,36,.28), rgba(26,19,8,.94))', accent: '#fbbf24' },
+  music: { gradient: 'linear-gradient(155deg, rgba(236,72,153,.30), rgba(26,10,20,.94))', accent: '#f472b6' },
 };
 
 // Продающий лозунг под заголовком каждой секции — по прямому запросу Александра.
@@ -55,6 +56,18 @@ const DOMAIN_TAGLINE: Record<DiscoveryDomain, string> = {
   chat: 'Умный собеседник для любых вопросов и задач',
   image: 'Любая идея — за секунды в готовое изображение',
   video: 'От текста до готового ролика — без камеры и монтажа',
+  music: 'Полноценный трек с вокалом по одному описанию',
+};
+
+// Музыка — единственный провайдер (Suno V5.5, DiffRhythm только как невидимый
+// аварийный резерв, см. sound.worker.ts) без своего реестра моделей на бэкенде
+// (в отличие от chat/image/video), поэтому карточка не приходит из /api/plans —
+// фиксированная запись прямо тут. cost подставляется из casper_costs.music_generate
+// при загрузке (см. useEffect ниже), пока undefined — карточка просто без бейджа цены.
+const MUSIC_DISCOVERY_ITEM: Omit<DiscoveryItem, 'cost'> = {
+  id: 'suno-v5.5',
+  label: 'Suno V5.5',
+  blurb: 'Треки с вокалом и текстом песни',
 };
 
 // Печатает текст по букве, пока карточка под курсором (перезапускается на каждый hover) —
@@ -160,6 +173,7 @@ function DiscoveryCard({ item, domain, onPick, onDetails }: { item: DiscoveryIte
                 <path d="M6 4l10 6-10 6V4z" fill="currentColor" />
               </svg>
             )}
+            {domain === 'music' && <MusicIcon size={28} style={{ color: style.accent }} />}
           </div>
         )}
       </div>
@@ -233,6 +247,11 @@ function ModelDetailsModal({
               {domain === 'chat' && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <ParticleAvatar shape={modelParticleShape(item.id)} size={64} spinSpeed={0.014} />
+                </div>
+              )}
+              {domain === 'music' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <MusicIcon size={48} style={{ color: style.accent }} />
                 </div>
               )}
               <button
@@ -430,8 +449,14 @@ export default function ChatPage() {
   // только внутри выпадающих пилюль — по прямому указанию Александра, витрина
   // возможностей должна быть видна сразу, не спрятана.
   const [models, setModels] = useState<PlansResponse['models'] | null>(null);
+  // Цена карточки "Музыка" — из casper_costs (см. комментарий у MUSIC_DISCOVERY_ITEM,
+  // у музыки нет своего реестра моделей в data.models, цена приходит отдельным полем).
+  const [musicCost, setMusicCost] = useState<number | undefined>();
   useEffect(() => {
-    api.payments.plans().then((data) => setModels(data.models)).catch(() => {});
+    api.payments.plans().then((data) => {
+      setModels(data.models);
+      setMusicCost(data.casper_costs.music_generate ?? 5);
+    }).catch(() => {});
   }, []);
 
   // Клик по карточке в витрине картинок/видео — imageModel/videoOptions.videoModel
@@ -450,7 +475,10 @@ export default function ChatPage() {
     // карточку (например выбрали чат-модель, а InputBar остался в видео-режиме).
     if (domain === 'chat') { setModel(id); setChatMode('chat'); }
     else if (domain === 'image') { setPresetImageModel(id); setChatMode('images'); }
-    else { setPresetVideoModel(id); setChatMode('video'); }
+    else if (domain === 'video') { setPresetVideoModel(id); setChatMode('video'); }
+    // 'music' — нет выбора модели (единственный провайдер, см. MUSIC_DISCOVERY_ITEM),
+    // карточка просто переключает режим композера, как и клик по пилюле "Музыка".
+    else setChatMode('music');
     setShowDiscovery(false);
   }
 
@@ -623,6 +651,16 @@ export default function ChatPage() {
                     items={models.video.map((m) => ({ ...m, cost: m.cost['4s'] }))}
                     onPick={(id) => pickModel('video', id)}
                     onDetails={(item) => setDetailsItem({ item, domain: 'video' })}
+                  />
+                  <ModelDiscoveryRow
+                    title="Музыка"
+                    domain="music"
+                    // Единственная карточка — у музыки нет выбора модели (см.
+                    // MUSIC_DISCOVERY_ITEM), но ряд остаётся тем же компонентом
+                    // ради единого визуального языка с остальными секциями.
+                    items={[{ ...MUSIC_DISCOVERY_ITEM, cost: musicCost ?? 0 }]}
+                    onPick={(id) => pickModel('music', id)}
+                    onDetails={(item) => setDetailsItem({ item, domain: 'music' })}
                   />
                 </div>
               </div>

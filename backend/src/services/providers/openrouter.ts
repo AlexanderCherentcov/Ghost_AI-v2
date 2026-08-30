@@ -323,7 +323,6 @@ export async function synthesizeSpeech(text: string, voice: string = 'alloy'): P
     modalities: ['text', 'audio'] as any,
     audio: { voice, format: 'pcm16' } as any,
     stream: true,
-    temperature: 0,
     messages: [
       // gpt-audio-mini — по сути чат-модель: без явного запрета она отвечает на текст
       // как на реплику собеседника (например, озвучивает ответ на вопрос вместо самого

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type PlansResponse } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
+import { useUIStore } from '@/store/ui.store';
 import { useToast } from '@/components/ui/Toast';
 import { InputBar, type ChatMode } from '@/components/chat/InputBar';
 import { getFileCategory } from '@/components/chat/InputBar';
@@ -47,6 +48,13 @@ const DOMAIN_STYLE: Record<DiscoveryDomain, { gradient: string; accent: string }
   chat:  { gradient: 'linear-gradient(155deg, rgba(123,92,240,.32), rgba(14,10,26,.94))', accent: '#a78bfa' },
   image: { gradient: 'linear-gradient(155deg, rgba(45,212,191,.28), rgba(9,22,23,.94))', accent: '#2dd4bf' },
   video: { gradient: 'linear-gradient(155deg, rgba(251,191,36,.28), rgba(26,19,8,.94))', accent: '#fbbf24' },
+};
+
+// Продающий лозунг под заголовком каждой секции — по прямому запросу Александра.
+const DOMAIN_TAGLINE: Record<DiscoveryDomain, string> = {
+  chat: 'Умный собеседник для любых вопросов и задач',
+  image: 'Любая идея — за секунды в готовое изображение',
+  video: 'От текста до готового ролика — без камеры и монтажа',
 };
 
 // Печатает текст по букве, пока карточка под курсором (перезапускается на каждый hover) —
@@ -284,7 +292,11 @@ function ModelDetailsModal({
   );
 }
 
-// Стрелка слайдера — то же кольцо, что у остальных вторичных кнопок в composer'е.
+// Стрелка слайдера — крупнее и контрастнее стандартных вторичных кнопок, чтобы
+// сразу читаться как управление каруселью, а не теряться на фоне карточек
+// (по прямому запросу Александра: "карточки должны быть слайдером, и
+// переключаться кнопками и свайпом" — свайп уже работал нативно через
+// overflow-x-auto+snap, кнопки были, но недостаточно заметны).
 function SliderArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => void }) {
   return (
     <button
@@ -292,12 +304,12 @@ function SliderArrow({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => v
       onClick={onClick}
       aria-label={dir === 'left' ? 'Прокрутить назад' : 'Прокрутить вперёд'}
       className={cn(
-        'absolute top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors',
-        dir === 'left' ? '-left-3' : '-right-3'
+        'absolute top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95',
+        dir === 'left' ? '-left-1 sm:-left-4' : '-right-1 sm:-right-4'
       )}
-      style={{ background: 'var(--panel-glass-sidebar)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-primary)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--panel-glass-border)', color: 'var(--text-primary)', boxShadow: '0 4px 14px -4px rgba(0,0,0,.5)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}
     >
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
         <path d={dir === 'left' ? 'M12.5 4.5L6 10l6.5 5.5' : 'M7.5 4.5L14 10l-6.5 5.5'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </button>
@@ -338,8 +350,13 @@ function ModelDiscoveryRow({ title, items, domain, onPick, onDetails }: { title:
   if (!items.length) return null;
   return (
     <div className="relative">
-      <div className="text-[11.5px] font-bold tracking-wide mb-3 text-center" style={{ color: 'var(--text-muted)' }}>
-        {title.toUpperCase()}
+      <div className="text-center mb-4">
+        <h2 className="font-display text-[22px] sm:text-[26px] font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          {title}
+        </h2>
+        <p className="text-[13px] sm:text-[14px] mt-1" style={{ color: 'var(--text-secondary)' }}>
+          {DOMAIN_TAGLINE[domain]}
+        </p>
       </div>
       <div ref={scrollerRef} className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-proximity pb-5">
         {items.map((item) => (
@@ -383,17 +400,7 @@ export default function ChatPage() {
   // Восстанавливаем последний режим после монтирования (не лениво в initial-state,
   // чтобы не разойтись с серверным рендером — hydration mismatch). См. тот же
   // приём и подробный комментарий в ChatIdPage.tsx.
-  // "Ознакомиться" в сайдбаре (под "Галерея") ставит этот флаг перед переходом на
-  // /chat — иначе последний использованный режим (например "видео") молча
-  // подменил бы витрину моделей на видео-композер, и кнопка ничего не показывала
-  // бы. sessionStorage, не query-параметр — тот же приём, что уже используется
-  // для initialPrompt/initialImageUrl и т.п. (см. handleSend ниже), без возни
-  // с useSearchParams/Suspense в App Router.
   useEffect(() => {
-    if (sessionStorage.getItem('forceDiscovery')) {
-      sessionStorage.removeItem('forceDiscovery');
-      return; // остаёмся на дефолтном chatMode:'chat', localStorage не читаем
-    }
     const stored = localStorage.getItem('ghostline_last_chat_mode') as ChatMode | null;
     if (stored) setChatMode(stored);
   }, []);
@@ -404,6 +411,20 @@ export default function ChatPage() {
   // действовать: отправил первое сообщение или выбрал модель карточкой. По прямому
   // запросу Александра: не должна висеть под уже занятым диалогом.
   const [showDiscovery, setShowDiscovery] = useState(true);
+  // "Ознакомиться" в сайдбаре вызывает requestDiscovery() (ui.store.ts) — счётчик,
+  // не булев флаг в sessionStorage, потому что router.push('/chat') на ТОТ ЖЕ
+  // маршрут не ремонтирует страницу (Next.js App Router): раньше флаг читался
+  // только в mount-эффекте и для пользователя, уже находящегося на /chat, кнопка
+  // молча ничего не делала. Эффект с зависимостью на значение счётчика реагирует
+  // на каждый клик независимо от того, был ли реальный переход по роуту.
+  const discoveryRequestId = useUIStore((s) => s.discoveryRequestId);
+  const seenDiscoveryRequestRef = useRef(discoveryRequestId);
+  useEffect(() => {
+    if (discoveryRequestId === seenDiscoveryRequestRef.current) return;
+    seenDiscoveryRequestRef.current = discoveryRequestId;
+    setShowDiscovery(true);
+    setChatMode('chat');
+  }, [discoveryRequestId]);
   // Реестр моделей с бэкенда — для витрины возможностей на пустом экране (см. ниже).
   // Конкуренты (GPTunneL) держат весь список моделей видимым на главном экране, а не
   // только внутри выпадающих пилюль — по прямому указанию Александра, витрина
@@ -567,8 +588,8 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => setShowDiscovery(false)}
-                className="inline-flex items-center gap-2 px-6 h-11 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: 'var(--accent)', color: 'white' }}
+                className="inline-flex items-center gap-2.5 px-9 h-14 rounded-2xl text-base sm:text-lg font-bold transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                style={{ background: 'var(--accent)', color: 'white', boxShadow: '0 8px 24px -6px var(--accent-border)' }}
               >
                 Начать творить →
               </button>

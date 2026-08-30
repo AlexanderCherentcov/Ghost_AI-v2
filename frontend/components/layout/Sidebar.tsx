@@ -61,11 +61,13 @@ export function Sidebar() {
     router.push('/chat');
   }
 
-  // "Ознакомиться" — витрина всех моделей с превью на /chat (та же, что открывается
-  // сама, если ещё ничего не выбрано) — forceDiscovery гарантирует, что она реально
-  // покажется, а не подменится последним использованным режимом (см. chat/page.tsx).
+  // "Ознакомиться" — витрина всех моделей с превью на /chat. requestDiscovery()
+  // (ui.store.ts) работает даже когда пользователь УЖЕ на /chat — router.push на
+  // тот же маршрут не ремонтирует страницу, поэтому раньше (через sessionStorage-
+  // флаг, читаемый только в mount-эффекте) кнопка молча ничего не делала для
+  // всех случаев кроме самого первого перехода с другой страницы.
   function handleExplore() {
-    sessionStorage.setItem('forceDiscovery', '1');
+    useUIStore.getState().requestDiscovery();
     useChatStore.getState().setActiveChat(null);
     useChatStore.getState().setMessages([]);
     router.push('/chat');

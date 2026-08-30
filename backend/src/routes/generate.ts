@@ -45,7 +45,10 @@ async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTE
 }
 
 const generateSchema = z.object({
-  prompt: z.string().min(1).max(2000),
+  // Опционален на уровне схемы: обязателен для vision/sound/reel/tts (проверяется
+  // вручную в каждом хендлере), но НЕ нужен для /generate/voice — там транскрипт
+  // известен только после STT внутри voice.worker.ts, а не в момент запроса.
+  prompt: z.string().max(2000).optional(),
   chatId: z.string().optional(),
   style: z.string().optional(),
   duration: z.number().int().min(5).max(30).optional(),
@@ -132,6 +135,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, chatId, sourceImageUrl, model, imageAspectRatio } = generateSchema.parse(request.body);
+      if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
 
       const modelId = model ?? DEFAULT_IMAGE_MODEL_ID;
       const spec = findModel('image', modelId);
@@ -260,6 +264,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, chatId, musicMode, musicDuration, lyrics, styleAudio, sunoStyle, sunoTitle, sunoInstrumental } = generateSchema.parse(request.body);
+      if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
 
       // Сбрасываем счётчики, если период закончился
       await checkResets(userId);
@@ -349,6 +354,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
     handler: async (request, reply) => {
       const { userId } = request.user;
       const { prompt, chatId, model, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt, videoCameraPreset } = generateSchema.parse(request.body);
+      if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
 
       const modelId = model ?? DEFAULT_VIDEO_MODEL_ID;
       const spec = findModel('video', modelId);

@@ -258,7 +258,7 @@ export async function buildApp() {
     const ext = filename.split('.').pop()?.toLowerCase() ?? 'mp3';
     const mimeMap: Record<string, string> = {
       mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
-      flac: 'audio/flac', m4a: 'audio/mp4',
+      flac: 'audio/flac', m4a: 'audio/mp4', webm: 'audio/webm', oga: 'audio/ogg',
     };
 
     reply.header('Accept-Ranges', 'bytes');

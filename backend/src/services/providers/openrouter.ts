@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { execFileSync } from 'node:child_process';
+import { writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -244,26 +249,51 @@ export async function generateImageFlux(
 
 export const VOICE_MODEL = 'openai/gpt-audio-mini';
 
-function base64FromDataUri(dataUriOrUrl: string): { base64: string; format: string } | null {
-  const m = dataUriOrUrl.match(/^data:audio\/(\w+);base64,(.+)$/);
-  if (!m) return null;
-  return { format: m[1] === 'mpeg' ? 'mp3' : m[1], base64: m[2] };
+function base64FromDataUri(dataUriOrUrl: string): string | null {
+  const m = dataUriOrUrl.match(/^data:audio\/\w+;base64,(.+)$/);
+  return m ? m[1] : null;
+}
+
+// OpenAI's `input_audio` content part accepts ONLY 'wav' or 'mp3' (see the SDK's
+// ChatCompletionContentPartInputAudio type) — but browsers record via MediaRecorder
+// as webm/opus (see VoiceWidget.tsx's pickMimeType), and our own `/audio/:filename`
+// route (app.ts) doesn't even map '.webm' in its Content-Type table, so it was
+// mislabeled as 'audio/mpeg' too. Every voice-chat message was therefore sent to the
+// model as raw webm bytes tagged 'mp3' — an invalid combination the model can't
+// decode, failing with a generic "400 Provider returned error" (found live 2026-09-05).
+// Fix: always normalize through ffmpeg (already in the Docker image, used by
+// sound.worker.ts for FLAC→MP3) regardless of the declared container, instead of
+// guessing the format from an unreliable content-type.
+function convertToMp3(buffer: Buffer): Buffer {
+  const id = crypto.randomUUID();
+  const inPath = path.join(tmpdir(), `${id}.in`);
+  const outPath = path.join(tmpdir(), `${id}.mp3`);
+  writeFileSync(inPath, buffer);
+  try {
+    execFileSync('ffmpeg', ['-i', inPath, '-ar', '16000', '-ac', '1', '-q:a', '4', '-y', outPath], {
+      stdio: 'pipe',
+      timeout: 30_000,
+    });
+    return readFileSync(outPath);
+  } finally {
+    try { unlinkSync(inPath); } catch {}
+    try { unlinkSync(outPath); } catch {}
+  }
 }
 
 /** Распознаёт речь из аудио (URL нашего сервера или data URI) и возвращает текст. */
 export async function transcribeAudio(audioUrl: string): Promise<string> {
-  let base64: string;
-  let format: string;
-  const dataUri = base64FromDataUri(audioUrl);
-  if (dataUri) {
-    ({ base64, format } = dataUri);
+  let rawBuffer: Buffer;
+  const dataUriBase64 = base64FromDataUri(audioUrl);
+  if (dataUriBase64) {
+    rawBuffer = Buffer.from(dataUriBase64, 'base64');
   } else {
     const res = await fetch(audioUrl);
     if (!res.ok) throw new Error(`[transcribeAudio] Failed to fetch audio: ${res.status}`);
-    const contentType = res.headers.get('content-type') ?? 'audio/mpeg';
-    format = contentType.includes('wav') ? 'wav' : contentType.includes('ogg') ? 'ogg' : 'mp3';
-    base64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+    rawBuffer = Buffer.from(await res.arrayBuffer());
   }
+
+  const base64 = convertToMp3(rawBuffer).toString('base64');
 
   const client = getClient();
   const resp = await client.chat.completions.create({
@@ -273,7 +303,7 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
         role: 'user',
         content: [
           { type: 'text', text: 'Transcribe exactly what is said in this audio. Reply with ONLY the transcript text, no commentary, no quotes.' },
-          { type: 'input_audio', input_audio: { data: base64, format } } as any,
+          { type: 'input_audio', input_audio: { data: base64, format: 'mp3' } } as any,
         ],
       },
     ] as OpenAI.ChatCompletionMessageParam[],

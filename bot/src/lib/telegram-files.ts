@@ -33,21 +33,6 @@ export async function uploadTelegramImage(session: UserSession, fileId: string):
   return res.data.url as string;
 }
 
-/** Скачивает голосовое сообщение из Telegram и загружает его в хранилище GhostLine, возвращая публичный URL. */
-export async function uploadTelegramAudio(session: UserSession, fileId: string): Promise<string> {
-  const { buffer, filename } = await downloadTelegramFile(fileId);
-  const form = new FormData();
-  // Telegram отдаёт голосовые в OGG/OPUS — filename обычно без осмысленного имени, задаём явно.
-  form.append('file', buffer, { filename: filename.includes('.') ? filename : `${filename}.oga` });
-  const res = await axios.post(`${INTERNAL_API_URL}/api/upload/audio`, form, {
-    headers: { ...form.getHeaders(), Authorization: `Bearer ${session.accessToken}` },
-    proxy: false,
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-  });
-  return res.data.url as string;
-}
-
 export interface ExtractedDocument {
   text: string;
   fileName: string;

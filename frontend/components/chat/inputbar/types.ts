@@ -34,4 +34,4 @@ export interface MusicOptions {
   lyrics: string;
 }
 
-export type ChatMode = 'chat' | 'images' | 'video' | 'music' | 'voice';
+export type ChatMode = 'chat' | 'images' | 'video' | 'music';

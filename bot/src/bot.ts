@@ -6,12 +6,12 @@ import {
 } from './lib/session.js';
 import {
   listChats, createChat, deleteChat, getChatMessages,
-  startVisionJob, startSoundJob, startReelJob, startVoiceJob, pollJob, generateLyrics,
+  startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
   getMe, createPlanPayment, createCasperPayment, getModels, getCasperHistory, shareToGallery,
   type ChatModelOption, type ImageModelOption, type VideoModelOption,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
-import { uploadTelegramImage, uploadTelegramAudio, extractTelegramDocument } from './lib/telegram-files.js';
+import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-files.js';
 import { PLAN_KEYS, planAtLeast } from './lib/plan-keys.js';
 import { apiErrorMessage } from './lib/error-message.js';
 import { formatTransactionReason } from './lib/casper-history.js';
@@ -343,7 +343,6 @@ bot.command('start', async (ctx) => {
 // ─── /help ─────────────────────────────────────────────────────────────────────
 
 async function sendHelp(ctx: Context): Promise<void> {
-  const costs = await fetchCasperCosts();
   await ctx.reply(
     `👻 *GhostLine AI — Помощь*\n\n` +
     `*Нижнее меню* — самый быстрый способ: тапни режим или раздел, ничего вводить не нужно.\n\n` +
@@ -366,7 +365,7 @@ async function sendHelp(ctx: Context): Promise<void> {
     `🎬 Видео — генерация видео\n\n` +
     `После каждого сообщения и генерации показываю остаток Caspers.\n\n` +
     `🆘 Поддержка — кнопка в нижнем меню, если что-то не работает или есть вопрос по оплате.\n\n` +
-    `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю. Пришли голосовое — отвечу голосом (${costs.voice_exchange ?? '?'} Caspers за обмен), видео пока не понимаю.`,
+    `Просто пиши сообщения — отвечаю в выбранном режиме. Фото и документы понимаю, голосовые и видео пока не понимаю.`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -492,8 +491,7 @@ async function casperPriceList(): Promise<string> {
       `💬 Чат — ${range(chatCosts)} / сообщ. (зависит от модели, «Авто» бесплатнее)\n` +
       `🎨 Картинка — ${range(imageCosts)} / шт (зависит от модели)\n` +
       `🎵 Музыка — ${costs.music_generate ?? '?'} / трек\n` +
-      `🎬 Видео — ${range(videoCosts)} (зависит от модели и длительности)\n` +
-      `🎙 Голосовое сообщение — ${costs.voice_exchange ?? '?'} / обмен`
+      `🎬 Видео — ${range(videoCosts)} (зависит от модели и длительности)`
     );
   } catch {
     return '';
@@ -1614,55 +1612,10 @@ bot.on('message:document', async (ctx) => {
   });
 });
 
-// ─── Голосовые сообщения — работают независимо от текущего режима ───────────
-// Запись войса — однозначное намерение ("хочу голосовой ответ"), поэтому не
-// требуем переключения в режим "Голос" через /mode, как на сайте. Ответ всегда
-// уходит в тот же чат, что и обычный текстовый диалог (bucket 'chat') — голос
-// и текст делят одну историю, как и на сайте (Message.mode='voice' внутри
-// того же Chat, а не отдельный вид чата).
-
-/** Chat-бакет пользователя, не трогая session.mode/activeChatId — голосовое сообщение
- * не должно молча переключать текущий режим (картинка/видео/музыка), в котором пользователь мог быть. */
-async function resolveChatBucketId(session: UserSession): Promise<string> {
-  const chats = await listChats(session);
-  const existing = chats.find((c) => chatBucket(c.mode) === 'chat');
-  if (existing) return existing.id;
-  const chat = await createChat(session, 'chat');
-  return chat.id;
-}
-
-bot.on('message:voice', async (ctx) => {
-  if (!ctx.from) return;
-  const session = await ensureSession(ctx.from);
-  const notice = await ctx.reply('🎙️ Слушаю...');
-  const balanceBefore = await getCasperBalance(session);
-
-  try {
-    const chatId = await resolveChatBucketId(session);
-    const audioUrl = await uploadTelegramAudio(session, ctx.message.voice.file_id);
-    const jobId = await startVoiceJob(session, chatId, audioUrl);
-    const result = await pollJob(session, jobId, { timeoutMs: 2 * 60_000 });
-
-    if (result.status !== 'done' || !result.mediaUrl) {
-      await editOrSend(ctx, notice.message_id, `❌ ${result.error ?? 'Не удалось обработать голосовое сообщение'}`);
-      return;
-    }
-
-    await ctx.api.deleteMessage(ctx.chat!.id, notice.message_id).catch(() => {});
-    await ctx.replyWithAudio(result.mediaUrl);
-
-    const spendNote = await casperSpendNote(session, balanceBefore);
-    if (spendNote) await ctx.reply(spendNote);
-  } catch (err: any) {
-    const msg = apiErrorMessage(err, 'Ошибка обработки голосового сообщения');
-    await editOrSend(ctx, notice.message_id, `❌ ${msg}`);
-  }
-});
-
-// Видеофайлы и аудио-документы пока не подключены к AI-движку бота
-// (транскрипции и понимания видео здесь нет; голосовые — см. message:voice выше).
-bot.on(['message:video', 'message:audio'], async (ctx) => {
-  await ctx.reply('👻 Видео и аудиофайлы пока не понимаю — пришли текстом, голосовым или фото.');
+// Голосовые, видео- и аудиофайлы пока не подключены к AI-движку бота
+// (распознавания речи и понимания видео здесь нет).
+bot.on(['message:voice', 'message:video', 'message:audio'], async (ctx) => {
+  await ctx.reply('👻 Голосовые, видео и аудиофайлы пока не понимаю — пришли текстом или фото.');
 });
 
 // ─── Запуск бота ──────────────────────────────────────────────────────────────────

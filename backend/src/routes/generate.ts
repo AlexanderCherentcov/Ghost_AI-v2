@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { checkResets, checkAndDeduct, refundCaspers } from '../services/tokens.js';
 import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
 import { findModel, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID, type VideoDurationChoice } from '../config/models.js';
-import { visionQueue, soundQueue, reelQueue, voiceQueue } from '../lib/bullmq.js';
+import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
 import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
@@ -31,7 +31,6 @@ const STALE_JOB_MINUTES: Record<string, number> = {
   vision: 12,
   sound: 5,
   reel: 15,
-  voice: 3,
 };
 
 async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTES) {
@@ -43,9 +42,8 @@ async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTE
 }
 
 const generateSchema = z.object({
-  // Опционален на уровне схемы: обязателен для vision/sound/reel (проверяется
-  // вручную в каждом хендлере), но НЕ нужен для /generate/voice — там транскрипт
-  // известен только после STT внутри voice.worker.ts, а не в момент запроса.
+  // Опционален на уровне схемы: обязателен для vision/sound/reel, но проверяется
+  // вручную в каждом хендлере, а не здесь.
   prompt: z.string().max(2000).optional(),
   chatId: z.string().optional(),
   style: z.string().optional(),
@@ -80,8 +78,6 @@ const generateSchema = z.object({
   sunoStyle: z.string().max(200).optional(),
   sunoTitle: z.string().max(100).optional(),
   sunoInstrumental: z.boolean().optional(),
-  // Голосовой чат: URL записанного голосового сообщения (уже загружен через /upload/audio)
-  audioUrl: z.string().url().optional(),
 });
 
 /**
@@ -469,69 +465,6 @@ export default async function generateRoutes(fastify: FastifyInstance) {
           operation: 'video_gen',
           error: err.message,
           context: `model=${modelId} duration=${effectiveDuration}`,
-        }).catch(() => {});
-        throw err;
-      });
-
-      await prisma.generateJob.update({
-        where: { id: job.id },
-        data: { bullJobId: bullJob.id },
-      });
-
-      return reply.code(202).send({ jobId: job.id });
-    },
-  });
-
-  // ── Voice (голосовой чат) ─────────────────────────────────────────────────
-  // ⚠️ Цена voice_exchange в CASPER_COSTS — заглушка, см. комментарий в config/plans.ts.
-  fastify.post('/generate/voice', {
-    preHandler: [fastify.authenticate],
-    handler: async (request, reply) => {
-      const { userId } = request.user;
-      const { chatId, audioUrl } = generateSchema.parse(request.body);
-
-      if (!audioUrl) return reply.code(400).send({ error: 'audioUrl обязателен', code: 'INVALID_REQUEST' });
-
-      // Сбрасываем счётчики, если период закончился
-      await checkResets(userId);
-
-      // Rate limit — тот же лимит, что у картинок (3/мин)
-      if (!await checkGenRateLimit(userId)) {
-        return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
-      }
-
-      // Блокировка задачи: отклоняем, если уже выполняется голосовая задача
-      const activeJob = await findActiveJob(userId, 'voice');
-      if (activeJob) {
-        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
-      }
-
-      let deductResult;
-      try {
-        deductResult = await checkAndDeduct(userId, 'voice', CASPER_COSTS.voice_exchange, 'voice_exchange');
-      } catch (err: any) {
-        return reply.code(403).send({ error: err.message, code: err.code ?? 'LIMIT_VOICE' });
-      }
-
-      // prompt пока пуст — заполнится транскриптом в voice.worker.ts после распознавания речи
-      const job = await prisma.generateJob.create({
-        data: { userId, mode: 'voice', prompt: '' },
-      });
-
-      const bullJob = await voiceQueue.add('generate-voice', {
-        jobId: job.id,
-        userId,
-        chatId: chatId ?? null,
-        audioUrl,
-        caspersSpent: deductResult.caspersSpent,
-      }).catch(async (err: any) => {
-        await refundCaspers(userId, deductResult.caspersSpent, 'voice_exchange').catch(() => {});
-        const userInfo = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
-        notifyApiError({
-          userId,
-          userName: userInfo?.name,
-          operation: 'voice_gen',
-          error: err.message,
         }).catch(() => {});
         throw err;
       });

@@ -16,7 +16,6 @@ import { CustomSelect } from './inputbar/CustomSelect';
 import { VideoWidget } from './inputbar/VideoWidget';
 import { MusicWidget } from './inputbar/MusicWidget';
 import { ImageWidget } from './inputbar/ImageWidget';
-import { VoiceWidget } from './inputbar/VoiceWidget';
 import { ModelPill } from './inputbar/ModelPill';
 
 // Реэкспорт — компонент раньше был одним файлом, снаружи на эти имена
@@ -66,8 +65,6 @@ interface InputBarProps {
     imageModel?: string,
     imageAspectRatio?: string,
   ) => void;
-  /** Голосовой чат: получает записанный файл, сам занимается загрузкой/распознаванием/ответом/озвучкой. */
-  onVoiceRecording?: (file: File) => Promise<void>;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -97,7 +94,7 @@ interface InputBarProps {
 }
 
 export function InputBar({
-  onSend, onVoiceRecording, onStop, disabled = false, isStreaming = false,
+  onSend, onStop, disabled = false, isStreaming = false,
   placeholder, model, setModel, userPlan, onUpgradeRequired,
   chatMode = 'chat', setChatMode,
   dispatchResult,
@@ -113,9 +110,7 @@ export function InputBar({
 
   // Диктовка в поле ввода — браузерный Web Speech API (бесплатно, без бэкенда).
   // По прямому запросу Александра: "нажимал микрофон диктовала, а в чате при
-  // этом печатался текст" — распознавание идёт ЖИВЬЁМ прямо в textarea, это
-  // НЕ то же самое, что режим "Голос" (VoiceWidget) — тот отправляет готовый
-  // аудио-файл на бэкенд и ждёт полного ответа ИИ, диктовка просто печатает.
+  // этом печатался текст" — распознавание идёт ЖИВЬЁМ прямо в textarea.
   //
   // speechSupported стартует false и обновляется только в эффекте (не читаем
   // window при рендере) — тот же приём, что и восстановление imageModel из
@@ -431,7 +426,6 @@ export function InputBar({
         { value: 'images', label: 'Картинка', icon: <ImageIcon size={13}/> },
         { value: 'video',  label: 'Видео',    icon: <VideoIcon size={13}/> },
         { value: 'music',  label: 'Музыка',   icon: <MusicIcon size={13}/> },
-        { value: 'voice',  label: 'Голос',    icon: <MicIcon   size={13}/> },
       ]}
     />
   );
@@ -481,14 +475,6 @@ export function InputBar({
               aspectRatio={imageAspectRatio}
               setAspectRatio={setImageAspectRatio}
               onUpgradeRequired={onUpgradeRequired}
-            />
-          )}
-          {chatMode === 'voice' && (
-            <VoiceWidget
-              key="voice-widget"
-              casperCosts={casperCosts}
-              disabled={disabled}
-              onRecordingComplete={onVoiceRecording ?? (async () => {})}
             />
           )}
         </AnimatePresence>
@@ -555,13 +541,6 @@ export function InputBar({
           </motion.div>
         )}
 
-        {/* В режиме голоса вместо текстового поля — только переключатель режима под орбом:
-            печатать тут нечего, ввод — голосом, через VoiceWidget выше. */}
-        {chatMode === 'voice' ? (
-          <div className="flex items-center gap-1.5">
-            {modeSelector}
-          </div>
-        ) : (
         <div
           className={cn(
             'flex flex-col border rounded-2xl px-4 pt-3.5 pb-2.5 transition-all backdrop-blur-[10px] shadow-[0_10px_34px_rgba(0,0,0,.25)]',
@@ -722,7 +701,6 @@ export function InputBar({
             <div className="hidden sm:block sm:flex-1 sm:order-4" />
           </div>
         </div>
-        )}
 
         <p className="text-center text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
           GhostLine может ошибаться. Проверяйте важную информацию.

@@ -233,47 +233,4 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
     },
   });
 
-  /**
-   * POST /api/upload/audio
-   * Принимает голосовое сообщение (multipart), сохраняет на диск, возвращает публичный URL.
-   * Используется для голосового чата (/generate/voice) — веб записывает через MediaRecorder,
-   * бот скачивает голосовое сообщение Telegram и загружает сюда тем же способом, что и фото.
-   */
-  fastify.post('/upload/audio', {
-    preHandler: [authenticate],
-    handler: async (request, reply) => {
-      const data = await request.file();
-      if (!data) {
-        return reply.code(400).send({ error: 'No file provided' });
-      }
-
-      const mime = data.mimetype ?? '';
-      if (!mime.startsWith('audio/') && !mime.startsWith('video/webm')) {
-        // video/webm — так Chrome/Firefox маркируют запись MediaRecorder без явного audio-контейнера
-        return reply.code(422).send({ error: 'Файл должен быть аудио' });
-      }
-
-      const ext = data.filename?.split('.').pop()?.toLowerCase() ?? 'webm';
-      const safeExt = ['webm', 'ogg', 'oga', 'mp3', 'wav', 'm4a'].includes(ext) ? ext : 'webm';
-      const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${safeExt}`;
-
-      const dir = path.join(process.cwd(), 'uploads', 'audio');
-      mkdirSync(dir, { recursive: true });
-      const filepath = path.join(dir, filename);
-
-      const writeStream = createWriteStream(filepath);
-      try {
-        await pipeline(data.file, writeStream);
-      } catch (err: any) {
-        writeStream.destroy();
-        fastify.log.error(err, '[upload/audio] write error');
-        return reply.code(500).send({ error: 'Не удалось сохранить аудио' });
-      }
-
-      const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
-      const url = `${API_BASE}/audio/${filename}`;
-
-      return { url, fileName: filename };
-    },
-  });
 }

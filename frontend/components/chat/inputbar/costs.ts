@@ -11,7 +11,6 @@ export type CasperCosts = Record<string, number>;
 
 export const DEFAULT_CASPER_COSTS: CasperCosts = {
   music_generate: 5,
-  voice_exchange: 8,
 };
 
 // Цена картинок/видео теперь зависит от выбранной модели (реестр backend/src/config/models.ts),
@@ -25,7 +24,6 @@ export function calcCaspers(
   videoModels?: VideoModelOption[],
 ): number {
   if (mode === 'music') return costs.music_generate;
-  if (mode === 'voice') return costs.voice_exchange;
   if (mode === 'images') return imageModel?.cost ?? 0;
   if (mode === 'video') {
     const spec = videoModels?.find((m) => m.id === videoOpts.videoModel);
@@ -81,10 +79,6 @@ export function getCostDisplay(
 
   if (mode === 'music') {
     return { type: 'caspers', amount: costs.music_generate };
-  }
-
-  if (mode === 'voice') {
-    return { type: 'caspers', amount: costs.voice_exchange };
   }
 
   if (mode === 'video') {

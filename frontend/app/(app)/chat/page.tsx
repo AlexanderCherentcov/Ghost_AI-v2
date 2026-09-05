@@ -13,19 +13,17 @@ import { getFileCategory } from '@/components/chat/InputBar';
 import { ParticleAvatar } from '@/components/ParticleAvatar';
 import { modelParticleShape } from '@/lib/model-icons';
 import { MODEL_DESCRIPTIONS } from '@/lib/model-descriptions';
-import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, CasperCoin } from '@/components/icons';
+import { ChatIcon, ImageIcon, VideoIcon, MusicIcon, CasperCoin } from '@/components/icons';
 import { cn, capitalizeFirst } from '@/lib/utils';
 
 // Мокап (Chat.dc.html: quickModeKeys) показывает 4 пилюли включая активный текущий
-// режим (chat/video/image/music), без голоса. У нас голос — реальная рабочая фича
-// (VoiceWidget), просто выкинуть её нельзя — добавляем пятой пилюлей, чат ставим
-// первым и активным по умолчанию, как в мокапе.
+// режим (chat/video/image/music) — чат ставим первым и активным по умолчанию,
+// как в мокапе.
 const QUICK_MODES: { mode: ChatMode; label: string; Icon: typeof ChatIcon }[] = [
   { mode: 'chat',   label: 'Диалог',   Icon: ChatIcon },
   { mode: 'images', label: 'Картинка', Icon: ImageIcon },
   { mode: 'video',  label: 'Видео',    Icon: VideoIcon },
   { mode: 'music',  label: 'Музыка',   Icon: MusicIcon },
-  { mode: 'voice',  label: 'Голос',    Icon: MicIcon },
 ];
 
 interface DiscoveryItem {
@@ -561,23 +559,6 @@ export default function ChatPage() {
     router.push(`/chat/${chat.id}`);
   }
 
-  // Голос записывается ДО того, как чат создан — реле через sessionStorage, как у
-  // остальных медиа-режимов (initialImageUrl/initialBinaryFileUrl используют тот же
-  // приём: blob-URL переживает клиентскую SPA-навигацию на /chat/[id]).
-  async function handleVoiceRecording(file: File) {
-    let chat: Awaited<ReturnType<typeof api.chats.create>>;
-    try {
-      chat = await api.chats.create({ mode: 'chat' });
-    } catch (err: any) {
-      show(err.message ?? 'Не удалось создать чат, попробуйте ещё раз', 'error');
-      throw err;
-    }
-    addChat(chat);
-    sessionStorage.setItem('initialVoiceAudioUrl', URL.createObjectURL(file));
-    sessionStorage.setItem('initialVoiceAudioType', file.type);
-    router.push(`/chat/${chat.id}`);
-  }
-
   const placeholder = chatMode === 'images'
     ? 'Опишите изображение...'
     : chatMode === 'video'
@@ -698,7 +679,6 @@ export default function ChatPage() {
 
             <InputBar
               onSend={handleSend}
-              onVoiceRecording={handleVoiceRecording}
               placeholder={placeholder}
               model={model}
               setModel={setModel}

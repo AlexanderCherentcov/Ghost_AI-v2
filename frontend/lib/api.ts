@@ -216,24 +216,6 @@ export const api = {
       }
       return res.json();
     },
-    /** Загрузить голосовое сообщение. Возвращает публичный URL для распознавания в /generate/voice. */
-    audio: async (file: File | Blob): Promise<{ url: string; fileName: string }> => {
-      const form = new FormData();
-      form.append('file', file, file instanceof File ? file.name : 'voice.webm');
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const res = await fetch(`${API_URL}/api/upload/audio`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw Object.assign(new Error(err.error ?? 'Upload failed'), { status: res.status });
-      }
-      return res.json();
-    },
     /** Загрузить файл для извлечения текста. Возвращает текст и метаданные. */
     extract: async (file: File): Promise<{ text: string; fileName: string; lang: string; truncated: boolean }> => {
       const form = new FormData();
@@ -282,11 +264,6 @@ export const api = {
     // id модели из реестра (backend/src/config/models.ts), напр. 'kling-v2.5' / 'veo-3.1-pro' / 'sora-2'.
     reel: (data: { prompt: string; chatId?: string; model?: string; videoDuration?: '4s' | '8s'; videoAspectRatio?: string; videoEnableAudio?: boolean; videoResolution?: string; videoImageUrl?: string; negativePrompt?: string; videoCameraPreset?: string }) =>
       request<{ jobId: string }>('/generate/reel', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    voice: (data: { chatId?: string; audioUrl: string }) =>
-      request<{ jobId: string }>('/generate/voice', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -408,7 +385,7 @@ export interface GenerateJob {
   mode: string;
   prompt: string;
   mediaUrl: string | null;
-  // Id модели из реестра, которой сделана работа (vision/reel — у sound/voice null).
+  // Id модели из реестра, которой сделана работа (vision/reel — у sound null).
   // Нужно для MessageAvatar сразу после генерации, до перезагрузки истории.
   modelId?: string | null;
   error: string | null;

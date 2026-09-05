@@ -14,7 +14,6 @@ const SYSTEM_REASON_LABELS: Record<string, string> = {
   plan_grant_monthly: 'Ежемесячное начисление по тарифу',
   topup: 'Пополнение баланса',
   music_generate: 'Генерация музыки',
-  voice_exchange: 'Голосовое сообщение',
   lipsync: 'Синхронизация губ (Lip Sync)',
 };
 

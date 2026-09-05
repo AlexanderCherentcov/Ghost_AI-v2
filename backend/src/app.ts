@@ -31,7 +31,6 @@ import maintenanceRoutes from './routes/maintenance.js';
 import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
-import { startVoiceWorker } from './workers/voice.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 
 // ─── Сборка приложения ──────────────────────────────────────────────────────
@@ -258,7 +257,7 @@ export async function buildApp() {
     const ext = filename.split('.').pop()?.toLowerCase() ?? 'mp3';
     const mimeMap: Record<string, string> = {
       mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
-      flac: 'audio/flac', m4a: 'audio/mp4', webm: 'audio/webm', oga: 'audio/ogg',
+      flac: 'audio/flac', m4a: 'audio/mp4',
     };
 
     reply.header('Accept-Ranges', 'bytes');
@@ -329,7 +328,6 @@ async function start() {
   startVisionWorker();
   startSoundWorker();
   startReelWorker();
-  startVoiceWorker();
 
   // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();

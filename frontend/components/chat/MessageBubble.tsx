@@ -91,14 +91,8 @@ export function MessageBubble({ message, onUsePrompt }: MessageBubbleProps) {
             className="rounded-[14px] px-4 py-3 text-sm leading-relaxed"
             style={{ color: 'var(--text-primary)', background: 'rgba(45,212,191,.12)', border: '1px solid rgba(45,212,191,.25)' }}
           >
-            {/* Голосовое сообщение пользователя */}
-            {message.mode === 'voice' && message.mediaUrl && (
-              <div className="mb-2 min-w-[200px]">
-                <audio src={message.mediaUrl} controls className="h-9 w-full" style={{ minWidth: '200px' }} />
-              </div>
-            )}
             {/* Превью изображения */}
-            {message.mode !== 'voice' && message.mediaUrl && (
+            {message.mediaUrl && (
               <div className="mb-2 rounded-xl overflow-hidden max-w-[260px]">
                 <img
                   src={message.mediaUrl}
@@ -237,11 +231,10 @@ function AiDisclaimer() {
 function GeneratingPlaceholder({ mode }: { mode: string }) {
   const isVideo = mode === 'reel';
   const isMusic = mode === 'sound';
-  const isVoice = mode === 'voice';
   return (
     <div
       className={`relative rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-elevated)] flex flex-col items-center justify-center gap-4 ${
-        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : (isMusic || isVoice) ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
+        isVideo ? 'w-full max-w-lg min-h-[200px] aspect-video' : isMusic ? 'w-full max-w-sm py-8' : 'w-[260px] h-[260px]'
       }`}
     >
       {/* Оверлей мерцания */}
@@ -254,13 +247,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
         />
       </div>
       {/* Иконка */}
-      {isVoice ? (
-        <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
-          <rect x="11" y="4" width="10" height="16" rx="5" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M7 15a9 9 0 0 0 18 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          <path d="M16 24v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-      ) : isVideo ? (
+      {isVideo ? (
         <svg width="40" height="40" viewBox="0 0 32 32" fill="none" className="text-accent/50">
           <rect x="2" y="7" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
           <path d="M22 13l8-4v14l-8-4V13z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -290,7 +277,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
       </div>
       <div className="flex flex-col items-center gap-1 px-4 text-center">
         <span className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {isVideo ? 'Генерирую видео...' : isMusic ? 'Создаю трек...' : isVoice ? 'Думаю и озвучиваю ответ...' : 'Генерирую картинку...'}
+          {isVideo ? 'Генерирую видео...' : isMusic ? 'Создаю трек...' : 'Генерирую картинку...'}
         </span>
         {isVideo && (
           <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
@@ -302,7 +289,7 @@ function GeneratingPlaceholder({ mode }: { mode: string }) {
             Обычно занимает 1–2 минуты
           </span>
         )}
-        {!isVideo && !isMusic && !isVoice && (
+        {!isVideo && !isMusic && (
           // Большинство картиночных моделей укладываются в 10-30 секунд, но у
           // тяжёлых reasoning-моделей (напр. gpt-image) реально бывает и 6+ минут
           // (живое подтверждение по логам OpenRouter) — таймаут на бэкенде теперь
@@ -406,7 +393,7 @@ function MediaContent({
     );
   }
 
-  if (mode === 'sound' || mode === 'voice') {
+  if (mode === 'sound') {
     return <AudioCard mediaUrl={mediaUrl} />;
   }
 

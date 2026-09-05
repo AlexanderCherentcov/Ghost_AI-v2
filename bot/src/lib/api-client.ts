@@ -141,12 +141,6 @@ export async function generateLyrics(session: UserSession, topic: string, style:
   return data.lyrics as string;
 }
 
-/** Транскрипт пользователя неизвестен заранее — voice.worker.ts пишет его в job.prompt после распознавания речи. */
-export async function startVoiceJob(session: UserSession, chatId: string, audioUrl: string): Promise<string> {
-  const { data } = await client(session).post('/generate/voice', { chatId, audioUrl });
-  return data.jobId;
-}
-
 export async function startReelJob(
   session: UserSession, chatId: string, prompt: string, options: VideoOptions, videoImageUrl?: string,
 ): Promise<string> {

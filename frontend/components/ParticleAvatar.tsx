@@ -46,7 +46,7 @@ export interface ParticleAvatarProps {
   cycleShapes?: string[];
   size: number;
   className?: string;
-  /** 0..1 — громкость микрофона в реальном времени (VoiceWidget). Раздувает/ускоряет форму под голос. */
+  /** 0..1 — уровень внешнего аудиосигнала в реальном времени. Раздувает/ускоряет форму. */
   reactiveLevel?: number;
   /** Скорость вращения, рад/кадр. По умолчанию — медленный фирменный дрейф. */
   spinSpeed?: number;

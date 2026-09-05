@@ -89,7 +89,6 @@ export default function ChatConversationPage() {
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
-  const [generatingVoice, setGeneratingVoice] = useState(false);
   const [messagesReady, setMessagesReady] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
   // Восстанавливаем последний режим композера ПОСЛЕ монтирования, не в
@@ -184,7 +183,7 @@ export default function ChatConversationPage() {
         const stored = localStorage.getItem(`pending_gen_${id}`);
         if (!stored) return;
         try {
-          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'voice' | 'sound'; prompt: string };
+          const { jobId, mode, prompt } = JSON.parse(stored) as { jobId: string; mode: 'vision' | 'reel' | 'sound'; prompt: string };
           // Раньше "уже готово" проверялось эвристикой по messages (любое сообщение
           // этого режима с реальным медиа) — в чате с несколькими прошлыми видео это
           // ложно срабатывало на СВЕЖЕЙ ещё не готовой генерации (совпадение по mode,
@@ -198,16 +197,12 @@ export default function ChatConversationPage() {
             if (!mountedRef.current) return;
             if (job.status === 'done' && job.mediaUrl) {
               if (placeholder) {
-                if (mode === 'voice') {
-                  patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
-                } else {
-                  patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
-                }
+                patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
               }
               localStorage.removeItem(`pending_gen_${id}`);
             } else if (job.status === 'failed') {
               if (placeholder) patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось создать'}`, mediaUrl: null });
-              if (mode !== 'voice') triggerAutoTitle(prompt);
+              triggerAutoTitle(prompt);
               localStorage.removeItem(`pending_gen_${id}`);
             } else {
               if (!placeholder) {
@@ -218,14 +213,13 @@ export default function ChatConversationPage() {
                 useChatStore.getState().addMessage(placeholder);
                 if (mode === 'vision') setGeneratingImage(true);
                 else if (mode === 'reel') setGeneratingVideo(true);
-                else if (mode === 'voice') setGeneratingVoice(true);
                 else setGeneratingMusic(true);
               }
-              await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : mode === 'voice' ? 1500 : 2000));
+              await new Promise((r) => setTimeout(r, mode === 'reel' || mode === 'sound' ? 3000 : 2000));
               return pollResume();
             }
           };
-          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); setGeneratingVoice(false); setGeneratingMusic(false); });
+          pollResume().finally(() => { setGeneratingImage(false); setGeneratingVideo(false); setGeneratingMusic(false); });
         } catch {
           localStorage.removeItem(`pending_gen_${id}`);
         }
@@ -274,32 +268,23 @@ export default function ChatConversationPage() {
     const initialFileLang    = sessionStorage.getItem('initialFileLang');
     const initialBinaryUrl   = sessionStorage.getItem('initialBinaryFileUrl');
     const initialFileMime    = sessionStorage.getItem('initialFileMime');
-    const initialVoiceAudioUrl  = sessionStorage.getItem('initialVoiceAudioUrl');
-    const initialVoiceAudioType = sessionStorage.getItem('initialVoiceAudioType') ?? 'audio/webm';
 
-    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl || initialVoiceAudioUrl;
+    const hasAny = initialPrompt || initialImagePrompt || initialVideoPrompt || initialMusicPrompt || initialImageUrl || initialFileContent || initialBinaryUrl;
     if (!hasAny) return;
 
     autoSentChatRef.current = id; // помечаем чат как автоотправленный до начала асинхронной работы
     ['initialPrompt','initialImagePrompt','initialImageModel','initialImageAspectRatio','initialVideoPrompt','initialVideoOptions','initialMusicPrompt','initialMusicMode','initialMusicDuration',
      'initialLyrics','initialSunoStyle','initialSunoTitle','initialSunoInstrumental',
      'initialImageUrl','initialFileContent','initialFileName','initialFileLang','initialBinaryFileUrl','initialFileMime',
-     'initialVoiceAudioUrl','initialVoiceAudioType',
     ].forEach((k) => sessionStorage.removeItem(k));
 
     (async () => {
       // Переключаем видимый режим композера ПЕРЕД генерацией — иначе страница
       // монтируется с дефолтным chatMode:'chat' (useState выше) и пилюли/UI
-      // показывают чат, хотя реально уже идёт генерация картинки/видео/музыки/
-      // голоса: пользователь выбрал режим на главной, но сюда, в новый чат,
+      // показывают чат, хотя реально уже идёт генерация картинки/видео/музыки:
+      // пользователь выбрал режим на главной, но сюда, в новый чат,
       // выбор не долетал вообще (только сам промт/опции через sessionStorage).
-      if (initialVoiceAudioUrl) {
-        setChatMode('voice');
-        const res = await fetch(initialVoiceAudioUrl);
-        const blob = await res.blob();
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: initialVoiceAudioType });
-        handleGenerateVoice(file);
-      } else if (initialVideoPrompt) {
+      if (initialVideoPrompt) {
         setChatMode('video');
         if (initialVideoOptions?.videoModel) setPresetVideoModel(initialVideoOptions.videoModel);
         handleGenerateVideo(initialVideoPrompt, initialVideoOptions);
@@ -478,77 +463,6 @@ export default function ChatConversationPage() {
       setGeneratingVideo(false);
     }
   }, [accessToken, messagesReady, triggerAutoTitle]);
-
-  // ── Голосовой чат ────────────────────────────────────────────────────────────
-  // В отличие от картинок/видео транскрипт пользователя неизвестен заранее — его
-  // возвращает бэкенд (voice.worker.ts пишет его в GenerateJob.prompt после
-  // распознавания речи), поэтому плейсхолдер сообщения пользователя стартует
-  // пустым (с локальным blob-URL для мгновенного проигрывания своей записи) и
-  // заполняется текстом только когда джоба завершится.
-  const handleGenerateVoice = useCallback(async (file: File) => {
-    if (!accessToken || !messagesReady) return;
-
-    const localUrl = URL.createObjectURL(file);
-    const userPlaceholder: Message = {
-      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      role: 'user',
-      content: '',
-      mode: 'voice',
-      tokensCost: 0,
-      cacheHit: false,
-      mediaUrl: localUrl,
-      createdAt: new Date().toISOString(),
-    };
-    addMessage(userPlaceholder);
-
-    const placeholder: Message = {
-      id: `gen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      role: 'assistant',
-      content: '',
-      mode: 'voice',
-      tokensCost: 0,
-      cacheHit: false,
-      mediaUrl: '__loading__',
-      createdAt: new Date().toISOString(),
-    };
-    addMessage(placeholder);
-
-    setGeneratingVoice(true);
-    try {
-      const { url: audioUrl } = await api.upload.audio(file);
-      // Локальный blob-URL не переживёт перезагрузку страницы — меняем на настоящий сразу после загрузки
-      patchOrAppendMessage(userPlaceholder, { mediaUrl: audioUrl });
-
-      const { jobId } = await api.generate.voice({ chatId: id, audioUrl });
-      localStorage.setItem(`pending_gen_${id}`, JSON.stringify({ jobId, mode: 'voice', prompt: '' }));
-
-      const poll = async (): Promise<void> => {
-        if (!mountedRef.current) return;
-        const job = await api.generate.status(jobId);
-        if (!mountedRef.current) return;
-        if (job.status === 'done' && job.mediaUrl) {
-          patchOrAppendMessage(userPlaceholder, { content: job.prompt || userPlaceholder.content });
-          patchOrAppendMessage(placeholder, { mediaUrl: job.mediaUrl });
-          if (job.prompt) triggerAutoTitle(job.prompt);
-        } else if (job.status === 'failed') {
-          patchOrAppendMessage(placeholder, { content: `Ошибка: ${job.error ?? 'не удалось обработать голосовое сообщение'}`, mediaUrl: null });
-        } else {
-          await new Promise((r) => setTimeout(r, 1500));
-          return poll();
-        }
-      };
-
-      await poll();
-    } catch (err: any) {
-      patchOrAppendMessage(placeholder, { content: 'Ошибка обработки голосового сообщения', mediaUrl: null });
-      showToast(err.message ?? 'Ошибка обработки голосового сообщения', 'error');
-      throw err; // VoiceWidget сам покажет короткую ошибку рядом с микрофоном и сбросит состояние записи
-    } finally {
-      URL.revokeObjectURL(localUrl);
-      localStorage.removeItem(`pending_gen_${id}`);
-      setGeneratingVoice(false);
-    }
-  }, [accessToken, messagesReady, id, triggerAutoTitle, showToast]);
 
   // ── Генерация музыки ───────────────────────────────────────────────────────────
   const handleGenerateMusic = useCallback(async (prompt: string, musicMode: MusicMode = 'short', musicDuration?: number, sunoStyle?: string, sunoTitle?: string, sunoInstrumental?: boolean, lyrics?: string) => {
@@ -879,7 +793,7 @@ export default function ChatConversationPage() {
     }
   }, [id, messages, model, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);
 
-  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || generatingVoice || !messagesReady;
+  const busy = isStreaming || generatingImage || generatingVideo || generatingMusic || !messagesReady;
 
   // isLoading = true, пока ждём токен ИЛИ ждём сообщения с сервера
   const isLoading = !accessToken || !messagesReady;
@@ -900,7 +814,6 @@ export default function ChatConversationPage() {
 
       <InputBar
         onSend={handleSend}
-        onVoiceRecording={handleGenerateVoice}
         onStop={() => { abortStream(); setStreaming(false); }}
         isStreaming={busy}
         disabled={busy}

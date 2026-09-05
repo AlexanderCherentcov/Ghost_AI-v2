@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { friendlyGenerationError } from './generation-error.js';
 
-describe('friendlyGenerationError — классификация ошибок генерации (image/video/music/voice)', () => {
+describe('friendlyGenerationError — классификация ошибок генерации (image/video/music)', () => {
   it('503 внутри сырого JSON от GoAPI — считается перегрузкой', () => {
     const raw = 'GoAPI task failed: {"code":200,"data":{"status":"failed"},"logs":["internal server error\\nstatus code: 503","Internal upstream is busy (too many requests)."]}';
     expect(friendlyGenerationError(raw)).toBe('Сервера перегружены, попробуйте другую модель или повторите чуть позже');

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { checkBotSecret } from '../lib/bot-auth.js';
+import { checkAdminSecret } from '../lib/bot-auth.js';
 import {
   shareToGallery, approveItem, rejectItem, toggleLike, listPublic, listFeatured,
   GalleryError, type GallerySort,
@@ -84,9 +84,9 @@ const galleryRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
-  // ── Модерация из админ-бота (bot-secret, без JWT) ──
+  // ── Модерация из админ-бота (admin-bot-secret, без JWT) ──
   fastify.post('/admin/gallery/:id/approve', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const item = await approveItem(id);
     if (!item) return reply.code(409).send({ error: 'Работа не найдена или уже обработана' });
@@ -94,7 +94,7 @@ const galleryRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/admin/gallery/:id/reject', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const item = await rejectItem(id);
     if (!item) return reply.code(409).send({ error: 'Работа не найдена или уже обработана' });

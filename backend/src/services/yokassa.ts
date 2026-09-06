@@ -83,6 +83,12 @@ export async function createPayment(
       status: 'PENDING',
       plan: planKey as any,
       paymentType: 'subscription',
+      // Фиксируем здесь, а не читаем из тела вебхука в processWebhook — оно
+      // приходит на публичный эндпоинт без подписи и подделываемо клиентом
+      // (например, оплатить месяц, но по гонке с настоящим вебхуком прислать
+      // billing: "yearly" и активировать год по цене месяца).
+      billing: billing === 'yearly' ? 'YEARLY' : 'MONTHLY',
+      promoCode: appliedPromo ?? null,
     },
   });
 
@@ -206,7 +212,10 @@ export async function processWebhook(body: unknown): Promise<void> {
   if (payment.plan) {
     const planInfo = PLANS[payment.plan as keyof typeof PLANS];
     if (planInfo) {
-      const billing = (event.object.metadata?.billing === 'yearly' ? 'YEARLY' : 'MONTHLY') as 'MONTHLY' | 'YEARLY';
+      // Берём billing из своей же записи Payment (зафиксирован в createPayment
+      // на сервере), а не из event.object.metadata — тело вебхука не подписано
+      // и приходит с публичного эндпоинта, клиент может прислать туда что угодно.
+      const billing = payment.billing ?? 'MONTHLY';
       const expiresAt = new Date();
       if (billing === 'YEARLY') {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -235,7 +244,7 @@ export async function processWebhook(body: unknown): Promise<void> {
         `plan_grant_${payment.plan.toLowerCase()}`,
       );
 
-      const promoCode = event.object.metadata?.promoCode;
+      const promoCode = payment.promoCode;
       if (promoCode) {
         await finalizeDiscountRedemption({ code: promoCode, userId: payment.userId, paymentId: payment.id }).catch(() => {});
       }

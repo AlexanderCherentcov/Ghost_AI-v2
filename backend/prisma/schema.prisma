@@ -164,6 +164,9 @@ model Payment {
   plan          Plan?
   paymentType   String        @default("subscription") // "subscription" | "caspers"
   casperAmount  Int?          // for casper top-up purchases
+  billing       Billing?      // зафиксировано при создании платежа — вебхук ЮKassa
+                               // не подписан, доверять billing/promoCode из его тела нельзя
+  promoCode     String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

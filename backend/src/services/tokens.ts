@@ -182,11 +182,22 @@ export async function checkAndDeduct(
     // что вообще ограничивает FREE-тариф. std_messages_today сбрасывается
     // в checkResets по day_start — тот же механизм, что уже был для статистики.
     if (domain === 'chat' && cost === 0) {
-      if (plan === 'FREE' && user.std_messages_today >= FREE_LIMITS.chat_daily) {
-        throw Object.assign(
-          new Error('Лимит бесплатных сообщений на сегодня исчерпан'),
-          { code: 'LIMIT_MESSAGES' },
-        );
+      if (plan === 'FREE') {
+        // Проверка лимита и инкремент объединены в один UPDATE с условием в
+        // WHERE (как в deductCaspersOrThrow) — иначе два параллельных запроса
+        // читают один и тот же std_messages_today, оба проходят проверку и
+        // оба инкрементируют, пропуская дневной лимит FREE-тарифа.
+        const claimed = await tx.user.updateMany({
+          where: { id: userId, std_messages_today: { lt: FREE_LIMITS.chat_daily } },
+          data: { std_messages_today: { increment: 1 } },
+        });
+        if (claimed.count === 0) {
+          throw Object.assign(
+            new Error('Лимит бесплатных сообщений на сегодня исчерпан'),
+            { code: 'LIMIT_MESSAGES' },
+          );
+        }
+        return { caspersSpent: 0 };
       }
       await tx.user.update({ where: { id: userId }, data: { std_messages_today: { increment: 1 } } });
       return { caspersSpent: 0 };

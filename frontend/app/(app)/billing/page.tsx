@@ -19,8 +19,16 @@ export default function BillingPage() {
 
   // Тарифы и тиры цен на Caspers — только с бэкенда (GET /plans), без локальных копий цифр
   const [plansData, setPlansData] = useState<PlansResponse | null>(null);
+  const [plansError, setPlansError] = useState(false);
+  function loadPlans() {
+    setPlansError(false);
+    api.payments.plans().then(setPlansData).catch(() => {
+      setPlansError(true);
+      show('Не удалось загрузить тарифы', 'error');
+    });
+  }
   useEffect(() => {
-    api.payments.plans().then(setPlansData).catch(() => show('Не удалось загрузить тарифы', 'error'));
+    loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const plans = plansData?.plans ?? [];
@@ -161,21 +169,24 @@ export default function BillingPage() {
               )}
             </div>
 
-            {/* Промокод на Caspers — активируется сразу */}
-            <div className="mt-4 pt-4 border-t border-[var(--border)] flex items-center gap-2">
+            {/* Промокод на Caspers — активируется сразу.
+                flex-col на мобильном: "Активировать" длиннее соседней "Применить",
+                поэтому в одну строку на узких экранах инпут сжимался до обрезки
+                плейсхолдера ("Промокод на С..."). */}
+            <div className="mt-4 pt-4 border-t border-[var(--border)] flex flex-col sm:flex-row sm:items-center gap-2">
               <input
                 type="text"
                 value={casperPromoCode}
                 onChange={(e) => setCasperPromoCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleRedeemCasperPromo()}
                 placeholder="Промокод на Caspers"
-                className="input-ghost h-9 text-sm flex-1"
+                className="input-ghost h-9 text-sm flex-1 min-w-0"
                 style={{ height: '36px' }}
               />
               <button
                 onClick={handleRedeemCasperPromo}
                 disabled={!casperPromoCode.trim() || casperPromoLoading}
-                className="btn btn-ghost h-9 px-4 text-sm disabled:opacity-40"
+                className="btn btn-ghost h-9 px-4 text-sm disabled:opacity-40 shrink-0"
               >
                 {casperPromoLoading ? 'Активирую...' : 'Активировать'}
               </button>
@@ -234,8 +245,14 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {!plansData && (
+          {!plansData && !plansError && (
             <p className="text-sm text-[rgba(255,255,255,0.4)]">Загрузка тарифов...</p>
+          )}
+          {plansError && (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-[rgba(255,255,255,0.4)]">Не удалось загрузить тарифы</p>
+              <button onClick={loadPlans} className="btn btn-ghost h-8 px-3 text-xs">Повторить</button>
+            </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

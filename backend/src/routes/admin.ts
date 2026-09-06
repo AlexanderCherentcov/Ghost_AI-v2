@@ -6,7 +6,7 @@ import { redis } from '../lib/redis.js';
 import { PLANS } from '../services/yokassa.js';
 import { grantCaspers } from '../services/tokens.js';
 import { createPromoCode, deletePromoCode, normalizePromoCode, PromoError } from '../services/promo.js';
-import { checkBotSecret } from '../lib/bot-auth.js';
+import { checkAdminSecret } from '../lib/bot-auth.js';
 import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
 import { getMaintenanceState, setMaintenanceState } from '../lib/maintenance.js';
 
@@ -77,7 +77,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/users ──────────────────────────────────────────────────
   fastify.get('/admin/users', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const q = request.query as { page?: string; limit?: string; search?: string };
     const page   = Math.max(1, parseInt(q.page ?? '1'));
@@ -117,7 +117,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/users/:id ───────────────────────────────────────────────
   fastify.get('/admin/users/:id', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { id } = request.params as { id: string };
     const user = await prisma.user.findFirst({
@@ -133,7 +133,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── POST /api/admin/setplan ────────────────────────────────────────────────
   fastify.post('/admin/setplan', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { userId, plan } = setplanSchema.parse(request.body);
     const planInfo = PLANS[plan as keyof typeof PLANS];
@@ -173,7 +173,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── POST /api/admin/resetlimits ────────────────────────────────────────────
   fastify.post('/admin/resetlimits', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { userId } = resetSchema.parse(request.body);
 
@@ -199,7 +199,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // ── POST /api/admin/addcaspers ─────────────────────────────────────────────
   // Начислить Caspers на баланс пользователя напрямую.
   fastify.post('/admin/addcaspers', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { userId, amount } = addCaspersSchema.parse(request.body);
 
@@ -217,7 +217,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // ── POST /api/admin/subcaspers ────────────────────────────────────────────
   // Списать Caspers с баланса пользователя (не уходит ниже 0).
   fastify.post('/admin/subcaspers', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { userId, amount } = addCaspersSchema.parse(request.body);
 
@@ -238,7 +238,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── POST /api/admin/ban ────────────────────────────────────────────────────
   fastify.post('/admin/ban', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { userId, unban } = banSchema.parse(request.body);
 
@@ -254,7 +254,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/stats ───────────────────────────────────────────────────
   fastify.get('/admin/stats', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -340,7 +340,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── POST /api/admin/promo/create ───────────────────────────────────────────
   fastify.post('/admin/promo/create', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const input = createPromoSchema.parse(request.body);
     if (input.rewardType === 'CASPERS' && !input.casperAmount) {
@@ -364,7 +364,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/promo/list ──────────────────────────────────────────────
   fastify.get('/admin/promo/list', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const q = request.query as { page?: string; limit?: string };
     const page  = Math.max(1, parseInt(q.page ?? '1'));
@@ -384,7 +384,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/promo/:code — детали + кто активировал ──────────────────
   fastify.get('/admin/promo/:code', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { code } = request.params as { code: string };
     const promo = await prisma.promoCode.findUnique({ where: { code: normalizePromoCode(code) } });
@@ -403,7 +403,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // Полностью удаляет, если ни разу не использовался; иначе деактивирует, чтобы
   // история активаций (кто и что использовал) осталась видна админам.
   fastify.delete('/admin/promo/:code', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { code } = request.params as { code: string };
     try {
@@ -417,13 +417,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // ── GET /api/admin/maintenance — текущий статус тех.работ ──────────────────
   fastify.get('/admin/maintenance', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
     return getMaintenanceState();
   });
 
   // ── POST /api/admin/maintenance — включить/выключить тех.работы ────────────
   fastify.post('/admin/maintenance', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkAdminSecret(request, reply)) return;
 
     const { active, until } = maintenanceSchema.parse(request.body);
     // Новый токен обхода на каждое включение — старая ссылка (если утекла) не

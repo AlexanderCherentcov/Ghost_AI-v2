@@ -45,7 +45,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
           return reply.code(400).send({ error: err.message, code: err.code });
         }
         fastify.log.error(err, 'createPayment failed');
-        return reply.code(502).send({ error: err.message ?? 'Платёжный сервис недоступен' });
+        return reply.code(502).send({ error: 'Платёжный сервис недоступен' });
       }
     },
   });

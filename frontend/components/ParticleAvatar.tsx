@@ -83,12 +83,15 @@ export function ParticleAvatar({
     const ctx = el.getContext('2d');
     if (!ctx) return;
 
+    // Уважаем системную настройку "уменьшить движение" — ни постоянное
+    // вращение, ни цикл форм индикатора "думаю" не должны крутиться, если
+    // пользователь явно попросил ОС уменьшить анимации.
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const effectiveSpinSpeed = reducedMotion ? 0 : spinSpeed;
+    const effectiveCycleShapes = reducedMotion ? undefined : cycleShapes;
+
     let angle = Math.random() * Math.PI * 2;
     const start = performance.now();
-
-    loadLogos().then((l) => {
-      if (!cancelled) logos = l;
-    });
 
     const draw = (t: number) => {
       if (cancelled) return;
@@ -97,10 +100,10 @@ export function ParticleAvatar({
 
       if (logos) {
         const level = reactiveRef.current;
-        angle += spinSpeed * (1 + level * 2.2);
+        angle += effectiveSpinSpeed * (1 + level * 2.2);
 
-        const morph: Morph = cycleShapes && cycleShapes.length > 0
-          ? cycleMorph(cycleShapes, stageMs, transMs, t - start)
+        const morph: Morph = effectiveCycleShapes && effectiveCycleShapes.length > 0
+          ? cycleMorph(effectiveCycleShapes, stageMs, transMs, t - start)
           : { from: shape, to: shape, mixT: 0 };
 
         const a = logos[morph.from] || logos[FALLBACK_PARTICLE_SHAPE];
@@ -135,9 +138,18 @@ export function ParticleAvatar({
           }
         }
       }
-      raf = requestAnimationFrame(draw);
+      // При reducedMotion угол/форма больше не меняются между кадрами — кадр
+      // будет пиксель-в-пиксель тем же, поэтому не гоняем RAF вхолостую,
+      // рисуем один раз, как только форма подгрузится (см. loadLogos().then ниже).
+      if (!reducedMotion) raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
+    if (!reducedMotion) raf = requestAnimationFrame(draw);
+
+    loadLogos().then((l) => {
+      if (cancelled) return;
+      logos = l;
+      if (reducedMotion) draw(performance.now());
+    });
 
     return () => {
       cancelled = true;

@@ -4,12 +4,12 @@
 // его ради клиента means выполнить весь файл целиком).
 import axios from 'axios';
 
-const API_URL    = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
-const BOT_SECRET = process.env.BOT_SECRET ?? '';
+const API_URL          = process.env.INTERNAL_API_URL ?? 'http://backend:4000';
+const ADMIN_BOT_SECRET = process.env.ADMIN_BOT_SECRET ?? '';
 
 export const api = axios.create({
   baseURL: `${API_URL}/api/admin`,
-  headers: { 'x-bot-secret': BOT_SECRET },
+  headers: { 'x-admin-bot-secret': ADMIN_BOT_SECRET },
   timeout: 15_000,
   proxy: false, // в обход HTTP_PROXY — внутренний Docker-хост через прокси недостижим
 });

@@ -13,7 +13,7 @@
  * и дёргает соответствующие ручки.
  */
 import type { Bot } from 'grammy';
-import { api } from './lib/admin-api.js';
+import { api } from './lib/support-api.js';
 import { apiErrorMessage } from './lib/error-message.js';
 
 const SUPPORT_GROUP_ID = process.env.GHOSTLINE_SUPPORT_GROUP_ID ?? '';

@@ -6,7 +6,7 @@
  * пишет боту в личку, а мы заводим/дополняем тикет через backend.
  */
 import { Bot } from 'grammy';
-import { api } from './lib/admin-api.js';
+import { api } from './lib/support-api.js';
 
 const WELCOME_TEXT =
   '👋 Поддержка GhostLine AI\n\n' +

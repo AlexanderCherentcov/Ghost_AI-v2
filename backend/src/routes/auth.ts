@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { redis } from '../lib/redis.js';
 import { notifyNewUser } from '../services/admin-notify.js';
 import { PLANS } from '../services/yokassa.js';
 import { FREE_WELCOME_CASPERS } from '../config/plans.js';
@@ -56,15 +57,36 @@ function hashesMatch(expected: string, actual: string | null | undefined): boole
   return crypto.timingSafeEqual(a, b);
 }
 
-function signTokens(fastify: FastifyInstance, userId: string, email?: string) {
+// TTL ключа в Redis держим синхронно со сроком жизни самого refresh-токена —
+// если задать переменной окружения другое значение, ключ должен жить не дольше.
+const REFRESH_TTL_SECONDS = parseDurationSeconds(process.env.JWT_REFRESH_EXPIRES_IN ?? '30d');
+
+function parseDurationSeconds(duration: string): number {
+  const match = /^(\d+)([smhd])$/.exec(duration);
+  if (!match) return 30 * 24 * 60 * 60;
+  const value = parseInt(match[1], 10);
+  const unit: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+  return value * unit[match[2]];
+}
+
+/**
+ * Каждый refresh-токен несёт уникальный jti, зарегистрированный в Redis —
+ * при следующем /auth/refresh ключ удаляется (ротация), а повторное
+ * предъявление того же токена (например, украденного после легитимной
+ * ротации) не находит ключ и отклоняется. Без этого refresh-токен на 30 дней
+ * был вечно валиден и отозвать его при компрометации было нечем.
+ */
+async function issueTokens(fastify: FastifyInstance, userId: string, email?: string) {
+  const jti = crypto.randomUUID();
   const accessToken = fastify.jwt.sign(
     { userId, email, type: 'access' },
     { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' }
   );
   const refreshToken = fastify.jwt.sign(
-    { userId, email, type: 'refresh' },
+    { userId, email, type: 'refresh', jti },
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '30d' }
   );
+  await redis.set(`refresh_jti:${userId}:${jti}`, '1', 'EX', REFRESH_TTL_SECONDS);
   return { accessToken, refreshToken };
 }
 
@@ -135,7 +157,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       notifyNewUser({ ...user, source: 'telegram-webapp', telegramUsername: tgUser.username }).catch(() => {});
     }
 
-    const tokens = signTokens(fastify, user.id);
+    const tokens = await issueTokens(fastify, user.id);
     return { ...tokens, user, isNew: isNew || !user.onboardingDone };
   });
 
@@ -206,7 +228,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const { accessToken, refreshToken } = signTokens(fastify, user.id, user.email ?? undefined);
+    const { accessToken, refreshToken } = await issueTokens(fastify, user.id, user.email ?? undefined);
 
     // Редиректим на фронтенд с токенами в query (фронтенд сохраняет их в httpOnly cookie через API)
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
@@ -280,7 +302,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const { accessToken, refreshToken } = signTokens(fastify, user.id, user.email ?? undefined);
+    const { accessToken, refreshToken } = await issueTokens(fastify, user.id, user.email ?? undefined);
 
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
@@ -311,7 +333,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       notifyNewUser({ ...user, source: 'telegram-bot', telegramUsername: body.username }).catch(() => {});
     }
 
-    const tokens = signTokens(fastify, user.id);
+    const tokens = await issueTokens(fastify, user.id);
     return { ...tokens, isNew: !user.onboardingDone, termsAccepted: !!user.termsAcceptedAt };
   });
 
@@ -396,7 +418,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       notifyNewUser({ ...user, source: 'telegram-verify', telegramUsername: fields.username }).catch(() => {});
     }
 
-    const tokens = signTokens(fastify, user.id);
+    const tokens = await issueTokens(fastify, user.id);
     return { ...tokens, user, isNew: !user.onboardingDone };
   });
 
@@ -446,7 +468,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       notifyNewUser({ ...user, source: 'telegram-oauth', telegramUsername: fields.username }).catch(() => {});
     }
 
-    const { accessToken, refreshToken } = signTokens(fastify, user.id);
+    const { accessToken, refreshToken } = await issueTokens(fastify, user.id);
     const redirectUrl = user.onboardingDone ? '/chat' : '/onboarding/name';
     return reply.redirect(
       `${process.env.FRONTEND_URL}/auth/callback/#access=${accessToken}&refresh=${refreshToken}&redirect=${encodeURIComponent(redirectUrl)}`
@@ -459,7 +481,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     if (!body?.refreshToken) return reply.code(400).send({ error: 'No refresh token' });
 
     try {
-      const payload = fastify.jwt.verify<{ userId: string; type?: string }>(body.refreshToken);
+      const payload = fastify.jwt.verify<{ userId: string; type?: string; jti?: string }>(body.refreshToken);
       // Без этой проверки короткоживущий access-токен (15 мин) можно предъявить
       // сюда и получить свежую пару, включая 30-дневный refresh — что сводит
       // на нет весь смысл его короткого TTL. type отсутствует у токенов, выпущенных
@@ -467,10 +489,20 @@ export default async function authRoutes(fastify: FastifyInstance) {
       // type: 'access' отклоняем всегда: все новые access-токены его проставляют.
       if (payload.type === 'access') throw new Error('Not a refresh token');
 
+      // Ротация: jti — одноразовый, del() атомарно проверяет и сразу гасит ключ,
+      // поэтому повторное предъявление того же refresh-токена (например, украденного
+      // после того как легитимный клиент уже обновился) больше не находит ключ и
+      // отклоняется. jti отсутствует у токенов, выпущенных до этого фикса — пропускаем
+      // их без проверки один раз (иначе разлогинит всех активных пользователей разом).
+      if (payload.jti) {
+        const removed = await redis.del(`refresh_jti:${payload.userId}:${payload.jti}`);
+        if (removed === 0) throw new Error('Refresh token already used or revoked');
+      }
+
       const user = await prisma.user.findUnique({ where: { id: payload.userId } });
       if (!user) throw new Error('User not found');
 
-      const tokens = signTokens(fastify, user.id, user.email ?? undefined);
+      const tokens = await issueTokens(fastify, user.id, user.email ?? undefined);
       return tokens;
     } catch {
       return reply.code(401).send({ error: 'Invalid refresh token' });

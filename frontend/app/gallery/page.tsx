@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
 import { api, type GalleryItem, type GalleryResponse } from '@/lib/api';
@@ -57,6 +57,27 @@ function GalleryCard({ item, canLike, onLikeChange }: {
   onLikeChange: (id: string, liked: boolean, likesCount: number) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // При PAGE_LIMIT=24 голое autoPlay на каждой карточке грузит CPU/батарею
+  // декодированием до 24 видео одновременно, даже вне вьюпорта. Тот же приём,
+  // что уже сделан для hero-видео на лендинге (HeroVideoBackground) — играем
+  // только пока карточка реально видна, и не запускаем вовсе при
+  // prefers-reduced-motion.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (item.domain !== 'video' || !el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play().catch(() => {});
+        else el.pause();
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [item.domain]);
 
   async function handleLike(e: React.MouseEvent) {
     e.preventDefault();
@@ -82,9 +103,10 @@ function GalleryCard({ item, canLike, onLikeChange }: {
     >
       {item.domain === 'video' ? (
         <video
+          ref={videoRef}
           src={item.mediaUrl}
           className="absolute inset-0 w-full h-full object-cover"
-          autoPlay loop muted playsInline
+          loop muted playsInline
         />
       ) : (
         <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />

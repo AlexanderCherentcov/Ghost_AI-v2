@@ -123,6 +123,13 @@ export function ParticleBrainField() {
     const ctx = el.getContext('2d');
     if (!ctx) return;
 
+    // При "уменьшить движение" в ОС отключаем автономное вращение и таймерный
+    // цикл форм (brain→bulb→...) — это постоянная фоновая анимация без участия
+    // пользователя, ровно то, что prefers-reduced-motion просит убрать. Fade-in/
+    // параллакс по скроллу оставляем — это прямая реакция на действие пользователя,
+    // а не самостоятельное движение.
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     // maxScroll кэшируется и пересчитывается только при resize — читать
     // document.documentElement.scrollHeight на каждое scroll-событие (их десятки в
     // секунду) форсирует синхронный layout у браузера и подвешивает скролл.
@@ -208,26 +215,31 @@ export function ParticleBrainField() {
       const cy = h / 2 * 0.98 + Math.sin(t * 0.00028) * h * 0.025;
       const R = Math.min(w, h) * (wide ? 0.34 : 0.4);
 
-      angle += 0.0038;
+      angle += reducedMotion ? 0 : 0.0038;
       const cosA = Math.cos(angle), sinA = Math.sin(angle);
 
-      const elapsed = t - start;
       let fromName: string, toName: string, mixT: number;
-      if (elapsed < INTRO) { fromName = toName = 'brain'; mixT = 0; }
-      else if (elapsed < INTRO * 2) {
-        const local = elapsed - INTRO;
-        if (local < TRANS) { fromName = 'brain'; toName = 'bulb'; mixT = smooth(local / TRANS); }
-        else { fromName = toName = 'bulb'; mixT = 0; }
+      if (reducedMotion) {
+        // Без автопрокрутки по времени — застываем на исходной форме мозга.
+        fromName = toName = 'brain'; mixT = 0;
       } else {
-        const loopDur = STAGE * LOOP.length;
-        const since = elapsed - INTRO * 2;
-        const loopT = since % loopDur;
-        const idx = Math.floor(loopT / STAGE);
-        const local = loopT % STAGE;
-        const curName = LOOP[idx];
-        const prevName = since < STAGE ? 'bulb' : LOOP[(idx - 1 + LOOP.length) % LOOP.length];
-        if (local < TRANS) { fromName = prevName; toName = curName; mixT = smooth(local / TRANS); }
-        else { fromName = toName = curName; mixT = 0; }
+        const elapsed = t - start;
+        if (elapsed < INTRO) { fromName = toName = 'brain'; mixT = 0; }
+        else if (elapsed < INTRO * 2) {
+          const local = elapsed - INTRO;
+          if (local < TRANS) { fromName = 'brain'; toName = 'bulb'; mixT = smooth(local / TRANS); }
+          else { fromName = toName = 'bulb'; mixT = 0; }
+        } else {
+          const loopDur = STAGE * LOOP.length;
+          const since = elapsed - INTRO * 2;
+          const loopT = since % loopDur;
+          const idx = Math.floor(loopT / STAGE);
+          const local = loopT % STAGE;
+          const curName = LOOP[idx];
+          const prevName = since < STAGE ? 'bulb' : LOOP[(idx - 1 + LOOP.length) % LOOP.length];
+          if (local < TRANS) { fromName = prevName; toName = curName; mixT = smooth(local / TRANS); }
+          else { fromName = toName = curName; mixT = 0; }
+        }
       }
       const introOnly = (toName === 'brain' || toName === 'bulb') && (fromName === 'brain' || fromName === 'bulb');
       const ready = introOnly || logosReady;

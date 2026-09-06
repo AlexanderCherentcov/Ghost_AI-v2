@@ -73,7 +73,7 @@ export function SupportWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-50 w-80 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl p-5"
+            className="fixed bottom-24 right-6 z-50 w-[min(320px,calc(100vw-32px))] rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl p-5"
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

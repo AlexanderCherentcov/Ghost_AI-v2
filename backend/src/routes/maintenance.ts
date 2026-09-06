@@ -1,8 +1,18 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { getMaintenanceState } from '../lib/maintenance.js';
 
 const BYPASS_COOKIE = 'ghost_bypass';
 const BYPASS_MAX_AGE_SEC = 60 * 60 * 24; // 24ч — обход надо будет один раз подтвердить ссылкой в сутки
+
+/** timingSafeEqual вместо `===` — та же причина, что и у hashesMatch в auth.ts. */
+function tokensMatch(expected: string, actual: string | undefined): boolean {
+  if (!actual) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(actual);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 /**
  * Публичный, без авторизации — сайту и боту нужно знать статус тех.работ ещё
@@ -24,10 +34,12 @@ const maintenanceRoutes: FastifyPluginAsync = async (fastify) => {
     const query = request.query as { bypass?: string };
     const cookieToken = request.cookies?.[BYPASS_COOKIE];
     const validToken = state.bypassToken; // null, если тех.работы выключены — сверять не с чем
-    const bypassed = !!validToken && (query.bypass === validToken || cookieToken === validToken);
+    const viaQuery = !!validToken && tokensMatch(validToken, query.bypass);
+    const viaCookie = !!validToken && tokensMatch(validToken, cookieToken);
+    const bypassed = viaQuery || viaCookie;
 
-    if (validToken && query.bypass === validToken && cookieToken !== validToken) {
-      reply.setCookie(BYPASS_COOKIE, validToken, {
+    if (viaQuery && !viaCookie) {
+      reply.setCookie(BYPASS_COOKIE, validToken as string, {
         path: '/', maxAge: BYPASS_MAX_AGE_SEC, httpOnly: true, sameSite: 'lax', secure: true,
       });
     }

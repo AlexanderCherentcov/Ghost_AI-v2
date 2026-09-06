@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { checkBotSecret } from '../lib/bot-auth.js';
+import { checkSupportBotSecret } from '../lib/bot-auth.js';
 import {
   getOrCreateOpenTicket, appendUserMessage, appendAdminReply,
   takeTicket, closeTicket, reopenTicket, findTicketByTopicId,
@@ -30,7 +30,9 @@ const telegramMessageSchema = z.object({
 const supportRoutes: FastifyPluginAsync = async (fastify) => {
   // ── Пользователь/гость пишет в поддержку — работает и с сайта, и из бота ──
   // (бот шлёт тот же JWT, что и обычные API-запросы сессии пользователя)
-  fastify.post('/support/message', async (request, reply) => {
+  // Без обязательной авторизации (гости пишут без логина) — точечный лимит
+  // поверх общего 200/мин, чтобы не заспамить очередь тикетов с одного IP.
+  fastify.post('/support/message', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const body = messageSchema.parse(request.body);
 
     let userId: string | null = null;
@@ -66,7 +68,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   // сюда стучится support-bot от лица пользователя — известен только его
   // Telegram ID, поэтому userId резолвим здесь по telegramId в БД.
   fastify.post('/admin/support/message-from-telegram', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { telegramId, text, displayName } = telegramMessageSchema.parse(request.body);
 
     const user = await prisma.user.findUnique({
@@ -84,10 +86,10 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true, knownUser: !!user });
   });
 
-  // ── Операторские действия из группы поддержки (вызывает admin-bot, bot-secret) ──
+  // ── Операторские действия из группы поддержки (вызывает support-bot, support-bot-secret) ──
 
   fastify.post('/admin/support/tickets/:id/take', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const { adminId, adminName } = takeSchema.parse(request.body);
     const ticket = await takeTicket(id, adminId, adminName);
@@ -96,7 +98,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/admin/support/tickets/:id/close', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const ticket = await closeTicket(id);
     if (!ticket) return reply.code(409).send({ error: 'Тикет не найден или уже закрыт' });
@@ -104,7 +106,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/admin/support/tickets/:id/reopen', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const ticket = await reopenTicket(id);
     if (!ticket) return reply.code(409).send({ error: 'Тикет не найден или не закрыт' });
@@ -112,7 +114,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/admin/support/tickets/:id/reply', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { id } = request.params as { id: string };
     const { text } = replySchema.parse(request.body);
     const result = await appendAdminReply(id, text);
@@ -121,7 +123,7 @@ const supportRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get('/admin/support/tickets/by-topic/:topicId', async (request, reply) => {
-    if (!checkBotSecret(request, reply)) return;
+    if (!checkSupportBotSecret(request, reply)) return;
     const { topicId } = request.params as { topicId: string };
     const parsed = parseInt(topicId, 10);
     if (!Number.isFinite(parsed)) return reply.code(400).send({ error: 'topicId должен быть числом' });

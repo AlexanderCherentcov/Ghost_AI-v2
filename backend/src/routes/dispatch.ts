@@ -74,7 +74,10 @@ Examples:
 // ─── Роут ─────────────────────────────────────────────────────────────────────
 
 const dispatchRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post('/dispatch', async (request, reply) => {
+  // Без авторизации (вызывается ещё до логина/на каждый ввод) — точечный лимит
+  // поверх общего 200/мин, иначе можно бесплатно накрутить вызовы Cloudflare/
+  // OpenRouter с одного IP.
+  fastify.post('/dispatch', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
     const { prompt, context } = bodySchema.parse(request.body);
 
     // Уровень 1: мгновенный regex — без вызова API

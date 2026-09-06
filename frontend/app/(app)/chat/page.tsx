@@ -450,11 +450,20 @@ export default function ChatPage() {
   // Цена карточки "Музыка" — из casper_costs (см. комментарий у MUSIC_DISCOVERY_ITEM,
   // у музыки нет своего реестра моделей в data.models, цена приходит отдельным полем).
   const [musicCost, setMusicCost] = useState<number | undefined>();
-  useEffect(() => {
+  // Раньше .catch(() => {}) молча проглатывал ошибку — при недоступном backend
+  // витрина не рендерилась вообще, пользователь видел пустой экран без единой
+  // подсказки, что происходит и что можно сделать.
+  const [modelsError, setModelsError] = useState(false);
+  function loadModels() {
+    setModelsError(false);
     api.payments.plans().then((data) => {
       setModels(data.models);
       setMusicCost(data.casper_costs.music_generate ?? 5);
-    }).catch(() => {});
+    }).catch(() => setModelsError(true));
+  }
+  useEffect(() => {
+    loadModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Клик по карточке в витрине картинок/видео — imageModel/videoOptions.videoModel
@@ -606,7 +615,7 @@ export default function ChatPage() {
 
             {/* Витрина возможностей — реальные модели с бэкенда, все домены сразу
                 (структура GPTunneL), не спрятаны за пилюлями. */}
-            {models && (
+            {models ? (
               <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-6 pb-6 [@media(max-height:560px)]:pt-2 [@media(max-height:560px)]:pb-3 [@media(max-height:560px)]:[--discovery-card-size:128px]">
                 <div className="w-full space-y-10 [@media(max-height:560px)]:space-y-4">
                   <ModelDiscoveryRow
@@ -644,6 +653,23 @@ export default function ChatPage() {
                     onDetails={(item) => setDetailsItem({ item, domain: 'music' })}
                   />
                 </div>
+              </div>
+            ) : modelsError ? (
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Не удалось загрузить модели — проверьте соединение
+                </p>
+                <button
+                  type="button"
+                  onClick={loadModels}
+                  className="btn btn-ghost h-9 px-4 text-sm"
+                >
+                  Повторить
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 flex items-center justify-center px-6">
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Загрузка моделей…</p>
               </div>
             )}
           </motion.div>

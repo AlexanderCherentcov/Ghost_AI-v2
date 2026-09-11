@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { GhostIcon } from '@/components/icons/GhostIcon';
 
 export const metadata = {
-  title: 'Политика конфиденциальности — GhostLine AI',
-  description: 'Политика обработки персональных данных GhostLine AI',
+  // Суффикс "· GhostLine" добавляет шаблон в app/layout.tsx — раньше здесь
+  // тоже был бренд в title, и на выдаче дублировалось "... GhostLine AI · GhostLine".
+  title: 'Политика конфиденциальности',
+  description: 'Политика обработки персональных данных пользователей GhostLine AI.',
 };
 
 export default function PrivacyPage() {

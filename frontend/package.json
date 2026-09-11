@@ -2,6 +2,12 @@
   "name": "@ghostline/frontend",
   "version": "1.0.0",
   "private": true,
+  "browserslist": [
+    "> 0.3%",
+    "last 2 years",
+    "not dead",
+    "not op_mini all"
+  ],
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

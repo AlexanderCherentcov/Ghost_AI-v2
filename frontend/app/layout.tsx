@@ -1,6 +1,35 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import '@/styles/globals.css';
 import { Providers } from './providers';
+
+// next/font/google самохостит шрифты в сборке (файлы выкладываются рядом со
+// статикой сайта) — раньше подключались через @import в globals.css к
+// fonts.googleapis.com: лишний внешний DNS/TLS/HTTP-роундтрип на критическом
+// пути рендера у каждого пользователя (~450мс цепочка, 224КБ трафика).
+// cyrillic — сайт русскоязычный, кириллица нужна в основном шрифте интерфейса
+// (Inter) и в моноширинном (JetBrains Mono, код/технический текст могут быть
+// на русском в комментариях). У Space Grotesk на Google Fonts нет кириллицы —
+// она и не нужна: используется только в var(--font-display) для h1-h3, где
+// сама CSS font-family уже даёт fallback на Inter для кириллических символов.
+const inter = Inter({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+});
 
 // ─── Канонический домен ─────────────────────────────────────────────────────
 const BASE_URL = 'https://ghostlineai.ru';
@@ -185,7 +214,11 @@ const jsonLd = {
 // ─── Корневой layout ─────────────────────────────────────────────────────────
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className="dark" suppressHydrationWarning>
+    <html
+      lang="ru"
+      className={`dark ${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Инициализация темы и шрифта — выполняется до отрисовки, чтобы не было мигания */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme')||'dark';var f=localStorage.getItem('fontSize')||'medium';var cl=document.documentElement.classList;cl.remove('light','dark');cl.add(t);cl.remove('font-small','font-medium','font-large');if(f!=='medium')cl.add('font-'+f);}catch(e){}})();` }} />
@@ -197,9 +230,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        {/* Preconnect к Google Fonts (уже используется в CSS) */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Preconnect к Google Fonts убран — шрифты теперь самохостятся через
+            next/font/google (см. импорты выше), в runtime нет ни одного запроса
+            к fonts.googleapis.com/fonts.gstatic.com. */}
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>

@@ -2,15 +2,29 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChatIcon, VisionIcon, SoundIcon, ReelIcon, MicIcon,
   SparkleIcon, TokenIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, CheckIcon,
   AppleIcon, AndroidIcon, WindowsIcon,
 } from '@/components/icons';
-import { ParticleBrainField } from '@/components/landing/ParticleBrainField';
-import { HeroVideoBackground } from '@/components/landing/HeroVideoBackground';
-import { SupportWidget } from '@/components/ui/SupportWidget';
+// ssr:false — чисто декоративные клиентские виджеты (canvas-анимация,
+// видео-фон, чат поддержки), не влияют на LCP/содержимое страницы, но раньше
+// попадали в основной бандл лендинга и гидрировались сразу. Выделены в
+// отдельные чанки, загружаются и монтируются только на клиенте.
+const ParticleBrainField = dynamic(
+  () => import('@/components/landing/ParticleBrainField').then((m) => m.ParticleBrainField),
+  { ssr: false },
+);
+const HeroVideoBackground = dynamic(
+  () => import('@/components/landing/HeroVideoBackground').then((m) => m.HeroVideoBackground),
+  { ssr: false },
+);
+const SupportWidget = dynamic(
+  () => import('@/components/ui/SupportWidget').then((m) => m.SupportWidget),
+  { ssr: false },
+);
 import { api, type PlanInfo, type GalleryItem } from '@/lib/api';
 import { loadFeatureModelNames, loadFeatureModelPreviews, topNames, type FeatureModelNames, type FeatureModelPreview } from '@/lib/model-display';
 import { fakeCyclePrice, freeTierTagline, cheapestCosts, maxGenerations, type CheapestCosts } from '@/lib/pricing';
@@ -35,6 +49,32 @@ const SHOWCASE_GRADIENTS = [
   'linear-gradient(135deg, rgba(167,139,250,.32), rgba(20,15,35,.9))',
 ];
 const SHOWCASE_TILE_HEIGHT = 'h-44';
+
+// Секция "Галерея работ" — ниже сгиба страницы, но раньше все видео там играли
+// с autoPlay сразу при монтаже, независимо от того, докрутил ли пользователь
+// до неё вообще (лишняя загрузка/декодирование видео на старте). Тот же приём,
+// что уже применён в HeroVideoBackground и app/gallery/page.tsx — играем
+// только пока элемент реально во вьюпорте, не запускаем при prefers-reduced-motion.
+function LazyAutoplayVideo({ src, className }: { src: string; className?: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play().catch(() => {});
+        else el.pause();
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return <video ref={ref} src={src} className={className} loop muted playsInline preload="metadata" />;
+}
 
 // Реальные режимы продукта (см. inputbar/types.ts:ChatMode) — без вымышленных
 // возможностей вроде старого "Ghost Think": тот режим был убран из реестра моделей
@@ -475,7 +515,7 @@ export default function LandingPage() {
                       style={{ border: '1px solid var(--panel-glass-border)' }}
                     >
                       {item.domain === 'video' ? (
-                        <video src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                        <LazyAutoplayVideo src={item.mediaUrl} className="absolute inset-0 w-full h-full object-cover" />
                       ) : (
                         <img src={item.mediaUrl} alt={item.prompt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                       )}
@@ -797,7 +837,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div>
-              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#726a89' }}>ПРОДУКТ</div>
+              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>ПРОДУКТ</div>
               <div className="flex flex-col gap-2.5 text-sm">
                 <a href="#features" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Возможности</a>
                 <a href="#how" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Как это работает</a>
@@ -806,7 +846,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div>
-              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#726a89' }}>КОМПАНИЯ</div>
+              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>КОМПАНИЯ</div>
               <div className="flex flex-col gap-2.5 text-sm">
                 <Link href="/install" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Установить как приложение</Link>
                 <Link href="/privacy" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Политика конфиденциальности</Link>
@@ -814,7 +854,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div>
-              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#726a89' }}>ПОДДЕРЖКА</div>
+              <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>ПОДДЕРЖКА</div>
               <div className="flex flex-col gap-2.5 text-sm">
                 <a href="mailto:xxghostlinex@gmail.com" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Написать в поддержку</a>
                 <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Telegram</a>
@@ -823,7 +863,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t" style={{ borderColor: 'rgba(148,163,184,.1)' }}>
-            <span className="text-[13px]" style={{ color: '#726a89' }}>© {new Date().getFullYear()} GhostLine AI</span>
+            <span className="text-[13px]" style={{ color: '#8078a0' }}>© {new Date().getFullYear()} GhostLine AI</span>
             <span
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs"
               style={{ background: 'rgba(123,92,240,.08)', border: '1px solid rgba(123,92,240,.2)', color: '#c4b5fd' }}

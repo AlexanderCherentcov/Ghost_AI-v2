@@ -49,7 +49,15 @@ jobs:
             DEPLOY_BACKEND=$(echo "$CHANGED" | grep -q '^backend/' && echo true || echo false)
             DEPLOY_FRONTEND=$(echo "$CHANGED" | grep -q '^frontend/' && echo true || echo false)
             DEPLOY_BOT=$(echo "$CHANGED" | grep -q '^bot/' && echo true || echo false)
-            echo "Changed services — backend: $DEPLOY_BACKEND, frontend: $DEPLOY_FRONTEND, bot: $DEPLOY_BOT"
+            # infra/nginx/*.conf монтируется в контейнер read-only volume'ом —
+            # git reset --hard обновляет файл на диске, но РАБОТАЮЩИЙ процесс nginx
+            # продолжает жить со старым конфигом в памяти, пока его не перезагрузить.
+            # Раньше этот случай был вообще не покрыт: воркфлоу триггерится на
+            # infra/** (см. `on: push: paths:` выше), но скрипт ничего не делал с
+            # nginx — правки конфига реально применялись только со следующим
+            # ручным перезапуском контейнера.
+            DEPLOY_NGINX=$(echo "$CHANGED" | grep -q '^infra/nginx/' && echo true || echo false)
+            echo "Changed services — backend: $DEPLOY_BACKEND, frontend: $DEPLOY_FRONTEND, bot: $DEPLOY_BOT, nginx: $DEPLOY_NGINX"
 
             cd infra
 
@@ -72,6 +80,12 @@ jobs:
               docker compose build --no-cache bot admin-bot support-bot
               docker compose up -d --no-deps bot admin-bot support-bot
               echo "→ Bot deployed"
+            fi
+
+            if [ "$DEPLOY_NGINX" = "true" ]; then
+              echo "→ Reloading nginx config..."
+              docker compose exec nginx nginx -s reload
+              echo "→ Nginx reloaded"
             fi
 
             docker image prune -f

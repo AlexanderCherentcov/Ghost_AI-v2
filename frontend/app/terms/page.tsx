@@ -3,8 +3,9 @@ import { GhostIcon } from '@/components/icons/GhostIcon';
 import { WarningIcon } from '@/components/icons';
 
 export const metadata = {
-  title: 'Условия использования — GhostLine AI',
-  description: 'Пользовательское соглашение и условия использования сервиса GhostLine AI',
+  // Суффикс "· GhostLine" добавляет шаблон в app/layout.tsx — см. privacy/page.tsx.
+  title: 'Условия использования',
+  description: 'Пользовательское соглашение и условия использования сервиса GhostLine AI.',
 };
 
 export default function TermsPage() {

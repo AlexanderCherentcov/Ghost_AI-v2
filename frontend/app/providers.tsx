@@ -104,14 +104,15 @@ function AuthInit({ children }: { children: React.ReactNode }) {
     clearAuth();
   }, [hydrated, pathname]);
 
-  // Callback-страницы должны рендериться немедленно (без ожидания), чтобы их useState-инициализатор
-  // успел захватить хэш/токены до запуска React-эффектов.
-  const isCallback = pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/telegram/callback');
-
-  // Пока localStorage не гидрирован: не рендерим ничего (одинаково на сервере и клиенте → без рассинхрона).
-  // После гидратации всегда рендерим children — редиректы авторизации обрабатывают сами страницы.
-  if (!isCallback && !hydrated) return null;
-
+  // РАНЬШЕ здесь был `if (!isCallback && !hydrated) return null;`, блокировавший
+  // рендер ЛЮБОЙ страницы (включая публичный лендинг, /login, /privacy) до
+  // гидратации localStorage на клиенте. Это означало, что сервер (и любой
+  // краулер без JS — Yandex, Telegram/VK preview-боты) получал ПУСТОЙ HTML:
+  // подтверждено curl'ом на проде — 0 тегов в <body> кроме <meta>/<script>.
+  // Auth-состояние нужно знать ДО рендера только приватным разделам ((app)/
+  // layout.tsx, onboarding/layout.tsx) — у них уже есть собственный, куда более
+  // узкий гейт по user/isLoading из useAuthStore. Публичные страницы не должны
+  // ждать вообще ничего.
   return <>{children}</>;
 }
 

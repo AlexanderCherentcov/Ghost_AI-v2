@@ -29,10 +29,13 @@ const config: Config = {
         'border-def':   'rgba(255,255,255,0.06)',
         'border-hover': 'rgba(255,255,255,0.12)',
       },
+      // Переменные --font-* задаются next/font/google в app/layout.tsx —
+      // шрифты самохостятся в сборке, без внешнего запроса к fonts.googleapis.com
+      // на каждую загрузку страницы (раньше — @import в styles/globals.css).
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-        display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-jetbrains-mono)', 'Fira Code', 'monospace'],
+        display: ['var(--font-space-grotesk)', 'var(--font-inter)', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         'display': ['64px', { lineHeight: '1.05', letterSpacing: '-0.04em' }],

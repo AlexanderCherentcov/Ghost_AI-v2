@@ -13,6 +13,11 @@ export type SpendDomain = 'chat' | 'image' | 'video' | 'music';
 
 export { CASPER_COSTS };
 
+// Тип клиента транзакции Prisma — тот же приём, что уже применён в
+// deductCaspersOrThrow, чтобы функции могли работать и с обычным prisma,
+// и внутри чужого $transaction (например, вебхука ЮKassa).
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 export const FREE_WEEKLY_LIMITS = {
   images: FREE_LIMITS.images_weekly,
   music:  FREE_LIMITS.music_weekly,
@@ -75,41 +80,36 @@ export async function checkResets(userId: string): Promise<void> {
     updates.month_start       = now;
   }
 
-  // Месячное начисление Caspers: когда прошло period_start + 30 дней (только платные тарифы)
-  // Используем оптимистичную блокировку (updateMany с условием по period_start) + атомарный
-  // инкремент, чтобы избежать двойного начисления при гонке.
-  let didGrantMonthly = false;
-  if (user.caspers_monthly > 0) {
-    const periodEnd = new Date(user.period_start);
-    periodEnd.setDate(periodEnd.getDate() + 30);
-    if (now >= periodEnd) {
-      const granted = await prisma.user.updateMany({
-        where: {
-          id: userId,
-          period_start: user.period_start,   // оптимистичная блокировка — сработает только один раз
-          caspers_monthly: { gt: 0 },
-        },
-        data: {
-          caspers_balance: { increment: user.caspers_monthly },
-          period_start: now,
-        },
-      });
-      if (granted.count > 0) {
-        didGrantMonthly = true;
-        await prisma.casperTransaction.create({
-          data: { userId, amount: user.caspers_monthly, reason: 'plan_grant_monthly' },
-        }).catch(() => {});
-      }
-    }
+  // Балансовая демоция подписки (решение Александра, 2026-09-11): платные
+  // привилегии держатся, пока caspers_balance > 0, а не до какой-то даты.
+  // РАНЬШЕ здесь был периодический авто-регрант caspers_monthly каждые 30 дней
+  // (period_start + 30d) НЕЗАВИСИМО от того, оплатил ли пользователь ещё раз —
+  // то есть один платёж давал бесконечные ежемесячные Caspers даром, а
+  // user.plan вообще никогда не откатывался на FREE (planExpiresAt не
+  // проверялся нигде). Теперь единственный источник новых Caspers на платный
+  // тариф — реальная оплата (см. processWebhook в yokassa.ts), а демоция —
+  // вот эта проверка, тот же паттерн, что и в checkAndDeduct.
+  if (user.plan !== 'FREE' && user.caspers_balance <= 0) {
+    updates.plan = 'FREE';
+    updates.caspers_monthly = 0;
   }
 
-  // Применяем оставшиеся сбросы счётчиков (если есть) отдельно
+  // Применяем сбросы счётчиков/демоцию (если есть) одним запросом
   if (Object.keys(updates).length > 0) {
     await prisma.user.update({ where: { id: userId }, data: updates });
   }
+}
 
-  // Подавляем предупреждение о неиспользуемой переменной
-  void didGrantMonthly;
+/**
+ * Та же балансовая демоция, что в checkResets/checkAndDeduct — вызывается
+ * отдельно там, где баланс мог уйти в 0 не через обычный расход (возврат
+ * оплаты, ручное списание админом), а не через checkAndDeduct/checkResets.
+ */
+export async function demoteIfDepleted(userId: string): Promise<void> {
+  await prisma.user.updateMany({
+    where: { id: userId, plan: { not: 'FREE' }, caspers_balance: { lte: 0 } },
+    data: { plan: 'FREE', caspers_monthly: 0 },
+  }).catch(() => {});
 }
 
 // ─── Атомарное списание Caspers ────────────────────────────────────────────────
@@ -171,7 +171,17 @@ export async function checkAndDeduct(
     });
     if (!user) throw Object.assign(new Error('User not found'), { code: 'UNAUTHORIZED' });
 
-    const plan = user.plan as string;
+    // Балансовая демоция подписки — см. подробный комментарий в checkResets.
+    // Проверяем здесь тоже (не только в checkResets), т.к. это единственная
+    // точка, где домен-специфичная логика ниже читает user.plan для гейтинга —
+    // без этого баланс мог упасть до 0 прямо в этой транзакции (списание за
+    // предыдущий домен того же запроса не бывает, но на всякий случай единый
+    // источник правды лучше двух разных).
+    let plan = user.plan as string;
+    if (plan !== 'FREE' && user.caspers_balance <= 0) {
+      await tx.user.update({ where: { id: userId }, data: { plan: 'FREE', caspers_monthly: 0 } });
+      plan = 'FREE';
+    }
 
     // ── обычный чат (бесплатная модель, cost === 0) ─────────────────────────
     // Безлимитный на платных тарифах — Cloudflare-модель ничего не стоит по
@@ -298,14 +308,20 @@ export async function deductCaspers(
 }
 
 // ─── Начисление Caspers (при покупке/продлении тарифа) ───────────────────────
+//
+// client — опционально передаётся tx, если вызывается внутри чужого
+// $transaction (см. processWebhook в yokassa.ts — флип статуса платежа и
+// начисление должны быть одной атомарной операцией, иначе крах процесса между
+// ними навсегда помечает платёж SUCCEEDED без выданных Caspers/плана).
 
 export async function grantCaspers(
   userId: string,
   amount: number,
   monthly: number,
   reason: string,
+  client: PrismaTx | typeof prisma = prisma,
 ): Promise<void> {
-  await prisma.user.update({
+  await client.user.update({
     where: { id: userId },
     data: {
       caspers_balance: { increment: amount },
@@ -317,8 +333,25 @@ export async function grantCaspers(
       day_start: new Date(),
     },
   });
-  await prisma.casperTransaction.create({
+  await client.casperTransaction.create({
     data: { userId, amount, reason },
+  }).catch(() => {});
+}
+
+// ─── Отмена начисления при возврате оплаты (refund.succeeded) ────────────────
+// В отличие от deductCaspers — не бросает ошибку, если баланс меньше суммы
+// (клэмп на 0): к моменту возврата пользователь мог уже потратить часть или
+// весь начисленный при оплате баланс, отменить то, чего больше нет, нельзя.
+
+export async function reverseCaspersGrant(userId: string, amount: number, reason: string): Promise<void> {
+  if (amount <= 0) return;
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { caspers_balance: true } });
+    if (!user) return;
+    const deduct = Math.min(amount, user.caspers_balance);
+    if (deduct <= 0) return;
+    await tx.user.update({ where: { id: userId }, data: { caspers_balance: { decrement: deduct } } });
+    await tx.casperTransaction.create({ data: { userId, amount: -deduct, reason } }).catch(() => {});
   }).catch(() => {});
 }
 

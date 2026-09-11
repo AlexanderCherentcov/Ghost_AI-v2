@@ -128,15 +128,15 @@ export function startSoundWorker() {
       }
 
       // ── Скачиваем и конвертируем СРАЗУ — пользователь получает локальный URL ─
-      let finalUrl = externalUrl;
-      try {
-        const filename = await saveAudioToDisk(externalUrl);
-        const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
-        finalUrl = `${API_BASE}/audio/${filename}`;
-        console.info(`[SoundWorker] Audio saved to disk: ${filename}`);
-      } catch (err: any) {
-        console.warn(`[SoundWorker] Disk save failed, using external URL: ${err.message}`);
-      }
+      // Раньше ошибка здесь (404/битый файл от провайдера — реальный инцидент был
+      // с Suno, см. providerTaskId) тихо проглатывалась, и job всё равно помечался
+      // done с невалидным externalUrl — пользователь получал "готово" с неработающей
+      // ссылкой, Caspers списаны без возврата. Теперь ошибка пробрасывается дальше
+      // и ловится worker.on('failed') ниже — статус failed + возврат Caspers.
+      const filename = await saveAudioToDisk(externalUrl);
+      const API_BASE = process.env.API_URL ?? 'https://api.ghostlineai.ru';
+      const finalUrl = `${API_BASE}/audio/${filename}`;
+      console.info(`[SoundWorker] Audio saved to disk: ${filename}`);
 
       // ── Помечаем done с локальным URL ──────────────────────────────────────
       await prisma.generateJob.update({
@@ -164,6 +164,8 @@ export function startSoundWorker() {
     {
       connection: bullmqConnection,
       concurrency: 3,
+      // maxStalledCount: 0 — см. подробный комментарий в vision.worker.ts.
+      maxStalledCount: 0,
     }
   );
 

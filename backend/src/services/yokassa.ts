@@ -5,7 +5,7 @@ import crypto from 'crypto';
 // указывают на прокси, который некорректно проксирует HTTPS из контейнера.
 const yokassaAxios = axios.create({ proxy: false });
 import { prisma } from '../lib/prisma.js';
-import { grantCaspers } from './tokens.js';
+import { grantCaspers, reverseCaspersGrant, demoteIfDepleted } from './tokens.js';
 import { notifyPayment } from './admin-notify.js';
 import { PLANS, calculateCasperPrice } from '../config/plans.js';
 import { previewDiscountPromo, finalizeDiscountRedemption } from './promo.js';
@@ -164,11 +164,31 @@ export async function createCasperPayment(
 
 // ─── Обработка вебхука ─────────────────────────────────────────────────────────
 
+type YokassaEvent = {
+  type: string;
+  object: { id: string; status?: string; metadata?: Record<string, string>; payment_id?: string; amount?: { value: string } };
+};
+
 export async function processWebhook(body: unknown): Promise<void> {
-  const event = body as {
-    type: string;
-    object: { id: string; status: string; metadata: Record<string, string> };
-  };
+  const event = body as YokassaEvent;
+
+  // ── Отмена платежа — просто фиксируем статус, ничего не выдавали ──────────
+  if (event.type === 'payment.canceled') {
+    await prisma.payment.updateMany({
+      where: { yokassaId: event.object.id, status: 'PENDING' },
+      data: { status: 'CANCELED' },
+    });
+    return;
+  }
+
+  // ── Возврат оплаты — отзываем то, что было выдано ─────────────────────────
+  // Раньше эти события вообще не обрабатывались: ручной возврат денег через
+  // кабинет ЮKassa никак не отражался у нас — пользователь оставался с
+  // оплаченной подпиской/Caspers, доступ не отзывался.
+  if (event.type === 'refund.succeeded') {
+    await handleRefund(event.object.payment_id);
+    return;
+  }
 
   if (event.type !== 'payment.succeeded') return;
 
@@ -178,26 +198,76 @@ export async function processWebhook(body: unknown): Promise<void> {
   }).catch(() => null);
   if (!verifyRes || verifyRes.data?.status !== 'succeeded') return;
 
-  const updated = await prisma.payment.updateMany({
-    where: { yokassaId: paymentId, status: { not: 'SUCCEEDED' } },
-    data: { status: 'SUCCEEDED' },
-  });
-  if (updated.count === 0) return;
-
   const payment = await prisma.payment.findUnique({ where: { yokassaId: paymentId } });
   if (!payment) return;
 
-  const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } });
+  // Флип статуса + начисление Caspers/выдача плана — ОДНА атомарная транзакция.
+  // Раньше это были два независимых запроса: если процесс падал между ними
+  // (OOM, деплой, краш), платёж навсегда оставался SUCCEEDED, а Caspers/план
+  // не выданы — повторная доставка вебхука ничего не восстанавливала (guard
+  // status != SUCCEEDED уже не срабатывал).
+  const grantedNow = await prisma.$transaction(async (tx) => {
+    const updated = await tx.payment.updateMany({
+      where: { yokassaId: paymentId, status: { not: 'SUCCEEDED' } },
+      data: { status: 'SUCCEEDED' },
+    });
+    if (updated.count === 0) return false; // уже обработан (повтор/гонка вебхуков)
 
-  // ── Докупка Caspers ───────────────────────────────────────────────────────
+    if (payment.paymentType === 'caspers' && payment.casperAmount) {
+      await tx.user.update({
+        where: { id: payment.userId },
+        data: { caspers_balance: { increment: payment.casperAmount } },
+      });
+      await tx.casperTransaction.create({
+        data: { userId: payment.userId, amount: payment.casperAmount, reason: 'topup' },
+      }).catch(() => {});
+    } else if (payment.plan) {
+      const planInfo = PLANS[payment.plan as keyof typeof PLANS];
+      if (planInfo) {
+        // Берём billing из своей же записи Payment (зафиксирован в createPayment
+        // на сервере), а не из event.object.metadata — тело вебхука не подписано
+        // и приходит с публичного эндпоинта, клиент может прислать туда что угодно.
+        const billing = payment.billing ?? 'MONTHLY';
+        const expiresAt = new Date();
+        if (billing === 'YEARLY') {
+          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+        } else {
+          expiresAt.setMonth(expiresAt.getMonth() + 1);
+        }
+
+        await tx.user.update({
+          where: { id: payment.userId },
+          data: {
+            plan: payment.plan,
+            planExpiresAt: expiresAt,
+            billing,
+            images_this_week: 0,
+            music_this_week: 0,
+            videos_this_month: 0,
+            week_start: new Date(),
+            month_start: new Date(),
+          },
+        });
+
+        await grantCaspers(
+          payment.userId,
+          planInfo.caspers_monthly,
+          planInfo.caspers_monthly,
+          `plan_grant_${payment.plan.toLowerCase()}`,
+          tx,
+        );
+      }
+    }
+    return true;
+  });
+
+  if (!grantedNow) return;
+
+  // Побочные эффекты best-effort — вне транзакции: их сбой не должен откатывать
+  // уже подтверждённое (и закоммиченное) начисление.
+  const payer = await prisma.user.findUnique({ where: { id: payment.userId }, select: { name: true } }).catch(() => null);
+
   if (payment.paymentType === 'caspers' && payment.casperAmount) {
-    await prisma.user.update({
-      where: { id: payment.userId },
-      data: { caspers_balance: { increment: payment.casperAmount } },
-    });
-    await prisma.casperTransaction.create({
-      data: { userId: payment.userId, amount: payment.casperAmount, reason: 'topup' },
-    });
     notifyPayment({
       userId:   payment.userId,
       userName: payer?.name ?? null,
@@ -205,57 +275,44 @@ export async function processWebhook(body: unknown): Promise<void> {
       plan:     `${payment.casperAmount} Caspers (топап)`,
       billing:  'one-time',
     }).catch(() => {});
-    return;
+  } else if (payment.plan) {
+    if (payment.promoCode) {
+      await finalizeDiscountRedemption({ code: payment.promoCode, userId: payment.userId, paymentId: payment.id }).catch(() => {});
+    }
+    notifyPayment({
+      userId:   payment.userId,
+      userName: payer?.name ?? null,
+      amount:   payment.amount,
+      plan:     payment.plan,
+      billing:  (payment.billing ?? 'MONTHLY').toLowerCase(),
+    }).catch(() => {});
   }
+}
 
-  // ── Оплата подписки ───────────────────────────────────────────────────────
-  if (payment.plan) {
+// ─── Возврат оплаты — отзываем выданное ────────────────────────────────────────
+
+async function handleRefund(originalYokassaPaymentId: string | undefined): Promise<void> {
+  if (!originalYokassaPaymentId) return;
+
+  const updated = await prisma.payment.updateMany({
+    where: { yokassaId: originalYokassaPaymentId, status: 'SUCCEEDED' },
+    data: { status: 'REFUNDED' },
+  });
+  if (updated.count === 0) return; // не был SUCCEEDED — ничего не выдавали, либо повтор вебхука возврата
+
+  const payment = await prisma.payment.findUnique({ where: { yokassaId: originalYokassaPaymentId } });
+  if (!payment) return;
+
+  if (payment.paymentType === 'caspers' && payment.casperAmount) {
+    await reverseCaspersGrant(payment.userId, payment.casperAmount, 'refund_topup');
+  } else if (payment.plan) {
     const planInfo = PLANS[payment.plan as keyof typeof PLANS];
-    if (planInfo) {
-      // Берём billing из своей же записи Payment (зафиксирован в createPayment
-      // на сервере), а не из event.object.metadata — тело вебхука не подписано
-      // и приходит с публичного эндпоинта, клиент может прислать туда что угодно.
-      const billing = payment.billing ?? 'MONTHLY';
-      const expiresAt = new Date();
-      if (billing === 'YEARLY') {
-        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-      } else {
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
-      }
-
-      await prisma.user.update({
-        where: { id: payment.userId },
-        data: {
-          plan: payment.plan,
-          planExpiresAt: expiresAt,
-          billing,
-          images_this_week: 0,
-          music_this_week: 0,
-          videos_this_month: 0,
-          week_start: new Date(),
-          month_start: new Date(),
-        },
-      });
-
-      await grantCaspers(
-        payment.userId,
-        planInfo.caspers_monthly,
-        planInfo.caspers_monthly,
-        `plan_grant_${payment.plan.toLowerCase()}`,
-      );
-
-      const promoCode = payment.promoCode;
-      if (promoCode) {
-        await finalizeDiscountRedemption({ code: promoCode, userId: payment.userId, paymentId: payment.id }).catch(() => {});
-      }
-
-      notifyPayment({
-        userId:   payment.userId,
-        userName: payer?.name ?? null,
-        amount:   payment.amount,
-        plan:     payment.plan,
-        billing:  billing.toLowerCase(),
-      }).catch(() => {});
+    if (planInfo?.caspers_monthly) {
+      await reverseCaspersGrant(payment.userId, planInfo.caspers_monthly, `refund_plan_${payment.plan.toLowerCase()}`);
     }
   }
+
+  // Балансовая демоция (см. tokens.ts) — если после отмены гранта баланс ушёл
+  // в 0, платные привилегии отзываются немедленно, а не при следующем чате/генерации.
+  await demoteIfDepleted(payment.userId);
 }

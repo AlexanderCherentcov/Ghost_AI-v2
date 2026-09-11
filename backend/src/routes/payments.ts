@@ -76,7 +76,12 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
   });
 
   // ── Вебхук YooKassa ────────────────────────────────────────────────────────
-  fastify.post('/payments/webhook', async (request, reply) => {
+  // Без авторизации (ЮKassa не поддерживает кастомные заголовки) — безопасность
+  // держится на встречном GET-запросе к ЮKassa с реальными credentials внутри
+  // processWebhook, подделать нельзя. Но эндпоинт всё равно публичный и без
+  // лимита кто угодно мог слать сюда POST с произвольным paymentId, заставляя
+  // backend делать исходящий запрос к ЮKassa — точечный лимит поверх общего.
+  fastify.post('/payments/webhook', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (request, reply) => {
     try {
       await processWebhook(request.body);
       return reply.code(200).send({ ok: true });

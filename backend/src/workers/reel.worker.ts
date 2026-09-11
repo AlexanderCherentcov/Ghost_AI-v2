@@ -13,6 +13,25 @@ import { encrypt } from '../lib/crypto.js';
 import { refundCaspers } from '../services/tokens.js';
 import { friendlyGenerationError } from '../lib/generation-error.js';
 
+// Провайдер может вернуть "успех" с битой/404 ссылкой (реальный инцидент был у
+// Suno в sound.worker.ts, см. providerTaskId) — раньше finalizeJob сразу помечал
+// job done с externalUrl без единой проверки, что там реально лежит рабочий файл.
+// HEAD-запрос быстрый (не грузит тело) и не мешает задуманной быстрой отдаче
+// внешнего URL пользователю (см. комментарий в finalizeJob ниже); ranged GET —
+// фолбэк для CDN, не поддерживающих HEAD.
+async function verifyMediaReachable(url: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'HEAD' });
+  } catch (err) {
+    throw new Error(`Media URL unreachable: ${(err as Error).message}`);
+  }
+  if (res.status === 405 || res.status === 501) {
+    res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+  }
+  if (!res.ok) throw new Error(`Media URL not reachable: ${res.status}`);
+}
+
 // ── Video сохраняем на наш сервер — GoAPI хранит файлы только 3 дня ───────────
 async function saveVideoUrlToDisk(url: string): Promise<string> {
   const dir = path.join(process.cwd(), 'uploads', 'videos');
@@ -178,6 +197,11 @@ export function startReelWorker() {
         });
       }
 
+      // Проверяем, что провайдер отдал реально рабочую ссылку, ДО того как помечать
+      // job done — иначе пользователь получает "готово" с неработающей ссылкой,
+      // а Caspers списаны без возврата (см. комментарий у verifyMediaReachable).
+      await verifyMediaReachable(externalUrl);
+
       // Сразу помечаем done с внешним URL — не ждём фоновой докачки, чтобы
       // пользователь увидел результат как можно раньше. modelId — ВСЕГДА исходно
       // запрошенный spec.id (не usedSpec) — фолбэк невидим для пользователя/биллинга,
@@ -201,7 +225,8 @@ export function startReelWorker() {
 
       return { mediaUrl: externalUrl };
     },
-    { connection: bullmqConnection, concurrency: 2 },
+    // maxStalledCount: 0 — см. подробный комментарий в vision.worker.ts.
+    { connection: bullmqConnection, concurrency: 2, maxStalledCount: 0 },
   );
 
   worker.on('failed', async (job, err) => {

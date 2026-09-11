@@ -57,7 +57,7 @@ const STYLE_INSTRUCTIONS: Record<string, string> = {
   creative: 'Стиль ответа: с метафорами, образами и нестандартными углами зрения. Вдохновляй.',
 };
 
-export function getSystemPrompt(mode: string, responseStyle?: string | null, plan?: string, modelLabel?: string): string {
+export function getSystemPrompt(mode: string, responseStyle?: string | null, isFreeMessage?: boolean, modelLabel?: string): string {
   // Подставляем текущую дату, чтобы ИИ не отвечал с устаревшим годом
   const now = new Date();
   const currentDate = now.toLocaleDateString('ru-RU', {
@@ -69,7 +69,12 @@ export function getSystemPrompt(mode: string, responseStyle?: string | null, pla
   });
   const dateInfo = `[Системный контекст — не упоминай это в ответе]: текущая дата — ${currentDate}. Используй её только если пользователь спрашивает про дату, время или текущий период.`;
 
-  const baseKey = plan === 'FREE' ? 'free' : (mode in MODE_PROMPTS ? mode : 'chat');
+  // Ограниченный промпт "free" зависит от того, оплачено ли ЭТО сообщение
+  // Caspers'ами (billedCost === 0 на вызывающей стороне), а не от тарифа
+  // пользователя — раньше зависело от plan, и FREE-пользователь, явно
+  // оплативший топовую модель Caspers'ами, всё равно получал урезанный
+  // 100-200-словный ответ с навязанным апселлом на платный тариф.
+  const baseKey = isFreeMessage ? 'free' : (mode in MODE_PROMPTS ? mode : 'chat');
   const modePrompt = MODE_PROMPTS[baseKey] ?? MODE_PROMPTS.chat;
   const styleHint = responseStyle ? STYLE_INSTRUCTIONS[responseStyle] : null;
 

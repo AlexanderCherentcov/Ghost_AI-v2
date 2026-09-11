@@ -7,6 +7,7 @@ import {
   findModel,
   type ChatModelSpec,
 } from '../config/models.js';
+import { planAtLeast, type PlanKey } from '../config/plans.js';
 
 // ─── Ключевые слова для диспетчера режима «Авто» ──────────────────────────────
 //
@@ -85,6 +86,19 @@ export class UnknownModelError extends Error {
   }
 }
 
+// На момент написания у всех CHAT_MODELS minPlan: 'FREE', поэтому это пока не
+// активная дырка — но без этой проверки гейт по тарифу для чат-моделей держится
+// только на "случайно у всех minPlan одинаковый", а не на коде (в отличие от
+// image/video в routes/generate.ts, где planAtLeast проверяется явно). Если
+// завтра добавить чат-модель с minPlan выше FREE — без этого её купленный за
+// Caspers доступ не будет ограничен тарифом вообще.
+export class ChatPlanRestrictedError extends Error {
+  code = 'PLAN_RESTRICTED';
+  constructor(label: string, minPlan: string) {
+    super(`Модель «${label}» доступна с тарифа ${minPlan}`);
+  }
+}
+
 /**
  * Разрешает id модели (включая 'auto') в конкретный ChatModelSpec.
  * Явный выбор — уважается всегда, включая ошибку вместо молчаливой подмены,
@@ -99,6 +113,9 @@ export function resolveChatModel(
   if (modelId !== AUTO_MODEL_ID) {
     const spec = findModel('chat', modelId);
     if (!spec) throw new UnknownModelError(modelId);
+    if (!planAtLeast(plan as PlanKey, spec.minPlan as PlanKey)) {
+      throw new ChatPlanRestrictedError(spec.label, spec.minPlan);
+    }
     if (hasImage && !spec.capabilities?.vision) throw new VisionNotSupportedError(spec.label);
     return { spec, viaAuto: false, billedCost: spec.cost };
   }

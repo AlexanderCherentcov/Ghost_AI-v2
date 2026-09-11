@@ -394,12 +394,20 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
 
         // Собираем массив сообщений для ИИ.
-        // Системный промпт различает «обычный» и «глубокий» тон по цене модели —
-        // раньше это решал флаг mode==='think', теперь платность самой выбранной
-        // модели несёт тот же сигнал (см. lib/prompts.ts: ключ 'think' даёт
-        // инструкцию рассуждать пошагово и структурировать ответ).
-        const promptStyleKey = spec.cost > 0 ? 'think' : 'chat';
-        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, plan, spec.label) };
+        // Системный промпт различает «обычный» и «глубокий» тон по тому, оплачено
+        // ли реально ЭТО сообщение (billedCost > 0), а не по номинальной цене
+        // модели — «Авто» может выбрать бесплатную по себестоимости модель, но
+        // всё равно списать AUTO_MIN_COST (см. ai-router.ts), и это должно
+        // считаться оплаченным сообщением, а не бесплатной квотой.
+        const promptStyleKey = billedCost > 0 ? 'think' : 'chat';
+        // Ограничение "free"-промпта (и maxTokens ниже) — по тому же сигналу:
+        // billedCost === 0 значит сообщение покрылось дневной бесплатной квотой
+        // FREE-тарифа, а не оплачено Caspers'ами. Раньше оба ограничения были
+        // жёстко привязаны к user.plan === 'FREE' — FREE-пользователь, явно
+        // оплативший топовую модель, получал тот же урезанный ответ, что и
+        // бесплатное сообщение, хотя реально заплатил Caspers.
+        const isFreeMessage = billedCost === 0;
+        const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, isFreeMessage, spec.label) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
         let userMsg: ChatMessage;
@@ -437,7 +445,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // чем предполагает Caspers-цена модели. 4000 токенов — с большим запасом
         // хватает на развёрнутый structured-ответ в режиме "think", но ограничивает
         // аномалии сверху.
-        const maxTokens = plan === 'FREE' ? 400 : 4000;
+        const maxTokens = isFreeMessage ? 400 : 4000;
 
         // Cloudflare — основной путь для бесплатной модели, резерв — OpenRouter.
         // Остальные модели — сразу OpenRouter с цепочкой резервных из реестра.

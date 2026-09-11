@@ -128,3 +128,29 @@ export async function releaseChatLock(userId: string): Promise<void> {
     // Игнорируем ошибку — лок всё равно истечёт через LOCK_TTL
   }
 }
+
+// ─── Блокировка одновременных запросов генерации (image/video/music) ──────────
+// Тот же приём, что и acquireChatLock — без него два почти одновременных запроса
+// (два клика, скрипт) оба проходят проверку "активной задачи нет" (routes/generate.ts:
+// findActiveJob) до того, как первый успеет создать GenerateJob, и оба списывают
+// Caspers. Короткий TTL (не GEN_LOCK_TTL как у чата) — лок держится только на время
+// синхронной части хендлера (проверка + списание + создание job), не на всю генерацию.
+const GEN_LOCK_TTL = 15; // секунд
+
+export async function acquireGenLock(userId: string, mode: string): Promise<boolean> {
+  try {
+    const key = `lock:gen:${mode}:${userId}`;
+    const result = await redis.set(key, '1', 'EX', GEN_LOCK_TTL, 'NX');
+    return result === 'OK';
+  } catch {
+    return true;
+  }
+}
+
+export async function releaseGenLock(userId: string, mode: string): Promise<void> {
+  try {
+    await redis.del(`lock:gen:${mode}:${userId}`);
+  } catch {
+    // Игнорируем — лок всё равно истечёт через GEN_LOCK_TTL
+  }
+}

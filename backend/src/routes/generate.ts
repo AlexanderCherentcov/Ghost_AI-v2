@@ -6,7 +6,7 @@ import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
 import { findModel, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID, type VideoDurationChoice } from '../config/models.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
-import { checkGenRateLimit, checkVideoRateLimit } from '../services/user-limiter.js';
+import { checkGenRateLimit, checkVideoRateLimit, acquireGenLock, releaseGenLock } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
 import { callCloudflareJSON } from '../services/providers/cloudflare.js';
 import { encrypt } from '../lib/crypto.js';
@@ -138,7 +138,15 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
       }
 
-      // Блокировка задачи: отклоняем, если у пользователя уже выполняется vision-задача
+      // Блокировка задачи: отклоняем, если у пользователя уже выполняется vision-задача.
+      // Redis-лок (acquireGenLock) закрывает узкое окно гонки, которое НЕ закрывает
+      // сам findActiveJob: два почти одновременных запроса оба видят "активной задачи
+      // нет" до того, как первый успеет создать GenerateJob — без лока оба списывают
+      // Caspers и встают в очередь.
+      if (!await acquireGenLock(userId, 'vision')) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS' });
+      }
+      try {
       const activeJob = await findActiveJob(userId, 'vision');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
@@ -239,6 +247,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       await prisma.userImageRequest.create({ data: { userId, promptHash } }).catch(() => {});
 
       return reply.code(202).send({ jobId: job.id });
+      } finally {
+        await releaseGenLock(userId, 'vision');
+      }
     },
   });
 
@@ -258,7 +269,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
       }
 
-      // Блокировка задачи: отклоняем, если у пользователя уже выполняется sound-задача
+      // Блокировка задачи: отклоняем, если у пользователя уже выполняется sound-задача.
+      // Redis-лок закрывает гонку между "активной задачи нет" и созданием GenerateJob
+      // (см. комментарий у acquireGenLock в services/user-limiter.ts).
+      if (!await acquireGenLock(userId, 'sound')) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS' });
+      }
+      try {
       const activeJob = await findActiveJob(userId, 'sound');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
@@ -329,6 +346,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       });
 
       return reply.code(202).send({ jobId: job.id });
+      } finally {
+        await releaseGenLock(userId, 'sound');
+      }
     },
   });
 
@@ -389,7 +409,13 @@ export default async function generateRoutes(fastify: FastifyInstance) {
         return reply.code(429).send({ error: 'Слишком много запросов. Подождите минуту.', code: 'RATE_LIMITED' });
       }
 
-      // Блокировка задачи: отклоняем, если у пользователя уже выполняется reel-задача
+      // Блокировка задачи: отклоняем, если у пользователя уже выполняется reel-задача.
+      // Redis-лок закрывает гонку между "активной задачи нет" и созданием GenerateJob
+      // (см. комментарий у acquireGenLock в services/user-limiter.ts).
+      if (!await acquireGenLock(userId, 'reel')) {
+        return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS' });
+      }
+      try {
       const activeJob = await findActiveJob(userId, 'reel');
       if (activeJob) {
         return reply.code(409).send({ error: 'Задача уже выполняется. Подождите.', code: 'TASK_IN_PROGRESS', jobId: activeJob.id });
@@ -475,6 +501,9 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       });
 
       return reply.code(202).send({ jobId: job.id });
+      } finally {
+        await releaseGenLock(userId, 'reel');
+      }
     },
   });
 

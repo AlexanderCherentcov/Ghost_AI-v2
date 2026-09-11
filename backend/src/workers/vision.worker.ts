@@ -105,7 +105,13 @@ export function startVisionWorker() {
 
       return { mediaUrl };
     },
-    { connection: bullmqConnection, concurrency: 5 },
+    // maxStalledCount: 0 — БЕЗ повторного запуска job'а, если воркер умер/убит
+    // посреди генерации (краш процесса, деплой, OOM). BullMQ по умолчанию
+    // (maxStalledCount: 1) переисполнил бы job ещё раз НЕЗАВИСИМО от attempts:1
+    // в mediaQueueOptions (тот параметр защищает только от повтора при explicit
+    // throw внутри job-функции, не от stalled-recovery) — провайдеру платим
+    // дважды, а сообщение в чат может задвоиться.
+    { connection: bullmqConnection, concurrency: 5, maxStalledCount: 0 },
   );
 
   worker.on('failed', async (job, err) => {

@@ -162,8 +162,22 @@ export function onToken(callback: (chunk: WSChunk) => void): () => void {
 // затем рассылает синтетический 'done', чтобы промис резолвился немедленно.
 // Примечание: сервер продолжает генерацию — отменить её через WS нельзя.
 // [H-07]
+let abortResetTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function abortStream() {
   aborted = true;
   const abortChunk: WSChunk = { type: 'done', tokensCost: 0, cacheHit: false };
   listeners.forEach((l) => l(abortChunk));
+
+  // Флаг aborted сбрасывается естественно, когда придёт РЕАЛЬНЫЙ done/error от
+  // бэкенда для отменённого стрима (ws.onmessage выше) — но сервер не обязан
+  // его прислать (обрыв соединения, рестарт бэкенда, переподключение WS) и
+  // тогда aborted остаётся true НАВСЕГДА: все следующие сообщения в этом чате
+  // молча теряют входящие токены (chunk.type==='token' игнорируется), стрим
+  // виснет до штатного STALL_BEFORE_FIRST/STALL_AFTER_TOKEN и падает с
+  // "Нет ответа от сервера" — хотя реальный ответ просто выбрасывался этим
+  // фильтром. Короткий грейс-период — подстраховка на этот случай, не
+  // полагаемся только на то, что сервер обязательно пришлёт свой done/error.
+  if (abortResetTimer) clearTimeout(abortResetTimer);
+  abortResetTimer = setTimeout(() => { aborted = false; }, 5000);
 }

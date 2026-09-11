@@ -153,6 +153,17 @@ export default function ChatConversationPage() {
   // Синхронные ref-guards против двойного запуска генерации (state-updates async, refs sync)
   const generatingVideoRef = useRef(false);
   const generatingMusicRef = useRef(false);
+  // Кнопка "Стоп" во время генерации картинки/видео/музыки (в отличие от чата)
+  // раньше не делала вообще ничего — onStop дёргал только abortStream()/
+  // setStreaming(false), которые относятся к WS-чату, а image/video/music
+  // генерируются через polling (см. handleGenerate*), у которого не было
+  // никакого способа прерваться. Кнопка при этом ПОКАЗЫВАЛАСЬ (isStreaming=busy
+  // включает все режимы) — то есть выглядела рабочей, а по факту не была.
+  // Флаг проверяется в каждой итерации poll() — если выставлен, генерация
+  // считается отменённой на клиенте (сама job на бэкенде всё равно доработает,
+  // Caspers списаны — тот же принцип, что уже принят для чата: "сервер
+  // продолжает генерацию, отменить её нельзя", здесь просто перестаём ждать).
+  const genCancelledRef = useRef(false);
   // Предотвращает повторный auto-send для того же чата
   const autoSentChatRef = useRef<string | null>(null);
 
@@ -327,6 +338,7 @@ export default function ChatConversationPage() {
   // ── Встроенная генерация изображений ──────────────────────────────────────────
   const handleGenerateImage = useCallback(async (prompt: string, sourceImageUrl?: string, model?: string, imageAspectRatio?: string) => {
     if (!accessToken || !messagesReady) return;
+    genCancelledRef.current = false;
     setGeneratingImage(true);
 
     addMessage({
@@ -358,8 +370,16 @@ export default function ChatConversationPage() {
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         if (job.status === 'done' && job.mediaUrl) {
           patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 10, jobId, provider: job.modelId ?? undefined });
           lastGeneratedImageRef.current = job.mediaUrl;
@@ -390,6 +410,7 @@ export default function ChatConversationPage() {
     if (!accessToken || !messagesReady) return;
     if (generatingVideoRef.current) return;
     generatingVideoRef.current = true;
+    genCancelledRef.current = false;
     setGeneratingVideo(true);
 
     addMessage({
@@ -432,8 +453,16 @@ export default function ChatConversationPage() {
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         if (job.status === 'done' && job.mediaUrl) {
           patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0, jobId, provider: job.modelId ?? undefined });
           triggerAutoTitle(prompt);
@@ -469,6 +498,7 @@ export default function ChatConversationPage() {
     if (!accessToken || !messagesReady) return;
     if (generatingMusicRef.current) return;
     generatingMusicRef.current = true;
+    genCancelledRef.current = false;
     setGeneratingMusic(true);
 
     addMessage({
@@ -500,8 +530,16 @@ export default function ChatConversationPage() {
 
       const poll = async (): Promise<void> => {
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         const job = await api.generate.status(jobId);
         if (!mountedRef.current) return;
+        if (genCancelledRef.current) {
+          patchOrAppendMessage(placeholder, { content: 'Генерация остановлена', mediaUrl: null });
+          return;
+        }
         if (job.status === 'done' && job.mediaUrl) {
           patchOrAppendMessage(placeholder, { content: prompt, mediaUrl: job.mediaUrl, tokensCost: 0 });
           triggerAutoTitle(prompt);
@@ -814,7 +852,21 @@ export default function ChatConversationPage() {
 
       <InputBar
         onSend={handleSend}
-        onStop={() => { abortStream(); setStreaming(false); }}
+        onStop={() => {
+          // Раньше здесь трогался только чатовый стрим (abortStream/setStreaming) —
+          // во время генерации картинки/видео/музыки кнопка была видна (isStreaming={busy}
+          // покрывает все режимы), но клик не делал вообще ничего: у poll-циклов
+          // не было способа прерваться. Теперь гасим то, что реально активно —
+          // мгновенно, не дожидаясь следующего тика poll() (см. genCancelledRef).
+          abortStream();
+          setStreaming(false);
+          genCancelledRef.current = true;
+          setGeneratingImage(false);
+          setGeneratingVideo(false);
+          setGeneratingMusic(false);
+          generatingVideoRef.current = false;
+          generatingMusicRef.current = false;
+        }}
         isStreaming={busy}
         disabled={busy}
         placeholder={placeholder}

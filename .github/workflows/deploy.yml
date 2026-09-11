@@ -83,9 +83,17 @@ jobs:
             fi
 
             if [ "$DEPLOY_NGINX" = "true" ]; then
-              echo "→ Reloading nginx config..."
-              docker compose exec nginx nginx -s reload
-              echo "→ Nginx reloaded"
+              echo "→ Recreating nginx (config changed)..."
+              # НЕ `docker compose exec nginx nginx -s reload` — bind-mount на
+              # ОДИН файл привязывается к inode на момент старта контейнера, а
+              # `git reset --hard` пересоздаёт файл (unlink+create), а не правит
+              # на месте. Reload перечитывает старый (уже отвязанный) inode —
+              # живая проверка 2026-09-11: конфиг на диске обновился, md5sum
+              # внутри контейнера остался старым, nginx продолжал работать со
+              # старыми directives. Полный recreate переустанавливает bind mount.
+              docker compose stop nginx
+              docker compose up -d nginx
+              echo "→ Nginx recreated"
             fi
 
             docker image prune -f

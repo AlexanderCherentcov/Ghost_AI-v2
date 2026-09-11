@@ -430,7 +430,14 @@ export default function LandingPage() {
                 }
               >
                 {item.previewUrl && item.domain === 'video' ? (
-                  <video src={item.previewUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay loop muted playsInline />
+                  // Раньше autoPlay без preload="metadata" — браузер агрессивно
+                  // буферизовал файл ещё ДО того, как секция вообще попадала во
+                  // вьюпорт. Хуже того: `hidden lg:grid` (эта секция скрыта на
+                  // мобильном) — CSS display:none НЕ останавливает загрузку
+                  // <video src>, в отличие от <img loading="lazy"> — на мобильном
+                  // эти видео качались впустую, внося основной вклад в
+                  // "чрезмерную нагрузку на сеть" (Lighthouse, 2026-09-11).
+                  <LazyAutoplayVideo src={item.previewUrl} className="absolute inset-0 w-full h-full object-cover" />
                 ) : item.previewUrl ? (
                   <img src={item.previewUrl} alt={item.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                 ) : item.domain === 'video' ? (

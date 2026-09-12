@@ -73,7 +73,13 @@ function LazyAutoplayVideo({ src, className }: { src: string; className?: string
     return () => observer.disconnect();
   }, []);
 
-  return <video ref={ref} src={src} className={className} loop muted playsInline preload="metadata" />;
+  // preload="none" — не "metadata": живая проверка на проде (Lighthouse,
+  // 2026-09-12) показала, что "metadata" всё равно тянул МБ на файл (12.7MB,
+  // 5.2MB, 3.3MB) — сохранённые бэкендом видео от провайдера (GoAPI), судя по
+  // всему, не web-optimized (moov-атом не в начале файла), и браузеру для
+  // чтения даже одних метаданных приходится читать чуть ли не весь файл.
+  // "none" гарантирует ноль байт, пока IntersectionObserver не вызовет play().
+  return <video ref={ref} src={src} className={className} loop muted playsInline preload="none" />;
 }
 
 // Реальные режимы продукта (см. inputbar/types.ts:ChatMode) — без вымышленных
@@ -318,7 +324,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img
-              src="/ghostline-logo-icon.png"
+              src="/ghostline-logo-icon-sm.png"
               alt="GhostLine"
               className="w-9 h-9 rounded-[9px] object-cover"
               style={{ filter: 'drop-shadow(0 0 10px rgba(123,92,240,.55))' }}
@@ -797,8 +803,9 @@ export default function LandingPage() {
         <section className="py-24 px-6 text-center">
           <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <img
-              src="/ghostline-logo-icon.png"
+              src="/ghostline-logo-icon-sm.png"
               alt=""
+              loading="lazy"
               className="w-16 h-16 rounded-2xl object-cover animate-float mx-auto mb-6"
               style={{ filter: 'drop-shadow(0 0 20px rgba(123,92,240,.5))' }}
             />
@@ -836,7 +843,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2.5 mb-3.5">
-                <img src="/ghostline-logo-icon.png" alt="GhostLine" className="w-7 h-7 rounded-[7px] object-cover" />
+                <img src="/ghostline-logo-icon-sm.png" alt="GhostLine" loading="lazy" className="w-7 h-7 rounded-[7px] object-cover" />
                 <span className="font-display font-bold text-base text-white">GhostLine</span>
               </div>
               <p className="text-[13.5px] leading-relaxed max-w-[260px]" style={{ color: '#8a81a0' }}>

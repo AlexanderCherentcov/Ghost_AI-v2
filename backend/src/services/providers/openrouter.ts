@@ -78,6 +78,8 @@ export async function callOpenRouterJSON(
     messages: messages as OpenAI.ChatCompletionMessageParam[],
     stream: false,
     max_tokens: maxTokens,
+    // reasoning.exclude — см. подробный комментарий у tryStream ниже.
+    ...({ reasoning: { exclude: true } } as Record<string, unknown>),
   });
   return resp.choices[0]?.message?.content ?? '';
 }
@@ -98,6 +100,17 @@ export async function* streamOpenRouter(
       messages: messages as OpenAI.ChatCompletionMessageParam[],
       stream: true,
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      // reasoning.exclude — живой баг 2026-09-12: модели с "мышлением"
+      // (подтверждено на gemini-2.5-flash/pro через OpenRouter) без этого
+      // параметра стримят свой chain-of-thought ПРЯМО в delta.content —
+      // тот же поток, который мы показываем пользователю как ответ (см.
+      // extraction `chunk.choices[0]?.delta?.content` ниже, тип OpenAI SDK
+      // не содержит отдельного reasoning-поля в дельте для различения).
+      // Пользователь получал сырое рассуждение модели ("Steps: 1. Acknowledge
+      // the user's...") вместо финального ответа. Параметр — часть
+      // унифицированного API OpenRouter для reasoning-моделей, non-reasoning
+      // модели его просто игнорируют.
+      ...({ reasoning: { exclude: true } } as Record<string, unknown>),
     });
     for await (const chunk of stream) {
       const text = chunk.choices[0]?.delta?.content;

@@ -179,8 +179,15 @@ export const CHAT_MODELS: ChatModelSpec[] = [
     cost: 0, autoEligible: true, capabilities: {},
   },
   {
+    // Единственная модель каталога, у которой раньше вообще не было fallback —
+    // при этом сама служит резервом для deepseek-v3.2/gemini-2.5-flash/
+    // claude-haiku-4.5 (см. ниже). Падение openai/* у OpenRouter оставляло явно
+    // выбравшего её пользователя без единого резервного пути и одновременно
+    // выбивало последнее звено фолбэка у трёх других моделей. gemini-2.5-flash —
+    // сопоставимый по цене/классу сосед с той же поддержкой vision.
     id: 'gpt-4o-mini', domain: 'chat', label: 'GPT-4o mini', blurb: 'OpenAI', minPlan: 'FREE',
     provider: 'openrouter', providerModel: 'openai/gpt-4o-mini',
+    fallbackModels: ['google/gemini-2.5-flash'],
     cost: 1, autoEligible: true, capabilities: { vision: true },
   },
   {
@@ -252,7 +259,13 @@ export const IMAGE_MODELS: ImageModelSpec[] = [
     // сейчас нельзя, проверить на реальном трафике перед стартом продаж.
     id: 'gemini-flash-image', domain: 'image', label: 'Gemini Flash Image', blurb: 'Google', minPlan: 'FREE',
     provider: 'openrouter', providerModel: 'google/gemini-3.1-flash-image',
-    fallbackModel: 'google/gemini-3-pro-image',
+    // Раньше фолбэк был на google/gemini-3-pro-image — единственная пара
+    // image-моделей, где резерв внутри ТОГО ЖЕ провайдера (Google→Google),
+    // вопреки принципу, явно заявленному в комментарии у gemini-pro-image
+    // ниже. При падении Google целиком эта модель осталась бы без реальной
+    // защиты. gpt-5-image-mini — кросс-провайдерный резерв, уже подтверждён
+    // живым тестом как фолбэк nano-banana-2-lite.
+    fallbackModel: 'openai/gpt-5-image-mini',
     cost: 10, autoEligible: true, capabilities: { edit: true },
     ui: { aspectRatios: GEMINI_IMAGE_ASPECT_RATIOS },
     previewImageUrl: '/previews/gemini-flash-image.jpg',

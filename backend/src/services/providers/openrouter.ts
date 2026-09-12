@@ -109,14 +109,24 @@ export async function* streamOpenRouter(
   let usedModel = model;
 
   for (let i = 0; i < chain.length; i++) {
+    usedModel = chain[i];
+    // yieldedAny — раньше был `yield* tryStream(...)` целиком внутри try: если
+    // апстрим обрывался ПОСЕРЕДИНЕ стрима (не до первого токена), уже отданные
+    // пользователю токены нельзя забрать назад, а catch ниже всё равно
+    // переключался на следующую модель в цепочке, которая писала СВОЙ ответ
+    // с нуля — пользователь получал склейку двух несвязанных обрывков текста.
+    // Фолбэк безопасен только пока не отдан ни один токен.
+    let yieldedAny = false;
     try {
-      usedModel = chain[i];
-      yield* tryStream(chain[i]);
+      for await (const evt of tryStream(chain[i])) {
+        yieldedAny = true;
+        yield evt;
+      }
       yield { type: 'used_model' as const, model: usedModel };
       return;
     } catch (err) {
-      if (i === chain.length - 1) throw err;
-      // Пробуем следующую модель в цепочке
+      if (yieldedAny || i === chain.length - 1) throw err;
+      // Сбой ДО первого токена — пробуем следующую модель в цепочке
     }
   }
 }
@@ -179,7 +189,7 @@ export async function generateImageFlux(
       signal: controller.signal,
     });
   } catch (err: any) {
-    if (err?.name === 'AbortError') throw new Error('OpenRouter image generation: timeout (120s)');
+    if (err?.name === 'AbortError') throw new Error('OpenRouter image generation: timeout (600s)');
     throw err;
   } finally {
     clearTimeout(timeoutId);

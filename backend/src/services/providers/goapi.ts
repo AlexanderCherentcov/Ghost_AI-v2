@@ -250,7 +250,15 @@ function buildGenericVideoInput(
           model: 'v2.3',
           expand_prompt: true,
           duration: opts.duration === '4s' ? 6 : 10,
-          resolution: parseInt(opts.resolution, 10) || 768,
+          // Раньше `parseInt(opts.resolution, 10) || 768` пропускал ЛЮБОЕ
+          // число как есть — '720p' парсится в 720, а Hailuo принимает
+          // только 768 или 1080 (см. комментарий выше). '720p' приходит сюда
+          // регулярно: это дефолт videoResolution в routes/generate.ts, и
+          // именно с ним generate.ts уходит на фолбэк с других моделей на
+          // hailuo (см. VideoModelSpec.fallbackModelId в config/models.ts) —
+          // резервная генерация для hunyuan-video/framepack проваливалась
+          // почти гарантированно, ровно на пути, ради которого фолбэк заведён.
+          resolution: parseInt(opts.resolution, 10) >= 1080 ? 1080 : 768,
           ...(opts.imageUrl ? { image_url: opts.imageUrl } : {}),
         },
       };

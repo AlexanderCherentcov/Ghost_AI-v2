@@ -48,6 +48,7 @@ export async function checkResets(userId: string): Promise<void> {
       period_start: true,
       caspers_monthly: true,
       caspers_balance: true,
+      planExpiresAt: true,
     },
   });
   if (!user) return;
@@ -80,23 +81,57 @@ export async function checkResets(userId: string): Promise<void> {
     updates.month_start       = now;
   }
 
-  // Балансовая демоция подписки (решение Александра, 2026-09-11): платные
-  // привилегии держатся, пока caspers_balance > 0, а не до какой-то даты.
-  // РАНЬШЕ здесь был периодический авто-регрант caspers_monthly каждые 30 дней
-  // (period_start + 30d) НЕЗАВИСИМО от того, оплатил ли пользователь ещё раз —
-  // то есть один платёж давал бесконечные ежемесячные Caspers даром, а
-  // user.plan вообще никогда не откатывался на FREE (planExpiresAt не
-  // проверялся нигде). Теперь единственный источник новых Caspers на платный
-  // тариф — реальная оплата (см. processWebhook в yokassa.ts), а демоция —
-  // вот эта проверка, тот же паттерн, что и в checkAndDeduct.
-  if (user.plan !== 'FREE' && user.caspers_balance <= 0) {
-    updates.plan = 'FREE';
-    updates.caspers_monthly = 0;
-  }
-
-  // Применяем сбросы счётчиков/демоцию (если есть) одним запросом
+  // Применяем сбросы счётчиков (если есть) одним запросом — демоция и
+  // регрант ниже намеренно ОТДЕЛЬНЫЕ атомарные запросы, не часть этого update.
   if (Object.keys(updates).length > 0) {
     await prisma.user.update({ where: { id: userId }, data: updates });
+  }
+
+  // Периодический авто-регрант Caspers — но ТОЛЬКО в пределах уже оплаченного
+  // периода (planExpiresAt), не бессрочно. Раньше этой границы не было вовсе —
+  // один платёж давал бесконечные ежемесячные Caspers даром, что и убрали
+  // 2026-09-11 при переходе на балансовую демоцию. Но при удалении регранта
+  // целиком выяснилось: ГОДОВАЯ подписка (planExpiresAt = +1 год) тогда
+  // выдаёт Caspers только ОДИН раз при оплате вместо 12 месячных начислений,
+  // хотя и цена, и фичи тарифа обещают "N Caspers в месяц" — прямой обман
+  // годовых подписчиков. now < planExpiresAt решает оба случая разом: у
+  // месячной подписки planExpiresAt практически совпадает с первым тиком
+  // регранта (лишнего бесплатного месяца не будет — надо продлевать оплатой),
+  // у годовой — открывает ещё 11 тиков в течение уже оплаченного года.
+  if (user.plan !== 'FREE' && user.caspers_monthly > 0 && user.planExpiresAt && now < user.planExpiresAt) {
+    const periodEnd = new Date(user.period_start);
+    periodEnd.setDate(periodEnd.getDate() + 30);
+    if (now >= periodEnd) {
+      const granted = await prisma.user.updateMany({
+        where: {
+          id: userId,
+          period_start: user.period_start,   // оптимистичная блокировка — сработает только один раз
+          caspers_monthly: { gt: 0 },
+        },
+        data: {
+          caspers_balance: { increment: user.caspers_monthly },
+          period_start: now,
+        },
+      });
+      if (granted.count > 0) {
+        await prisma.casperTransaction.create({
+          data: { userId, amount: user.caspers_monthly, reason: 'plan_grant_monthly' },
+        }).catch(() => {});
+      }
+    }
+  }
+
+  // Балансовая демоция — атомарный updateMany с условием в WHERE (через
+  // demoteIfDepleted), а не безусловная запись поверх прочитанного в начале
+  // функции снапшота: раньше, если между чтением и этой записью успевал
+  // закоммититься вебхук оплаты (грант Caspers), только что купленную
+  // подписку затирало обратно на FREE. Проверка по user.caspers_balance —
+  // только быстрый гейт, чтобы не дёргать лишний UPDATE на каждый запрос;
+  // корректность демоции обеспечивает WHERE внутри demoteIfDepleted, а не эта
+  // проверка (она может быть уже неактуальна к моменту выполнения — это ОК:
+  // и регрант выше, если сработал, уже поднял баланс до его вызова).
+  if (user.plan !== 'FREE' && user.caspers_balance <= 0) {
+    await demoteIfDepleted(userId);
   }
 }
 
@@ -173,14 +208,20 @@ export async function checkAndDeduct(
 
     // Балансовая демоция подписки — см. подробный комментарий в checkResets.
     // Проверяем здесь тоже (не только в checkResets), т.к. это единственная
-    // точка, где домен-специфичная логика ниже читает user.plan для гейтинга —
-    // без этого баланс мог упасть до 0 прямо в этой транзакции (списание за
-    // предыдущий домен того же запроса не бывает, но на всякий случай единый
-    // источник правды лучше двух разных).
+    // точка, где домен-специфичная логика ниже читает user.plan для гейтинга.
+    // updateMany с условием в WHERE, а не безусловный update поверх снапшота,
+    // прочитанного строкой выше — та же гонка, что и в checkResets: если
+    // конкурентно (например, вебхук оплаты) баланс уже пополнился, безусловная
+    // запись затёрла бы только что купленный план обратно на FREE. Если
+    // updateMany не нашёл строку под условие (count===0) — значит баланс уже
+    // не <=0, демоция не нужна, plan остаётся тем, что прочитали.
     let plan = user.plan as string;
     if (plan !== 'FREE' && user.caspers_balance <= 0) {
-      await tx.user.update({ where: { id: userId }, data: { plan: 'FREE', caspers_monthly: 0 } });
-      plan = 'FREE';
+      const demoted = await tx.user.updateMany({
+        where: { id: userId, plan: { not: 'FREE' }, caspers_balance: { lte: 0 } },
+        data: { plan: 'FREE', caspers_monthly: 0 },
+      });
+      if (demoted.count > 0) plan = 'FREE';
     }
 
     // ── обычный чат (бесплатная модель, cost === 0) ─────────────────────────

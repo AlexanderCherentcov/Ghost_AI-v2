@@ -400,13 +400,18 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         // всё равно списать AUTO_MIN_COST (см. ai-router.ts), и это должно
         // считаться оплаченным сообщением, а не бесплатной квотой.
         const promptStyleKey = billedCost > 0 ? 'think' : 'chat';
-        // Ограничение "free"-промпта (и maxTokens ниже) — по тому же сигналу:
-        // billedCost === 0 значит сообщение покрылось дневной бесплатной квотой
-        // FREE-тарифа, а не оплачено Caspers'ами. Раньше оба ограничения были
-        // жёстко привязаны к user.plan === 'FREE' — FREE-пользователь, явно
-        // оплативший топовую модель, получал тот же урезанный ответ, что и
-        // бесплатное сообщение, хотя реально заплатил Caspers.
-        const isFreeMessage = billedCost === 0;
+        // Ограничение "free"-промпта (и maxTokens ниже) — только для FREE-тарифа
+        // НА бесплатной дневной квоте. billedCost === 0 САМ ПО СЕБЕ не значит
+        // "бесплатное сообщение" — на платных тарифах "Стандартный чат" (cost:0)
+        // тоже даёт billedCost=0, потому что он для них безлимитный/бесплатный
+        // перк, а не квота. Без plan==='FREE' в условии платный подписчик,
+        // явно выбравший бесплатную модель, получал урезанный 400-токенный
+        // ответ с рекламой платного тарифа — который он уже купил (регрессия,
+        // найдена при повторном аудите 2026-09-12). Обратная сторона тоже
+        // учтена: FREE-пользователь, оплативший топовую модель Caspers'ами
+        // (billedCost>0), не подпадает под ограничение — это и была исходная
+        // причина фикса.
+        const isFreeMessage = plan === 'FREE' && billedCost === 0;
         const systemMsg: ChatMessage = { role: 'system', content: getSystemPrompt(promptStyleKey, responseStyle, isFreeMessage, spec.label) };
         const historyMsgs: ChatMessage[] = history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
@@ -457,9 +462,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           try {
             yield* streamCloudflare(messages, maxTokens);
           } catch {
-            const cfFallback = spec.fallbackModels?.[0] ?? 'meta-llama/llama-3.1-8b-instruct';
+            // Раньше брали только fallbackModels[0] и не передавали остаток цепочки
+            // четвёртым аргументом — второе звено (llama-3.3-70b-instruct) было
+            // мёртвой конфигурацией: streamOpenRouter никогда его не видел, хотя
+            // комментарий у llama-3.1-fast в config/models.ts прямо утверждает
+            // обратное.
+            const [cfFallback = 'meta-llama/llama-3.1-8b-instruct', ...restFallbacks] = spec.fallbackModels ?? [];
             fastify.log.warn(`[chat] Cloudflare down, falling back to ${cfFallback}`);
-            yield* streamOpenRouter(messages, cfFallback, maxTokens);
+            yield* streamOpenRouter(messages, cfFallback, maxTokens, restFallbacks);
           }
         }
 

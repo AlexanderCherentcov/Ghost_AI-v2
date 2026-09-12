@@ -1644,7 +1644,17 @@ async function registerCommands(): Promise<void> {
 
 async function main() {
   console.log('[Bot] Starting GhostLine AI bot...');
-  await registerCommands();
+  // Живой инцидент 2026-09-12: транзиентный ETIMEDOUT на setMyCommands
+  // валил ВЕСЬ процесс бота (main().catch → process.exit(1)) ещё до
+  // bot.start() — Docker перезапускал контейнер, и он падал на том же
+  // месте в цикле, пока сетевой сбой не проходил сам. Меню команд —
+  // некритичная декорация (сама команда работает и без пункта в меню),
+  // не должна ронять способность бота вообще принимать сообщения.
+  try {
+    await registerCommands();
+  } catch (err: any) {
+    console.error('[Bot] registerCommands failed (non-fatal), continuing without command menu:', err.message ?? err);
+  }
   await bot.start({
     onStart: (info) => {
       console.log(`[Bot] Running as @${info.username}`);

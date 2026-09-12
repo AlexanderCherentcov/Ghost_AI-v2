@@ -9,11 +9,12 @@
 import { Bot } from 'grammy';
 import { registerSupportHandlers } from './support-admin.js';
 import { registerUserIntakeHandlers } from './support-user-intake.js';
+import { telegramClientOptions } from './lib/telegram-proxy.js';
 
 const BOT_TOKEN = process.env.SUPPORT_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('SUPPORT_BOT_TOKEN is required');
 
-const bot = new Bot(BOT_TOKEN);
+const bot = new Bot(BOT_TOKEN, { client: telegramClientOptions() });
 
 // Личка (пользователь пишет обращение) и темы группы (оператор отвечает) —
 // независимые обработчики, каждый игнорирует чужой тип чата через next().

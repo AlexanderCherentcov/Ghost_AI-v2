@@ -38,6 +38,7 @@ import {
   mainKb, promoListKb, promoDetailKb, userKb, planKb, userListKb, serverKb, maintenanceKb,
   ADMIN_KEYBOARD, KB_START, KB_USERS, KB_STATS, KB_PROMOS, KB_HEALTH, KB_SERVER, KB_MAINT,
 } from './lib/admin-keyboards.js';
+import { telegramClientOptions } from './lib/telegram-proxy.js';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ const ADMIN_IDS = new Set(
 
 // ─── Bot ──────────────────────────────────────────────────────────────────────
 
-const bot = new Bot(BOT_TOKEN);
+const bot = new Bot(BOT_TOKEN, { client: telegramClientOptions() });
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
 

@@ -15,6 +15,7 @@ import { uploadTelegramImage, extractTelegramDocument } from './lib/telegram-fil
 import { PLAN_KEYS, planAtLeast } from './lib/plan-keys.js';
 import { apiErrorMessage } from './lib/error-message.js';
 import { formatTransactionReason } from './lib/casper-history.js';
+import { telegramClientOptions } from './lib/telegram-proxy.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is required');
@@ -29,7 +30,7 @@ const ADMIN_IDS = new Set(
   (process.env.ADMIN_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 );
 
-const bot = new Bot(BOT_TOKEN);
+const bot = new Bot(BOT_TOKEN, { client: telegramClientOptions() });
 
 // ─── HTTP-клиент для backend ────────────────────────────────────────────────
 // proxy: false обязателен — HTTPS_PROXY/HTTP_PROXY в .env нужны для внешних

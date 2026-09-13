@@ -15,7 +15,19 @@ export default function AuthCallbackPage() {
   // Приоритет: window.__oauthHash (выставлен инлайн-скриптом, переживает переключения
   // COOP-контекста) → sessionStorage → window.location.hash (запасной вариант).
   const [tokenData] = useState(() => {
-    if (typeof window === 'undefined') return { access: '', refresh: '', redirect: '/chat' };
+    if (typeof window === 'undefined') return { access: '', refresh: '', code: '', redirect: '/chat' };
+
+    // Ссылка входа из бота Telegram: ?code=... — одноразовый код вместо готовых
+    // токенов в URL. Встроенный браузер Telegram ненадёжно передаёт #hash при
+    // открытии внешней ссылки (баг наблюдался вживую — страница грузится с пустым
+    // hash, мгновенный разлогин), а query-параметр — часть самого HTTP-запроса и
+    // до сервера доходит всегда. См. /auth/telegram-bot в backend/src/routes/auth.ts.
+    const query = new URLSearchParams(window.location.search);
+    const code = query.get('code') ?? '';
+    if (code) {
+      return { access: '', refresh: '', code, redirect: decodeURIComponent(query.get('redirect') ?? '/chat') };
+    }
+
     const w = window as any;
     const fromGlobal: string = w.__oauthHash ?? '';
     const fromSS: string = (() => {
@@ -27,12 +39,27 @@ export default function AuthCallbackPage() {
     return {
       access: params.get('access') ?? '',
       refresh: params.get('refresh') ?? '',
+      code: '',
       redirect: decodeURIComponent(params.get('redirect') ?? '/chat'),
     };
   });
 
   useEffect(() => {
-    const { access, refresh, redirect } = tokenData;
+    const { access, refresh, code, redirect } = tokenData;
+
+    if (code) {
+      api.auth.exchange(code)
+        .then(({ accessToken, refreshToken, user }) => {
+          setAccessToken(accessToken);
+          setAuth(user, accessToken, refreshToken);
+          router.replace(redirect);
+        })
+        .catch(() => {
+          clearAuth();
+          router.replace('/login');
+        });
+      return;
+    }
 
     if (!access || !refresh) {
       clearAuth();

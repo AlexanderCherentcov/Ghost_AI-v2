@@ -146,6 +146,12 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    /** Обмен одноразового кода из ссылки бота (см. /auth/callback?code=...) на пару токенов. */
+    exchange: (code: string) =>
+      request<AuthResponse>('/auth/exchange', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      }),
   },
 
   chats: {

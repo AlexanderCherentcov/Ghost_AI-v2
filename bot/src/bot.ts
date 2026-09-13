@@ -255,8 +255,10 @@ async function mintMagicLink(from: TgFrom, redirectPath: string): Promise<string
     photo_url: undefined,
   });
 
-  const { accessToken, refreshToken } = res.data as { accessToken: string; refreshToken: string };
-  return `${FRONTEND_URL}/auth/callback/#access=${accessToken}&refresh=${refreshToken}&redirect=${encodeURIComponent(redirectPath)}`;
+  const { code } = res.data as { code: string };
+  // Код, не токены в #hash — см. подробный комментарий у /auth/telegram-bot
+  // в backend/src/routes/auth.ts (встроенный браузер Telegram ненадёжно передаёт hash).
+  return `${FRONTEND_URL}/auth/callback?code=${code}&redirect=${encodeURIComponent(redirectPath)}`;
 }
 
 // ─── /start ────────────────────────────────────────────────────────────────────
@@ -315,17 +317,16 @@ bot.command('start', async (ctx) => {
         photo_url: undefined,
       });
 
-      const { accessToken, refreshToken, isNew } = res.data as {
-        accessToken: string;
-        refreshToken: string;
-        isNew: boolean;
-      };
+      const { code, isNew } = res.data as { code: string; isNew: boolean };
 
       const redirect = isNew ? '/onboarding/name' : '/chat';
-      const loginUrl = `${FRONTEND_URL}/auth/callback/#access=${accessToken}&refresh=${refreshToken}&redirect=${redirect}`;
+      // Код, не готовые токены — встроенный браузер Telegram ненадёжно передаёт
+      // #hash при открытии внешней ссылки, а query-параметр доходит всегда
+      // (см. подробный комментарий у /auth/telegram-bot в backend/src/routes/auth.ts).
+      const loginUrl = `${FRONTEND_URL}/auth/callback?code=${code}&redirect=${encodeURIComponent(redirect)}`;
 
       await ctx.reply(
-        `🔑 *Ваша ссылка для входа:*\n\nНажмите кнопку ниже — она действует 5 минут.\nНикому не передавайте эту ссылку.`,
+        `🔑 *Ваша ссылка для входа:*\n\nНажмите кнопку ниже — она действует 2 минуты.\nНикому не передавайте эту ссылку.`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard().url('🚀 Войти в GhostLine', loginUrl),

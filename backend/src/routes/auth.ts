@@ -61,6 +61,10 @@ function hashesMatch(expected: string, actual: string | null | undefined): boole
 // если задать переменной окружения другое значение, ключ должен жить не дольше.
 const REFRESH_TTL_SECONDS = parseDurationSeconds(process.env.JWT_REFRESH_EXPIRES_IN ?? '30d');
 
+// Ссылка входа из бота живёт 2 минуты — этого с запасом хватает, чтобы её открыть,
+// но окно кражи из истории/логов встроенного браузера Telegram остаётся минимальным.
+const LOGIN_CODE_TTL_SECONDS = 120;
+
 function parseDurationSeconds(duration: string): number {
   const match = /^(\d+)([smhd])$/.exec(duration);
   if (!match) return 30 * 24 * 60 * 60;
@@ -334,7 +338,36 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
 
     const tokens = await issueTokens(fastify, user.id);
-    return { ...tokens, isNew: !user.onboardingDone, termsAccepted: !!user.termsAcceptedAt };
+
+    // Одноразовый код — отдельно от токенов выше. Токены нужны боту для прямых
+    // серверных вызовов API (см. bot/src/lib/session.ts), код — для URL-кнопки
+    // "Войти на сайт", которую открывает встроенный браузер Telegram. Тот не всегда
+    // корректно передаёт #hash при открытии внешней ссылки (баг наблюдался вживую —
+    // страница грузится с пустым hash, пользователь мгновенно разлогинивается), а
+    // query-параметр — часть самого HTTP-запроса и до сервера доходит всегда.
+    // Класть сами JWT в URL тоже не стоило бы — код одноразовый и самоуничтожается
+    // через LOGIN_CODE_TTL_SECONDS секунд, а токены в истории браузера — бессрочны.
+    const code = crypto.randomUUID();
+    await redis.set(`login_code:${code}`, user.id, 'EX', LOGIN_CODE_TTL_SECONDS);
+
+    return { ...tokens, code, isNew: !user.onboardingDone, termsAccepted: !!user.termsAcceptedAt };
+  });
+
+  // ── Обмен одноразового кода (см. /auth/telegram-bot) на пару токенов ──────
+  fastify.post('/auth/exchange', async (request, reply) => {
+    const { code } = request.body as { code?: string };
+    if (!code) return reply.code(400).send({ error: 'No code' });
+
+    // getdel — атомарно читает и сразу гасит ключ, поэтому один и тот же код
+    // нельзя предъявить дважды (например, если ссылку открыли повторно из истории).
+    const userId = await redis.getdel(`login_code:${code}`);
+    if (!userId) return reply.code(401).send({ error: 'Invalid or expired code' });
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return reply.code(401).send({ error: 'Invalid or expired code' });
+
+    const tokens = await issueTokens(fastify, user.id, user.email ?? undefined);
+    return { ...tokens, user };
   });
 
   // ── Бот: получить данные пользователя по Telegram ID (план, имя, баланс) ──

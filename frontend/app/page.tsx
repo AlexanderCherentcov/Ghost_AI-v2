@@ -876,8 +876,19 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t" style={{ borderColor: 'rgba(148,163,184,.1)' }}>
+          <div className="flex flex-wrap items-center justify-center sm:justify-between gap-x-4 gap-y-3 pt-6 border-t text-center sm:text-left" style={{ borderColor: 'rgba(148,163,184,.1)' }}>
             <span className="text-[13px]" style={{ color: '#8078a0' }}>© {new Date().getFullYear()} GhostLine AI</span>
+            <a
+              href="https://alexandercherentsov.ru/?utm_source=ghostlineai.ru&utm_medium=credit"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] whitespace-nowrap transition-colors bg-[rgba(255,255,255,.06)] text-[rgba(255,255,255,.75)] hover:bg-[rgba(91,61,240,.18)] hover:text-white"
+            >
+              <svg width="14" height="14" viewBox="-8 -301 606 359" fill="currentColor" aria-hidden="true" className="flex-none">
+                <path fillRule="evenodd" d="M352.4 -119.2L350.4 -95.2Q341.2 -96 330.6 -96Q320 -96 312.8 -95.6Q307.2 -51.6 305.6 0L277.6 0Q275.2 -10.4 275.2 -27.6Q275.2 -44.8 276.2 -57.4Q277.2 -70 278.8 -82.4Q280.4 -94.8 280.4 -96.8Q274.8 -97.2 254 -97.2Q233.2 -97.2 225.2 -96.4Q178.8 -34 139.6 -1.8Q100.4 30.4 61.2 30.4Q42 30.4 29 18.8Q16 7.2 16 -12Q16 -48.4 71.4 -78.4Q126.8 -108.4 214.8 -118.8Q225.2 -134.8 253.6 -168.2Q282 -201.6 309.6 -226.4Q321.6 -254.4 328.6 -265.4Q335.6 -276.4 342.4 -276.4Q349.2 -276.4 353.6 -271.2Q358 -266 358 -257.8Q358 -249.6 349 -233.8Q340 -218 330.4 -185Q320.8 -152 317.2 -122.8Q338 -122.8 352.4 -119.2ZM148.4 -35.6Q181.6 -67.2 198.4 -95.6Q131.2 -91.6 94.6 -70.4Q58 -49.2 58 -25.2Q58 -14.8 65 -8.8Q72 -2.8 83.6 -2.8Q114.8 -2.8 148.4 -35.6ZM285.2 -122.8Q288 -136.4 292.6 -157Q297.2 -177.6 298 -181.2Q278.8 -162.8 271.2 -154.2Q263.6 -145.6 244.4 -121.2Q251.2 -121.6 261 -121.8Q270.8 -122 277.2 -122.4Q283.6 -122.8 285.2 -122.8Z M486 -134.4Q476 -114 469.4 -80.6Q462.8 -47.2 462.8 -20Q462.8 7.2 476 7.2Q484.4 7.2 498.8 -5.6L510 2.8Q504.8 13.2 492.8 23.6Q480.8 34 466.8 34Q438.4 34 438.4 -16.4Q438.4 -56.8 457.6 -119.2Q430 -104.8 409.6 -104.8Q389.2 -104.8 379 -115.8Q368.8 -126.8 369.6 -146.8Q371.6 -197.2 430.8 -255.6L443.2 -240.8Q421.6 -221.2 411 -199.4Q400.4 -177.6 400 -163.2Q399.6 -148.8 408.4 -140Q417.2 -131.2 432 -131.2Q446.8 -131.2 468.4 -144.4Q488 -199.2 513.4 -227.8Q538.8 -256.4 557.2 -256.4Q564.4 -256.4 569.2 -252.2Q574 -248 573.4 -238.2Q572.8 -228.4 567.2 -215.4Q561.6 -202.4 555.2 -193.4Q548.8 -184.4 536.6 -173.2Q524.4 -162 518.4 -157.4Q512.4 -152.8 499.4 -143.8Q486.4 -134.8 486 -134.4ZM544 -226.8Q533.6 -226.8 524.6 -213.4Q515.6 -200 499.6 -164.4Q522 -180.8 535 -197.2Q548 -213.6 548 -220.2Q548 -226.8 544 -226.8Z" />
+              </svg>
+              Сайт и дизайн — Александр
+            </a>
             <span
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs"
               style={{ background: 'rgba(123,92,240,.08)', border: '1px solid rgba(123,92,240,.2)', color: '#c4b5fd' }}

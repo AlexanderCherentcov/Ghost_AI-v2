@@ -20,8 +20,6 @@ jobs:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          # 178.253.55.232 снаружи больше не отвечает по SSH (проверено с узлов в США/Германии
-          # 2026-09-20, деплой падал с "dial tcp ... i/o timeout") — сервер тот же, адрес новый.
           host: 45.146.131.100
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}

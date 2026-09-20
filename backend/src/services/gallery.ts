@@ -148,11 +148,19 @@ export async function toggleLike(itemId: string, userId: string): Promise<{ like
     return { liked: false, likesCount: item.likesCount };
   }
 
-  const [, item] = await prisma.$transaction([
-    prisma.galleryLike.create({ data: { galleryItemId: itemId, userId } }),
-    prisma.galleryItem.update({ where: { id: itemId }, data: { likesCount: { increment: 1 } } }),
-  ]);
-  return { liked: true, likesCount: item.likesCount };
+  try {
+    const [, item] = await prisma.$transaction([
+      prisma.galleryLike.create({ data: { galleryItemId: itemId, userId } }),
+      prisma.galleryItem.update({ where: { id: itemId }, data: { likesCount: { increment: 1 } } }),
+    ]);
+    return { liked: true, likesCount: item.likesCount };
+  } catch (err: any) {
+    // Два параллельных клика: второй create упирается в unique (P2002) — лайк уже стоит.
+    // Раньше это был 500; счётчик первая транзакция уже увеличила, вторая целиком откатилась.
+    if (err?.code !== 'P2002') throw err;
+    const item = await prisma.galleryItem.findUniqueOrThrow({ where: { id: itemId }, select: { likesCount: true } });
+    return { liked: true, likesCount: item.likesCount };
+  }
 }
 
 export type GallerySort = 'top' | 'new';

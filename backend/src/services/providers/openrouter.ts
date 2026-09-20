@@ -39,6 +39,10 @@ export const OR_MODELS = {
   fluxFill:   'black-forest-labs/flux.2-pro',
 } as const;
 
+// Таймауты стрима чата: до первого токена (модели с «раздумьем» отвечают небыстро) и между токенами.
+const FIRST_TOKEN_TIMEOUT_MS = 60_000;
+const STREAM_IDLE_TIMEOUT_MS = 30_000;
+
 function getClient() {
   return new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY ?? '',
@@ -80,7 +84,7 @@ export async function callOpenRouterJSON(
     max_tokens: maxTokens,
     // reasoning.exclude — см. подробный комментарий у tryStream ниже.
     ...({ reasoning: { exclude: true } } as Record<string, unknown>),
-  });
+  }, { timeout: 45_000 }); // разовый вызов диспетчера: без таймаута SDK ждал до 10 минут
   return resp.choices[0]?.message?.content ?? '';
 }
 
@@ -95,6 +99,12 @@ export async function* streamOpenRouter(
   const client = getClient();
 
   async function* tryStream(m: string) {
+    // Зависший апстрим (нет первого токена / стрим замолчал) раньше держал соединение и
+    // блокировку чата бесконечно. По таймеру обрываем запрос: до первого токена
+    // streamOpenRouter перейдёт к следующей модели цепочки, после — отдаст ошибку.
+    const controller = new AbortController();
+    let timer = setTimeout(() => controller.abort(), FIRST_TOKEN_TIMEOUT_MS);
+    try {
     const stream = await client.chat.completions.create({
       model: m,
       messages: messages as OpenAI.ChatCompletionMessageParam[],
@@ -111,10 +121,20 @@ export async function* streamOpenRouter(
       // унифицированного API OpenRouter для reasoning-моделей, non-reasoning
       // модели его просто игнорируют.
       ...({ reasoning: { exclude: true } } as Record<string, unknown>),
-    });
+    }, { signal: controller.signal });
     for await (const chunk of stream) {
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), STREAM_IDLE_TIMEOUT_MS);
       const text = chunk.choices[0]?.delta?.content;
       if (text) yield { type: 'token' as const, data: text };
+    }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw Object.assign(new Error('OpenRouter stream timeout'), { code: 'STREAM_TIMEOUT' });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -248,7 +268,8 @@ export async function generateImageFlux(
     if (m) return m[0];
   }
 
-  console.error('[generateImageFlux] Unknown response:\n', JSON.stringify(data, null, 2).slice(0, 2000));
+  // Ответ может содержать base64 картинки или пользовательский контент — в лог только начало.
+  console.error('[generateImageFlux] Unknown response:', JSON.stringify(data).slice(0, 300));
   throw new Error(`No image data in OpenRouter response: ${JSON.stringify(data).slice(0, 300)}`);
 }
 

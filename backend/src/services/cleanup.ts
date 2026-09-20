@@ -29,6 +29,24 @@ function daysAgo(days: number): Date {
 //   2. НЕ упоминаются ни в одном Message или GenerateJob в БД
 // Безопасно: файл в использовании — не трогается.
 
+const VIDEO_SCAN_BATCH = 1000;
+
+async function collectVideoNames(
+  fetchPage: (cursor?: string) => Promise<{ id: string; mediaUrl: string | null }[]>,
+  into: Set<string>,
+): Promise<void> {
+  let cursor: string | undefined;
+  for (;;) {
+    const rows = await fetchPage(cursor);
+    for (const { mediaUrl } of rows) {
+      const name = mediaUrl?.split('/videos/').pop();
+      if (name) into.add(name);
+    }
+    if (rows.length < VIDEO_SCAN_BATCH) return;
+    cursor = rows[rows.length - 1].id;
+  }
+}
+
 async function cleanupVideoFiles(): Promise<number> {
   const videosDir = path.join(process.cwd(), 'uploads', 'videos');
 
@@ -42,23 +60,29 @@ async function cleanupVideoFiles(): Promise<number> {
 
   const cutoff = daysAgo(VIDEO_TTL_DAYS);
 
-  // Собираем все локальные URL видео из БД (и сообщения, и задачи)
-  const [msgRows, jobRows] = await Promise.all([
-    prisma.message.findMany({
-      where: { mediaUrl: { contains: '/videos/' } },
-      select: { mediaUrl: true },
-    }),
-    prisma.generateJob.findMany({
-      where: { mediaUrl: { contains: '/videos/' } },
-      select: { mediaUrl: true },
-    }),
-  ]);
-
+  // Собираем все локальные URL видео из БД (и сообщения, и задачи) — страницами по
+  // BATCH строк: раньше findMany без take грузил в память ВСЕ строки с видео каждые сутки.
   const referencedNames = new Set<string>();
-  for (const { mediaUrl } of [...msgRows, ...jobRows]) {
-    const name = mediaUrl?.split('/videos/').pop();
-    if (name) referencedNames.add(name);
-  }
+  await collectVideoNames(
+    (cursor) => prisma.message.findMany({
+      where: { mediaUrl: { contains: '/videos/' } },
+      select: { id: true, mediaUrl: true },
+      orderBy: { id: 'asc' },
+      take: VIDEO_SCAN_BATCH,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    }),
+    referencedNames,
+  );
+  await collectVideoNames(
+    (cursor) => prisma.generateJob.findMany({
+      where: { mediaUrl: { contains: '/videos/' } },
+      select: { id: true, mediaUrl: true },
+      orderBy: { id: 'asc' },
+      take: VIDEO_SCAN_BATCH,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    }),
+    referencedNames,
+  );
 
   let deleted = 0;
   for (const filename of filenames) {

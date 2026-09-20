@@ -36,6 +36,7 @@ import { startJobReconciler } from './services/job-reconciler.js';
 import { startHealthMonitor } from './services/health-monitor.js';
 import { visionQueue, soundQueue, reelQueue } from './lib/bullmq.js';
 import { hasInternalBotSecret } from './lib/bot-auth.js';
+import { parseByteRange } from './lib/http-range.js';
 import type { FastifyInstance } from 'fastify';
 import type { Worker } from 'bullmq';
 
@@ -193,15 +194,15 @@ export async function buildApp() {
     reply.header('Cache-Control', 'public, max-age=31536000');
     reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
 
-    if (rangeHeader) {
-      const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
-      const start = parseInt(startStr, 10);
-      const end = endStr ? parseInt(endStr, 10) : total - 1;
-      const chunkSize = end - start + 1;
+    const range = parseByteRange(rangeHeader, total);
+    if (range === 'unsatisfiable') {
+      return reply.code(416).header('Content-Range', `bytes */${total}`).send();
+    }
+    if (range) {
       reply.code(206);
-      reply.header('Content-Range', `bytes ${start}-${end}/${total}`);
-      reply.header('Content-Length', String(chunkSize));
-      return reply.send(fs.createReadStream(filepath, { start, end }));
+      reply.header('Content-Range', `bytes ${range.start}-${range.end}/${total}`);
+      reply.header('Content-Length', String(range.end - range.start + 1));
+      return reply.send(fs.createReadStream(filepath, { start: range.start, end: range.end }));
     }
 
     reply.header('Content-Length', String(total));
@@ -239,14 +240,15 @@ export async function buildApp() {
     const rangeHeader = (request.headers as Record<string, string>).range;
     reply.header('Accept-Ranges', 'bytes');
     reply.header('Content-Type', 'video/mp4');
-    if (rangeHeader) {
-      const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
-      const start = parseInt(startStr, 10);
-      const end = endStr ? parseInt(endStr, 10) : total - 1;
+    const range = parseByteRange(rangeHeader, total);
+    if (range === 'unsatisfiable') {
+      return reply.code(416).header('Content-Range', `bytes */${total}`).send();
+    }
+    if (range) {
       reply.code(206);
-      reply.header('Content-Range', `bytes ${start}-${end}/${total}`);
-      reply.header('Content-Length', String(end - start + 1));
-      return reply.send(fs.createReadStream(filepath, { start, end }));
+      reply.header('Content-Range', `bytes ${range.start}-${range.end}/${total}`);
+      reply.header('Content-Length', String(range.end - range.start + 1));
+      return reply.send(fs.createReadStream(filepath, { start: range.start, end: range.end }));
     }
     reply.header('Content-Length', String(total));
     return reply.send(fs.createReadStream(filepath));
@@ -282,6 +284,23 @@ export async function buildApp() {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   }));
+
+  // Готовность: реально дёргает Postgres и Redis. /health отвечает «ok», даже когда БД мертва,
+  // поэтому Docker healthcheck смотрит сюда — «healthy» должно значить «работает», а не «процесс жив».
+  fastify.get('/health/ready', async (_request, reply) => {
+    const withTimeout = <T>(p: Promise<T>) =>
+      Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))]);
+    const [db, cache] = await Promise.allSettled([
+      withTimeout(prisma.$queryRaw`SELECT 1`),
+      withTimeout(redis.ping()),
+    ]);
+    const ok = db.status === 'fulfilled' && cache.status === 'fulfilled';
+    return reply.code(ok ? 200 : 503).send({
+      status: ok ? 'ok' : 'degraded',
+      db: db.status === 'fulfilled' ? 'ok' : 'down',
+      redis: cache.status === 'fulfilled' ? 'ok' : 'down',
+    });
+  });
 
   // ── Глобальный обработчик ошибок ──────────────────────────────────────────
   fastify.setErrorHandler((error, _request, reply) => {

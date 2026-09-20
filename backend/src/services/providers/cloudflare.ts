@@ -51,6 +51,9 @@ export async function callCloudflareJSON(
 
 // ─── Стриминг текста от Cloudflare AI ──────────────────────────────────────────
 
+const CF_FIRST_TOKEN_TIMEOUT_MS = 30_000;
+const CF_STREAM_IDLE_TIMEOUT_MS = 20_000;
+
 export async function* streamCloudflare(
   messages: ChatMessage[],
   _maxTokens?: number,
@@ -74,14 +77,20 @@ export async function* streamCloudflare(
     max_tokens: _maxTokens ?? 1024,
   });
 
+  // Зависший апстрим не должен держать соединение и блокировку чата бесконечно.
+  const controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(), CF_FIRST_TOKEN_TIMEOUT_MS);
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: 'POST',
       headers,
       body,
+      signal: controller.signal,
     });
   } catch (err: any) {
+    clearTimeout(timer);
     throw Object.assign(
       new Error(`Cloudflare AI connection error: ${err.message}`),
       { code: 'CF_CONNECTION_ERROR' },
@@ -89,6 +98,7 @@ export async function* streamCloudflare(
   }
 
   if (!response.ok) {
+    clearTimeout(timer);
     const errText = await response.text().catch(() => response.statusText);
     throw Object.assign(
       new Error(`Cloudflare AI error ${response.status}: ${errText}`),
@@ -97,6 +107,7 @@ export async function* streamCloudflare(
   }
 
   if (!response.body) {
+    clearTimeout(timer);
     throw Object.assign(
       new Error('Cloudflare AI returned empty body'),
       { code: 'CF_EMPTY_RESPONSE' },
@@ -115,6 +126,8 @@ export async function* streamCloudflare(
       const { done, value } = await reader.read();
       if (done) break;
 
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), CF_STREAM_IDLE_TIMEOUT_MS);
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
@@ -137,6 +150,7 @@ export async function* streamCloudflare(
       }
     }
   } finally {
+    clearTimeout(timer);
     reader.releaseLock();
   }
 }

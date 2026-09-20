@@ -95,6 +95,23 @@ export async function checkGenRateLimit(userId: string): Promise<boolean> {
   }
 }
 
+// ─── Rate limit генерации текста песен ─────────────────────────────────────────
+// /generate/lyrics бесплатный (без списания Caspers) — без собственного лимита это
+// был безлимитный LLM за наш счёт, ограниченный только общим лимитом на IP.
+
+const LYRICS_RPM = parseInt(process.env.LYRICS_RPM ?? '5');
+
+export async function checkLyricsRateLimit(userId: string): Promise<boolean> {
+  try {
+    const key   = `rl:lyrics:${userId}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, 60);
+    return count <= LYRICS_RPM;
+  } catch {
+    return true;
+  }
+}
+
 // ─── Rate limit видео ──────────────────────────────────────────────────────────
 
 export async function checkVideoRateLimit(userId: string): Promise<boolean> {

@@ -41,7 +41,7 @@ const googleCallbackSchema = z.object({
 const updateProfileSchema = z.object({
   name: z.string().min(1).max(60).optional(),
   birthDate: z.string().optional(),
-  purposes: z.array(z.string()).optional(),
+  purposes: z.array(z.string().max(60)).max(10).optional(),
   responseStyle: z.string().optional(),
   onboardingDone: z.boolean().optional(),
 });

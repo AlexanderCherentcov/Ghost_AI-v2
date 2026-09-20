@@ -263,7 +263,9 @@ export async function checkAndDeduct(
     if (domain === 'chat') {
       const proClaimed = await tx.user.updateMany({
         where: { id: userId, caspers_balance: { gte: cost } },
-        data: { caspers_balance: { decrement: cost }, pro_messages_today: { increment: cost } },
+        // increment: 1 — счётчик считает СООБЩЕНИЯ (админ-карточка "Чат (про): N"), а не Caspers;
+        // раньше прибавлял цену и завышал статистику в цену раз.
+        data: { caspers_balance: { decrement: cost }, pro_messages_today: { increment: 1 } },
       });
       if (proClaimed.count === 0) {
         throw Object.assign(new Error('Недостаточно Caspers'), { code: 'LIMIT_PRO_MESSAGES' });
@@ -317,8 +319,10 @@ export async function refundCaspers(
     await prisma.casperTransaction.create({
       data: { userId, amount, reason: `refund_${reason}` },
     }).catch(() => {});
-  } catch {
-    // Возврат делается по принципу best-effort
+  } catch (err) {
+    // Best-effort: ошибка возврата не должна ронять вызывающий код — но потерянный возврат
+    // денег пользователю обязан быть виден в логах, а не исчезать молча.
+    console.error(`[refundCaspers] ВОЗВРАТ НЕ ВЫПОЛНЕН user=${userId} amount=${amount} reason=${reason}:`, err);
   }
 }
 

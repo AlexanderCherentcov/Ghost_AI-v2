@@ -7,7 +7,7 @@ import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
 import { findModel, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID, type VideoDurationChoice } from '../config/models.js';
 import { visionQueue, soundQueue, reelQueue } from '../lib/bullmq.js';
 import { getMediaCached } from '../services/cache.js';
-import { checkGenRateLimit, checkVideoRateLimit, acquireGenLock, releaseGenLock } from '../services/user-limiter.js';
+import { checkGenRateLimit, checkVideoRateLimit, checkLyricsRateLimit, acquireGenLock, releaseGenLock } from '../services/user-limiter.js';
 import { generateLipSync } from '../services/providers/goapi.js';
 import { callCloudflareJSON } from '../services/providers/cloudflare.js';
 import { encrypt } from '../lib/crypto.js';
@@ -532,6 +532,10 @@ export default async function generateRoutes(fastify: FastifyInstance) {
 
       if (instrumental) {
         return reply.send({ lyrics: '' });
+      }
+
+      if (!(await checkLyricsRateLimit(request.user.userId))) {
+        return reply.code(429).send({ error: 'Слишком много запросов — подождите минуту', code: 'RATE_LIMITED' });
       }
 
       const styleHint = style ? ` in ${style} style` : '';

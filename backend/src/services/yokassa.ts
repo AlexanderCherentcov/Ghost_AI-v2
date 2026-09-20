@@ -170,8 +170,13 @@ type YokassaEvent = {
   object: { id: string; status?: string; metadata?: Record<string, string>; payment_id?: string; amount?: { value: string } };
 };
 
+// Эндпоинт вебхука публичный, тело не подписано: id из него подставляется в URL исходящего
+// запроса к ЮKassa — без проверки формата туда можно было протащить произвольный путь.
+const YOKASSA_ID_PATTERN = /^[a-zA-Z0-9_-]{1,100}$/;
+
 export async function processWebhook(body: unknown): Promise<void> {
   const event = body as YokassaEvent;
+  if (typeof event?.type !== 'string' || typeof event.object?.id !== 'string') return;
 
   // ── Отмена платежа — просто фиксируем статус, ничего не выдавали ──────────
   if (event.type === 'payment.canceled') {
@@ -194,7 +199,8 @@ export async function processWebhook(body: unknown): Promise<void> {
   if (event.type !== 'payment.succeeded') return;
 
   const paymentId = event.object.id;
-  const verifyRes = await yokassaAxios.get(`${YOKASSA_BASE}/payments/${paymentId}`, {
+  if (!YOKASSA_ID_PATTERN.test(paymentId)) return;
+  const verifyRes = await yokassaAxios.get(`${YOKASSA_BASE}/payments/${encodeURIComponent(paymentId)}`, {
     headers: yokassaHeaders(crypto.randomUUID()),
   }).catch(() => null);
   if (!verifyRes || verifyRes.data?.status !== 'succeeded') return;

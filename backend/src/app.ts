@@ -33,6 +33,7 @@ import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
 import { startJobReconciler } from './services/job-reconciler.js';
+import { startHealthMonitor } from './services/health-monitor.js';
 import { visionQueue, soundQueue, reelQueue } from './lib/bullmq.js';
 import { hasInternalBotSecret } from './lib/bot-auth.js';
 import type { FastifyInstance } from 'fastify';
@@ -337,6 +338,9 @@ async function start() {
 
   // Закрывает генерации, которые остались processing после убитого процесса (с возвратом Caspers)
   startJobReconciler();
+
+  // Алерты админам: диск ≥85%, память <200 МБ, Redis ≥200 МБ
+  startHealthMonitor();
 
   // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();

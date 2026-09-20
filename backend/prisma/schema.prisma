@@ -152,6 +152,7 @@ model Message {
 
   @@index([chatId, createdAt])
   @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model Payment {
@@ -171,6 +172,7 @@ model Payment {
   updatedAt     DateTime      @updatedAt
 
   @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model CasperTransaction {
@@ -182,6 +184,7 @@ model CasperTransaction {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 // ─── Promo codes ────────────────────────────────────────────────────────────
@@ -249,6 +252,8 @@ model GenerateJob {
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([userId, mode, status])
 }
 
 model UserImageRequest {
@@ -320,6 +325,7 @@ model GalleryItem {
 
   @@index([status, likesCount])
   @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model GalleryLike {

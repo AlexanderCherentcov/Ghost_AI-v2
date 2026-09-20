@@ -37,6 +37,10 @@ import { startHealthMonitor } from './services/health-monitor.js';
 import { visionQueue, soundQueue, reelQueue } from './lib/bullmq.js';
 import { hasInternalBotSecret } from './lib/bot-auth.js';
 import { parseByteRange } from './lib/http-range.js';
+import {
+  createRateLimitKey, rateLimitMax,
+  ANON_RATE_LIMIT_PER_MIN, AUTH_ANON_RATE_LIMIT_PER_MIN,
+} from './lib/rate-limit-key.js';
 import type { FastifyInstance } from 'fastify';
 import type { Worker } from 'bullmq';
 
@@ -95,15 +99,15 @@ export async function buildApp() {
   if (!jwtSecret) throw new Error('JWT_SECRET env var is required — server refuses to start with a weak default');
   await fastify.register(jwt, { secret: jwtSecret });
 
+  // Ключ лимита — userId авторизованного (проверенный JWT), иначе IP. Подробности, почему не «просто IP»,
+  // — в lib/rate-limit-key.ts (реальный IP посетителя до backend не доходит).
+  const rateLimitKey = createRateLimitKey((token) => fastify.jwt.verify<{ userId?: string }>(token));
+
   await fastify.register(rateLimit, {
-    max: 200,
+    max: rateLimitMax(ANON_RATE_LIMIT_PER_MIN),
     timeWindow: '1 minute',
     skipOnError: true,
-    // Берём реальный IP клиента из заголовка nginx X-Real-IP.
-    // Без этого все пользователи выглядят как IP моста Docker (172.18.0.x)
-    // и делят один rate-limit-бакет — из-за чего невиновным пользователям прилетает 429.
-    keyGenerator: (req) =>
-      (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
+    keyGenerator: rateLimitKey,
     errorResponseBuilder: (_req, context) => ({
       error: `Слишком много запросов — повторите через ${context.after}`,
       code: 'RATE_LIMITED',
@@ -122,16 +126,16 @@ export async function buildApp() {
   // ── Декораторы ────────────────────────────────────────────────────────────
   fastify.decorate('authenticate', authenticate);
 
-  // ── Более строгий rate limit для auth-эндпоинтов (20 запросов/мин на IP) ──
+  // ── Отдельный rate limit для auth-эндпоинтов (вход, refresh, /me) ───────────
+  // Раньше 20 запросов/мин на «IP» = 20 входов в минуту НА ВЕСЬ САЙТ (все за адресом nginx).
   await fastify.register(async (authScope) => {
     await authScope.register(rateLimit, {
-      max: 20,
+      max: rateLimitMax(AUTH_ANON_RATE_LIMIT_PER_MIN),
       timeWindow: '1 minute',
       skipOnError: true,
-      // Боты ходят напрямую (общий IP контейнера) — без этого весь бот делил бы один бакет 20/мин.
+      // Боты ходят напрямую (общий IP контейнера) — без этого весь бот делил бы один общий бакет.
       allowList: (req) => hasInternalBotSecret(req),
-      keyGenerator: (req) =>
-        (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
+      keyGenerator: rateLimitKey,
       errorResponseBuilder: (_req, context) => ({
         error: `Слишком много запросов — повторите через ${context.after}`,
         code: 'RATE_LIMITED',

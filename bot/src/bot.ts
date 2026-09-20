@@ -165,6 +165,14 @@ function checkAuthRateLimit(userId: number): boolean {
   return true;
 }
 
+// Записи старше окна лимита ничего не значат — без чистки Map рос по одному ключу на каждого пользователя.
+setInterval(() => {
+  const cutoff = Date.now() - AUTH_RATE_LIMIT_MS;
+  for (const [id, last] of authRateLimit) {
+    if (last < cutoff) authRateLimit.delete(id);
+  }
+}, 10 * 60 * 1000).unref();
+
 // ─── Хелпер меток тарифов ───────────────────────────────────────────────────
 
 // Ключи планов должны совпадать с PLAN_KEYS из backend/src/config/plans.ts —

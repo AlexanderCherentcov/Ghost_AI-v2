@@ -86,9 +86,23 @@ export interface UserSession {
   awaitingInput: AwaitingInput;
   /** Согласие с условиями/политикой (см. /bot/accept-terms). Гейтится в bot.ts. */
   termsAccepted: boolean;
+  /** ms epoch последнего обращения — по нему вытесняются неактивные сессии. */
+  lastUsedAt: number;
 }
 
 const sessions = new Map<number, UserSession>();
+
+// Сессия держит два JWT и настройки. Без вытеснения каждый когда-либо писавший боту
+// пользователь оставался в памяти навсегда (на дистанции — OOM бота). Неактивных
+// просто забываем: следующее сообщение заведёт сессию заново через mintTokens.
+const SESSION_IDLE_EVICT_MS = 6 * 60 * 60 * 1000;
+const SESSION_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - SESSION_IDLE_EVICT_MS;
+  for (const [id, s] of sessions) {
+    if (s.lastUsedAt < cutoff) sessions.delete(id);
+  }
+}, SESSION_SWEEP_INTERVAL_MS).unref();
 
 interface TgFrom {
   id: number;
@@ -127,10 +141,13 @@ export async function ensureSession(from: TgFrom): Promise<UserSession> {
       musicOptions: { ...DEFAULT_MUSIC_OPTIONS },
       awaitingInput: null,
       termsAccepted,
+      lastUsedAt: Date.now(),
     };
     sessions.set(from.id, session);
     return session;
   }
+
+  session.lastUsedAt = Date.now();
 
   if (Date.now() > session.tokenExpiresAt - 60_000) {
     try {

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  createRateLimitKey, rateLimitMax,
+  createRateLimitKey, rateLimitMax, rateLimitErrorBuilder,
   USER_RATE_LIMIT_PER_MIN, ANON_RATE_LIMIT_PER_MIN, AUTH_ANON_RATE_LIMIT_PER_MIN,
 } from './rate-limit-key';
 
@@ -50,5 +50,14 @@ describe('rateLimitMax', () => {
   it('общий анонимный потолок заметно выше старых 200/мин на весь сайт', () => {
     expect(ANON_RATE_LIMIT_PER_MIN).toBeGreaterThan(200 * 10);
     expect(AUTH_ANON_RATE_LIMIT_PER_MIN).toBeGreaterThan(20 * 10);
+  });
+});
+
+describe('rateLimitErrorBuilder', () => {
+  it('отдаёт statusCode 429 (без него пользователь получал 500) и понятное сообщение', () => {
+    const body = rateLimitErrorBuilder({}, { after: '1 минуту' });
+    expect(body.statusCode).toBe(429);
+    expect(body.code).toBe('RATE_LIMITED');
+    expect(body.message).toContain('1 минуту');
   });
 });

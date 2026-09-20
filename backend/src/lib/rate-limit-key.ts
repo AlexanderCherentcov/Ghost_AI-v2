@@ -49,6 +49,19 @@ export function createRateLimitKey(verify: VerifyJwt) {
   };
 }
 
+/**
+ * Ответ при превышении лимита. statusCode обязателен: без него @fastify/rate-limit пробрасывал ошибку
+ * в общий обработчик, и вместо 429 пользователь получал «500 Internal server error».
+ */
+export function rateLimitErrorBuilder(_req: unknown, context: { after: string }) {
+  return {
+    statusCode: 429,
+    error: 'Too Many Requests',
+    message: `Слишком много запросов — повторите через ${context.after}`,
+    code: 'RATE_LIMITED',
+  };
+}
+
 /** Лимит для ключа: у авторизованного — свой, у анонимного общего бакета — anonMax. */
 export function rateLimitMax(anonMax: number) {
   return (_req: unknown, key: string): number => (key.startsWith(USER_KEY_PREFIX) ? USER_RATE_LIMIT_PER_MIN : anonMax);

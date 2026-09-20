@@ -38,7 +38,7 @@ import { visionQueue, soundQueue, reelQueue } from './lib/bullmq.js';
 import { hasInternalBotSecret } from './lib/bot-auth.js';
 import { parseByteRange } from './lib/http-range.js';
 import {
-  createRateLimitKey, rateLimitMax,
+  createRateLimitKey, rateLimitMax, rateLimitErrorBuilder,
   ANON_RATE_LIMIT_PER_MIN, AUTH_ANON_RATE_LIMIT_PER_MIN,
 } from './lib/rate-limit-key.js';
 import type { FastifyInstance } from 'fastify';
@@ -108,10 +108,7 @@ export async function buildApp() {
     timeWindow: '1 minute',
     skipOnError: true,
     keyGenerator: rateLimitKey,
-    errorResponseBuilder: (_req, context) => ({
-      error: `Слишком много запросов — повторите через ${context.after}`,
-      code: 'RATE_LIMITED',
-    }),
+    errorResponseBuilder: rateLimitErrorBuilder,
   });
 
   await fastify.register(websocket, {
@@ -136,10 +133,7 @@ export async function buildApp() {
       // Боты ходят напрямую (общий IP контейнера) — без этого весь бот делил бы один общий бакет.
       allowList: (req) => hasInternalBotSecret(req),
       keyGenerator: rateLimitKey,
-      errorResponseBuilder: (_req, context) => ({
-        error: `Слишком много запросов — повторите через ${context.after}`,
-        code: 'RATE_LIMITED',
-      }),
+      errorResponseBuilder: rateLimitErrorBuilder,
     });
     await authScope.register(authRoutes, { prefix: '/api' });
   });
@@ -318,7 +312,8 @@ export async function buildApp() {
     }
 
     if (error.statusCode) {
-      return reply.code(error.statusCode).send({ error: error.message });
+      const appCode = (error as { code?: string }).code;
+      return reply.code(error.statusCode).send({ error: error.message, ...(appCode === 'RATE_LIMITED' ? { code: appCode } : {}) });
     }
 
     // Собственные коды ошибок приложения (выбрасываются без statusCode)

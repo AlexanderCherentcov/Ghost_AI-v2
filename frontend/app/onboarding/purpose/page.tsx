@@ -57,7 +57,7 @@ export default function OnboardingPurposePage() {
       <ProgressDots current={2} />
 
       <h1 className="text-3xl font-medium text-white mb-2">Для чего используете?</h1>
-      <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">Выберите всё, что подходит.</p>
+      <p className="text-sm text-[rgba(255,255,255,0.55)] mb-8">Выберите всё, что подходит.</p>
 
       <div className="flex flex-wrap gap-2 mb-8">
         {PURPOSES.map((p) => {
@@ -70,7 +70,7 @@ export default function OnboardingPurposePage() {
                 'px-4 py-2 rounded-2xl text-sm border transition-all',
                 active
                   ? 'border-accent bg-[var(--accent-dim)] text-accent'
-                  : 'border-[var(--border)] text-[rgba(255,255,255,0.4)] hover:border-[var(--border-hover)] hover:text-white'
+                  : 'border-[var(--border)] text-[rgba(255,255,255,0.6)] hover:border-[var(--border-hover)] hover:text-white'
               )}
             >
               {p}

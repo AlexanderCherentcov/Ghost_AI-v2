@@ -52,7 +52,7 @@ export function AuthShell({ children, tagline }: { children: ReactNode; tagline?
           {children}
         </div>
         {tagline && (
-          <p className="text-center text-[12.5px] text-[rgba(255,255,255,0.35)] mt-[22px]">{tagline}</p>
+          <p className="text-center text-[12.5px] text-[rgba(255,255,255,0.55)] mt-[22px]">{tagline}</p>
         )}
       </motion.div>
     </div>
@@ -83,7 +83,7 @@ export function ConsentCheckbox({ consented, onChange }: { consented: boolean; o
           )}
         </div>
       </div>
-      <span className="text-[12px] text-[rgba(255,255,255,0.4)] leading-relaxed group-hover:text-[rgba(255,255,255,0.55)] transition-colors select-none">
+      <span className="text-[12px] text-[rgba(255,255,255,0.6)] leading-relaxed group-hover:text-[rgba(255,255,255,0.55)] transition-colors select-none">
         Я принимаю{' '}
         <Link href="/terms" className="text-[#c4b5fd] hover:opacity-80" onClick={(e) => e.stopPropagation()}>условия использования</Link>
         {' '}и даю согласие на обработку персональных данных в соответствии с{' '}

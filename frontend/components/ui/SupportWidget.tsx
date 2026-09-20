@@ -44,7 +44,9 @@ export function SupportWidget() {
       {/* Плавающая кнопка */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-accent shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 transition-transform"
+        className="fixed right-6 z-40 w-12 h-12 rounded-full bg-accent shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 transition-transform"
+        // На iPhone с индикатором «домой» кнопка садилась прямо на него — учитываем safe-area.
+        style={{ bottom: 'max(1.5rem, calc(env(safe-area-inset-bottom) + 0.75rem))' }}
         aria-label="Поддержка"
       >
         <img src="/ghostline-logo-icon-sm.png" alt="" className="w-7 h-7 rounded-[7px] object-cover" />
@@ -82,7 +84,7 @@ export function SupportWidget() {
               </div>
               <button
                 onClick={handleClose}
-                className="text-[rgba(255,255,255,0.3)] hover:text-white transition-colors text-lg leading-none"
+                className="text-[rgba(255,255,255,0.55)] hover:text-white transition-colors text-lg leading-none"
               >
                 ×
               </button>
@@ -92,7 +94,7 @@ export function SupportWidget() {
               <div className="text-center py-4">
                 <p className="text-accent text-2xl mb-2">✓</p>
                 <p className="text-white text-sm font-medium mb-1">Сообщение отправлено!</p>
-                <p className="text-[rgba(255,255,255,0.4)] text-xs">Мы ответим на ваш email.</p>
+                <p className="text-[rgba(255,255,255,0.6)] text-xs">Мы ответим на ваш email.</p>
                 <button
                   onClick={handleClose}
                   className="mt-4 text-sm text-accent hover:opacity-80"
@@ -113,7 +115,7 @@ export function SupportWidget() {
                   />
                 )}
                 {user && (
-                  <p className="text-xs text-[rgba(255,255,255,0.3)] mb-3">
+                  <p className="text-xs text-[rgba(255,255,255,0.55)] mb-3">
                     Ответ придёт на {user.email ?? 'ваш email'}
                   </p>
                 )}

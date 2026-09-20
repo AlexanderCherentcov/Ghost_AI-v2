@@ -132,7 +132,7 @@ export default function BillingPage() {
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       <div className="px-6 py-5 border-b border-[var(--border)]">
         <h1 className="text-xl font-medium text-white">Тарифы</h1>
-        <p className="text-sm text-[rgba(255,255,255,0.3)] mt-1">
+        <p className="text-sm text-[rgba(255,255,255,0.55)] mt-1">
           Текущий план: <span className="text-accent">{plan}</span>
         </p>
       </div>
@@ -144,7 +144,7 @@ export default function BillingPage() {
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-1">
+                <p className="text-xs font-medium text-[rgba(255,255,255,0.6)] uppercase tracking-wider mb-1">
                   Баланс Caspers
                 </p>
                 <div className="flex items-center gap-2">
@@ -154,7 +154,7 @@ export default function BillingPage() {
                   <span className="text-[rgba(255,255,255,0.5)] text-sm">Caspers</span>
                 </div>
                 {plan !== 'FREE' && (
-                  <p className="text-xs text-[rgba(255,255,255,0.3)] mt-1">
+                  <p className="text-xs text-[rgba(255,255,255,0.55)] mt-1">
                     {user.caspers_monthly} Caspers начисляется каждый месяц
                   </p>
                 )}
@@ -164,7 +164,7 @@ export default function BillingPage() {
                   <p className="text-xs text-[rgba(255,255,255,0.6)] font-medium mb-1">
                     До {plansData.free.limits.chat_daily} бесплатных сообщений в день
                   </p>
-                  <p className="text-xs text-[rgba(255,255,255,0.4)]">Остальное — за Caspers</p>
+                  <p className="text-xs text-[rgba(255,255,255,0.6)]">Остальное — за Caspers</p>
                 </div>
               )}
             </div>
@@ -196,7 +196,7 @@ export default function BillingPage() {
 
         {/* Переключатель Месяц/Год */}
         <div className="flex items-center gap-3">
-          <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>
+          <span className={cn('text-sm', billingCycle === 'monthly' ? 'text-white' : 'text-[rgba(255,255,255,0.6)]')}>
             Месяц
           </span>
           <button
@@ -211,7 +211,7 @@ export default function BillingPage() {
               billingCycle === 'yearly' ? 'translate-x-5' : 'translate-x-0'
             )} />
           </button>
-          <span className={cn('text-sm', billingCycle === 'yearly' ? 'text-white' : 'text-[rgba(255,255,255,0.4)]')}>
+          <span className={cn('text-sm', billingCycle === 'yearly' ? 'text-white' : 'text-[rgba(255,255,255,0.6)]')}>
             Год
           </span>
           {billingCycle === 'yearly' && (
@@ -246,11 +246,11 @@ export default function BillingPage() {
           </div>
 
           {!plansData && !plansError && (
-            <p className="text-sm text-[rgba(255,255,255,0.4)]">Загрузка тарифов...</p>
+            <p className="text-sm text-[rgba(255,255,255,0.6)]">Загрузка тарифов...</p>
           )}
           {plansError && (
             <div className="flex items-center gap-3">
-              <p className="text-sm text-[rgba(255,255,255,0.4)]">Не удалось загрузить тарифы</p>
+              <p className="text-sm text-[rgba(255,255,255,0.6)]">Не удалось загрузить тарифы</p>
               <button onClick={loadPlans} className="btn btn-ghost h-8 px-3 text-xs">Повторить</button>
             </div>
           )}
@@ -293,11 +293,11 @@ export default function BillingPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs mb-2 leading-relaxed text-[rgba(255,255,255,0.4)]">{description}</p>
+                  <p className="text-xs mb-2 leading-relaxed text-[rgba(255,255,255,0.6)]">{description}</p>
 
                   {/* Цена с фейковой скидкой */}
                   <div className="mb-1">
-                    <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
+                    <span className="text-xs text-[rgba(255,255,255,0.55)] line-through mr-2">
                       {formatNumber(fakePrice)} ₽
                     </span>
                     <span className="text-xs font-medium bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
@@ -306,7 +306,7 @@ export default function BillingPage() {
                   </div>
                   <div className="text-2xl font-medium mb-1">
                     {formatNumber(realPrice)} ₽
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">
+                    <span className="text-sm text-[rgba(255,255,255,0.55)]">
                       {billingCycle === 'yearly' ? '/год' : '/мес'}
                     </span>
                   </div>
@@ -359,7 +359,7 @@ export default function BillingPage() {
             <div>
               <span className="font-medium text-white text-sm">Бесплатный план</span>
               {plansData && (
-                <span className="ml-3 text-xs text-[rgba(255,255,255,0.4)]">
+                <span className="ml-3 text-xs text-[rgba(255,255,255,0.6)]">
                   {freeTierTagline(plansData.free.limits.chat_daily)}
                 </span>
               )}
@@ -379,7 +379,7 @@ export default function BillingPage() {
         )}>
           <div>
             <h2 className="text-base font-medium text-white">Докупить Caspers</h2>
-            <p className="text-xs text-[rgba(255,255,255,0.4)] mt-0.5">
+            <p className="text-xs text-[rgba(255,255,255,0.6)] mt-0.5">
               {isPaid
                 ? 'Пополните баланс в любое время'
                 : 'Доступно с активной подпиской'}
@@ -401,7 +401,7 @@ export default function BillingPage() {
               disabled={!isPaid}
               className="w-full accent-[var(--accent)]"
             />
-            <div className="flex items-center justify-between text-xs text-[rgba(255,255,255,0.4)]">
+            <div className="flex items-center justify-between text-xs text-[rgba(255,255,255,0.6)]">
               <span>10</span>
               <span>1 000</span>
             </div>

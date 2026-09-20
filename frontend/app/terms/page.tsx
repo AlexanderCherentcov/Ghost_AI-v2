@@ -27,7 +27,7 @@ export default function TermsPage() {
       {/* Content */}
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="text-3xl font-medium mb-2">Условия использования</h1>
-        <p className="text-sm text-[rgba(255,255,255,0.3)] mb-10">
+        <p className="text-sm text-[rgba(255,255,255,0.55)] mb-10">
           Пользовательское соглашение (публичная оферта) · Последнее обновление: апрель 2025 г.
         </p>
 
@@ -207,7 +207,7 @@ export default function TermsPage() {
 
       {/* Footer */}
       <footer className="border-t border-[var(--border)] py-6 px-6 mt-12">
-        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[rgba(255,255,255,0.2)]">
+        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[rgba(255,255,255,0.5)]">
           <span>© {new Date().getFullYear()} GhostLine AI</span>
           <div className="flex items-center gap-5">
             <Link href="/privacy" className="hover:text-white transition-colors">Политика</Link>

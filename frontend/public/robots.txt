@@ -11,17 +11,10 @@ Disallow: /profile
 Disallow: /settings
 Disallow: /billing
 Disallow: /onboarding
-Disallow: /vision
-Disallow: /sound
-Disallow: /reel
-Disallow: /think
 Disallow: /history
 Disallow: /auth/
 
 # Don't index API
 Disallow: /api/
-
-# Telegram Mini App entry point — thin/empty content outside Telegram context
-Disallow: /tg
 
 Sitemap: https://ghostlineai.ru/sitemap.xml

@@ -27,7 +27,7 @@ export default function PrivacyPage() {
       {/* Content */}
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="text-3xl font-medium mb-2">Политика конфиденциальности</h1>
-        <p className="text-sm text-[rgba(255,255,255,0.3)] mb-10">
+        <p className="text-sm text-[rgba(255,255,255,0.55)] mb-10">
           Последнее обновление: апрель 2025 г.
         </p>
 
@@ -55,9 +55,9 @@ export default function PrivacyPage() {
             <h2 className="text-base font-medium text-white mb-3">2. Оператор персональных данных</h2>
             <p>Оператором персональных данных является:</p>
             <ul className="mt-2 space-y-1 list-none pl-0">
-              <li><span className="text-[rgba(255,255,255,0.4)]">Наименование:</span> GhostLine AI</li>
+              <li><span className="text-[rgba(255,255,255,0.6)]">Наименование:</span> GhostLine AI</li>
               <li>
-                <span className="text-[rgba(255,255,255,0.4)]">Электронная почта:</span>{' '}
+                <span className="text-[rgba(255,255,255,0.6)]">Электронная почта:</span>{' '}
                 <a href="mailto:xxghostlinex@gmail.com" className="text-accent hover:opacity-80">
                   xxghostlinex@gmail.com
                 </a>
@@ -209,7 +209,7 @@ export default function PrivacyPage() {
 
       {/* Footer */}
       <footer className="border-t border-[var(--border)] py-6 px-6 mt-12">
-        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[rgba(255,255,255,0.2)]">
+        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[rgba(255,255,255,0.5)]">
           <span>© {new Date().getFullYear()} GhostLine AI</span>
           <div className="flex items-center gap-5">
             <Link href="/privacy" className="hover:text-white transition-colors">Политика</Link>

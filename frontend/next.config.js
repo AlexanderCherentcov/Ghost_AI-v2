@@ -2,15 +2,9 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  // next/image в проекте не используется (везде обычные <img>), оптимизацию отключаем —
+  // remotePatterns при unoptimized не работают, поэтому список хостов убран как мёртвая конфигурация.
   images: {
-    remotePatterns: [
-      { hostname: 'avatars.yandex.net' },
-      { hostname: 'lh3.googleusercontent.com' },
-      { hostname: 't.me' },
-      { hostname: 'media.ghostline.ai' },
-      { hostname: 'oaidalleapiprodscus.blob.core.windows.net' },
-      { hostname: 'replicate.delivery' },
-    ],
     unoptimized: true,
   },
 };

@@ -44,7 +44,7 @@ html, body {
 
   --text-primary:   rgba(255, 255, 255, 0.90);
   --text-secondary: rgba(255, 255, 255, 0.45);
-  --text-muted:     rgba(255, 255, 255, 0.20);
+  --text-muted:     rgba(255, 255, 255, 0.50);
   --text-ghost:     rgba(255, 255, 255, 0.08);
 
   --border:         rgba(255, 255, 255, 0.06);

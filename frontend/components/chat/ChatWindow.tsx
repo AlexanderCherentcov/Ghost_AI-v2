@@ -59,15 +59,32 @@ export function ChatWindow({ onSuggestion, onUsePrompt, isLoading }: ChatWindowP
   const { user } = useAuthStore();
   const { messages, isStreaming, streamContent, activeChat } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Прокручивать к низу только пока пользователь сам внизу: раньше smooth-скролл перезапускался
+  // на КАЖДОМ токене стрима — на телефоне это постоянная анимация, и отлистать вверх во время
+  // ответа было невозможно.
+  const stickToBottom = useRef(true);
+  const lastMessageCount = useRef(0);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamContent]);
+    const added = messages.length > lastMessageCount.current;
+    lastMessageCount.current = messages.length;
+    // Своё новое сообщение — всегда к низу; ответ ИИ дочитывающему выше не прыгает.
+    if (added && messages[messages.length - 1]?.role === 'user') stickToBottom.current = true;
+    if (!stickToBottom.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
+  }, [messages, streamContent, isStreaming]);
 
   const isEmpty = !messages.length && !isStreaming;
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col" style={{ touchAction: 'pan-y' }}>
+    <div
+      className="flex-1 overflow-y-auto overscroll-contain min-h-0 flex flex-col"
+      style={{ touchAction: 'pan-y' }}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      }}
+    >
       {isLoading ? (
         <ChatSkeleton />
       ) : isEmpty ? (

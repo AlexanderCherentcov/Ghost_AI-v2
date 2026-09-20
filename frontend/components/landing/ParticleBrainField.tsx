@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { LogoPointCloud } from '@/lib/particle-logos-data';
+import { loadLogos, type LogoPointCloud } from '@/lib/particle-logos';
 
 /**
  * Порт `setCanvasRef` из GhostLine.dc.html: 2600 процедурных точек морфят
@@ -96,13 +96,6 @@ function buildPoints(): Pt[] {
   return pts;
 }
 
-let logosPromise: Promise<Record<string, LogoPointCloud>> | null = null;
-function loadLogos(): Promise<Record<string, LogoPointCloud>> {
-  if (!logosPromise) {
-    logosPromise = import('@/lib/particle-logos-data').then((m) => m.LOGOS);
-  }
-  return logosPromise;
-}
 
 export function ParticleBrainField() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

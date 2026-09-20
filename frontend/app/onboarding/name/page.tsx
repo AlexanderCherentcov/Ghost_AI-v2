@@ -50,7 +50,7 @@ export default function OnboardingNamePage() {
       <ProgressDots current={0} />
 
       <h1 className="text-3xl font-medium text-white mb-2">Как вас зовут?</h1>
-      <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">GhostLine запомнит. Навсегда.</p>
+      <p className="text-sm text-[rgba(255,255,255,0.55)] mb-8">GhostLine запомнит. Навсегда.</p>
 
       <input
         className="input-ghost mb-6"

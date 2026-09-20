@@ -9,6 +9,8 @@ import { AppLayoutClient } from './AppLayoutClient';
 // Сама страница — клиентский компонент (AppLayoutClient, ниже) не может
 // экспортировать metadata, поэтому она вынесена в этот серверный layout.
 export const metadata: Metadata = {
+  // Заголовок вкладки: раньше у /chat, /billing, /profile был заголовок лендинга.
+  title: 'GhostLine — личный кабинет',
   robots: { index: false, follow: false },
 };
 

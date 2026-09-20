@@ -128,7 +128,7 @@ export function LimitPopup({ type, onClose }: Props) {
               >
                 {cfg.btn1}
               </button>
-              <button onClick={onClose} className="text-xs text-[rgba(255,255,255,0.25)] hover:text-[rgba(255,255,255,0.5)] transition-colors mt-1">
+              <button onClick={onClose} className="text-xs text-[rgba(255,255,255,0.5)] hover:text-[rgba(255,255,255,0.5)] transition-colors mt-1">
                 {cfg.btn2}
               </button>
             </div>

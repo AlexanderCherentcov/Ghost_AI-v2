@@ -181,19 +181,19 @@ export default function InstallPage() {
                 ))}
               </ol>
               {method.warning && (
-                <p className="mt-3 pl-9 text-xs leading-relaxed text-[rgba(255,255,255,0.4)]">{method.warning}</p>
+                <p className="mt-3 pl-9 text-xs leading-relaxed text-[rgba(255,255,255,0.6)]">{method.warning}</p>
               )}
             </div>
           ))}
 
           {active.note && (
-            <p className="text-xs leading-relaxed text-[rgba(255,255,255,0.4)] pt-5 mt-5 border-t" style={{ borderColor: 'var(--panel-glass-border)' }}>
+            <p className="text-xs leading-relaxed text-[rgba(255,255,255,0.6)] pt-5 mt-5 border-t" style={{ borderColor: 'var(--panel-glass-border)' }}>
               {active.note}
             </p>
           )}
         </div>
 
-        <p className="text-xs text-[rgba(255,255,255,0.3)] mt-8 leading-relaxed">
+        <p className="text-xs text-[rgba(255,255,255,0.55)] mt-8 leading-relaxed">
           Установленный GhostLine работает как обычная страница в браузере — офлайн-режим пока не поддерживается,
           для ответов всегда нужен интернет.
         </p>

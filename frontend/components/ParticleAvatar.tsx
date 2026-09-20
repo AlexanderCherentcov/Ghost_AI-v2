@@ -2,20 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import { FALLBACK_PARTICLE_SHAPE } from '@/lib/model-icons';
-import type { LogoPointCloud } from '@/lib/particle-logos-data';
+import { loadLogos, type LogoPointCloud } from '@/lib/particle-logos';
 
 /**
  * Частичное (particle) облако точек, которое морфится между лого-формами — фирменная
  * анимация редизайна (см. Chat.dc.html/GhostLine.dc.html). Данные форм грузятся один раз
- * лениво (общий модуль ~900KB), дальше держатся в памяти процесса.
+ * лениво (общий модуль ~430 КБ, см. lib/particle-logos.ts), дальше держатся в памяти процесса.
  */
-let logosPromise: Promise<Record<string, LogoPointCloud>> | null = null;
-function loadLogos(): Promise<Record<string, LogoPointCloud>> {
-  if (!logosPromise) {
-    logosPromise = import('@/lib/particle-logos-data').then((m) => m.LOGOS);
-  }
-  return logosPromise;
-}
 
 function smooth(u: number): number {
   return u * u * (3 - 2 * u);
@@ -93,8 +86,21 @@ export function ParticleAvatar({
     let angle = Math.random() * Math.PI * 2;
     const start = performance.now();
 
+    // Каждое сообщение ассистента в чате — отдельный аватар с собственным rAF-циклом (~200
+    // заливок за кадр). На длинном диалоге это десятки одновременных циклов: фриз и разряд
+    // батареи на телефоне. Не рисуем то, чего не видно (вне экрана / вкладка скрыта).
+    let onScreen = true;
+    const observer = typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(([entry]) => { onScreen = entry.isIntersecting; })
+      : null;
+    observer?.observe(el);
+
     const draw = (t: number) => {
       if (cancelled) return;
+      if (!onScreen || document.hidden) {
+        if (!reducedMotion) raf = requestAnimationFrame(draw);
+        return;
+      }
       const w = el.width, h = el.height;
       ctx.clearRect(0, 0, w, h);
 
@@ -154,6 +160,7 @@ export function ParticleAvatar({
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
+      observer?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shape, cycleShapes?.join(','), size, stageMs, transMs]);

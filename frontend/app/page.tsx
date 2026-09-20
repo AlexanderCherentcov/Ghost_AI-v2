@@ -462,7 +462,7 @@ export default function LandingPage() {
           </motion.div>
           </div>
 
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[rgba(255,255,255,0.2)]">
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-[rgba(255,255,255,0.5)]">
             <div className="w-px h-8 bg-gradient-to-b from-transparent to-current" />
             <ArrowDownIcon size={16} className="animate-bounce-slow" />
           </div>
@@ -699,14 +699,14 @@ export default function LandingPage() {
                   <h3 className="font-display font-semibold text-white mb-1">{name}</h3>
                   <p className="text-xs mb-3 leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>{description}</p>
                   <div className="mb-1">
-                    <span className="text-xs text-[rgba(255,255,255,0.3)] line-through mr-2">
+                    <span className="text-xs text-[rgba(255,255,255,0.55)] line-through mr-2">
                       {formatNumber(fakeCyclePrice(price, 'monthly'))} ₽
                     </span>
                     <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">-50%</span>
                   </div>
                   <div className="mb-1">
                     <span className="font-display text-2xl font-bold">{formatNumber(price)} ₽</span>
-                    <span className="text-sm text-[rgba(255,255,255,0.3)]">/мес</span>
+                    <span className="text-sm text-[rgba(255,255,255,0.55)]">/мес</span>
                   </div>
                   <p className="text-xs mb-3" style={{ color: 'var(--accent-teal)' }}>{formatNumber(caspers)} Caspers/мес</p>
                   {PLAN_SCENARIO[key] && (
@@ -815,7 +815,7 @@ export default function LandingPage() {
             <Link href="/login" className="btn btn-primary text-base h-12 px-10 mx-auto">
               Начать бесплатно
             </Link>
-            {tagline && <p className="mt-4 text-sm text-[rgba(255,255,255,0.35)]">{tagline}</p>}
+            {tagline && <p className="mt-4 text-sm text-[rgba(255,255,255,0.55)]">{tagline}</p>}
           </motion.div>
         </section>
       </main>
@@ -852,26 +852,26 @@ export default function LandingPage() {
             </div>
             <div>
               <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>ПРОДУКТ</div>
-              <div className="flex flex-col gap-2.5 text-sm">
-                <a href="#features" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Возможности</a>
-                <a href="#how" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Как это работает</a>
-                <a href="#pricing" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Тарифы</a>
-                <a href="#faq" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">FAQ</a>
+              <div className="flex flex-col gap-0 md:gap-2.5 text-sm">
+                <a href="#features" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Возможности</a>
+                <a href="#how" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Как это работает</a>
+                <a href="#pricing" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Тарифы</a>
+                <a href="#faq" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">FAQ</a>
               </div>
             </div>
             <div>
               <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>КОМПАНИЯ</div>
-              <div className="flex flex-col gap-2.5 text-sm">
-                <Link href="/install" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Установить как приложение</Link>
-                <Link href="/privacy" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Политика конфиденциальности</Link>
-                <Link href="/terms" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Условия использования</Link>
+              <div className="flex flex-col gap-0 md:gap-2.5 text-sm">
+                <Link href="/install" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Установить как приложение</Link>
+                <Link href="/privacy" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Политика конфиденциальности</Link>
+                <Link href="/terms" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Условия использования</Link>
               </div>
             </div>
             <div>
               <div className="text-xs font-bold tracking-wide mb-4" style={{ color: '#8078a0' }}>ПОДДЕРЖКА</div>
-              <div className="flex flex-col gap-2.5 text-sm">
-                <a href="mailto:xxghostlinex@gmail.com" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Написать в поддержку</a>
-                <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Telegram</a>
+              <div className="flex flex-col gap-0 md:gap-2.5 text-sm">
+                <a href="mailto:xxghostlinex@gmail.com" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Написать в поддержку</a>
+                <a href="https://t.me/ghostlineai" target="_blank" rel="noopener" className="flex items-center min-h-[44px] md:min-h-0 text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">Telegram</a>
               </div>
             </div>
           </div>

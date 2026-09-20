@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { CheckIcon, XIcon } from '@/components/icons';
@@ -10,7 +11,16 @@ import { useAuthStore } from '@/store/auth.store';
 
 type Status = 'loading' | 'succeeded' | 'cancelled' | 'pending' | 'error';
 
+// useSearchParams() без Suspense заставляет Next целиком отдавать страницу клиентским рендером.
 export default function BillingSuccessPage() {
+  return (
+    <Suspense fallback={<PageLoader fullscreen={false} />}>
+      <BillingSuccessContent />
+    </Suspense>
+  );
+}
+
+function BillingSuccessContent() {
   const params = useSearchParams();
   const rawId = params.get('paymentId') ?? params.get('payment_id');
   // M-21: валидация формата paymentId перед использованием
@@ -51,7 +61,7 @@ export default function BillingSuccessPage() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
         <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-[rgba(255,255,255,0.4)]">Проверяем статус оплаты...</p>
+        <p className="text-sm text-[rgba(255,255,255,0.6)]">Проверяем статус оплаты...</p>
       </div>
     );
   }
@@ -64,7 +74,7 @@ export default function BillingSuccessPage() {
             <CheckIcon size={28} className="text-green-400" />
           </div>
           <h1 className="text-2xl font-medium text-white mb-3">Оплата прошла!</h1>
-          <p className="text-sm text-[rgba(255,255,255,0.4)] mb-8 max-w-sm mx-auto">
+          <p className="text-sm text-[rgba(255,255,255,0.6)] mb-8 max-w-sm mx-auto">
             Токены начислены на ваш баланс.
           </p>
           <Link href="/chat" className="btn btn-primary h-11 px-8">Вернуться в чат</Link>
@@ -81,7 +91,7 @@ export default function BillingSuccessPage() {
             <XIcon size={28} className="text-red-400" />
           </div>
           <h1 className="text-2xl font-medium text-white mb-3">Оплата отменена</h1>
-          <p className="text-sm text-[rgba(255,255,255,0.4)] mb-8 max-w-sm mx-auto">
+          <p className="text-sm text-[rgba(255,255,255,0.6)] mb-8 max-w-sm mx-auto">
             Платёж был отменён. Токены не списаны.
           </p>
           <Link href="/billing" className="btn btn-ghost h-11 px-8">Вернуться к тарифам</Link>
@@ -98,7 +108,7 @@ export default function BillingSuccessPage() {
             <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
           </div>
           <h1 className="text-2xl font-medium text-white mb-3">Платёж обрабатывается</h1>
-          <p className="text-sm text-[rgba(255,255,255,0.4)] mb-8 max-w-sm mx-auto">
+          <p className="text-sm text-[rgba(255,255,255,0.6)] mb-8 max-w-sm mx-auto">
             ЮКасса ещё обрабатывает платёж. Токены будут начислены автоматически.
           </p>
           <Link href="/billing" className="btn btn-ghost h-11 px-8">Вернуться к тарифам</Link>
@@ -115,7 +125,7 @@ export default function BillingSuccessPage() {
           <XIcon size={28} className="text-red-400" />
         </div>
         <h1 className="text-2xl font-medium text-white mb-3">Не удалось проверить</h1>
-        <p className="text-sm text-[rgba(255,255,255,0.4)] mb-8 max-w-sm mx-auto">
+        <p className="text-sm text-[rgba(255,255,255,0.6)] mb-8 max-w-sm mx-auto">
           Не удалось получить статус платежа. Если деньги списаны — обратитесь в поддержку.
         </p>
         <Link href="/billing" className="btn btn-ghost h-11 px-8">Вернуться к тарифам</Link>

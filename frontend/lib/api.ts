@@ -152,6 +152,21 @@ async function request<T>(
   return res.json();
 }
 
+// /plans публичный (без авторизации) и одинаков для всех, а на одной странице его дёргали
+// до 6 раз независимые компоненты (лендинг, ModelPill, InputBar, model-display…). Общий
+// промис объединяет параллельные вызовы, короткий TTL не даёт показывать устаревшие цены.
+const PLANS_CACHE_TTL_MS = 30_000;
+let plansCache: { at: number; promise: Promise<PlansResponse> } | null = null;
+
+function fetchPlansCached(): Promise<PlansResponse> {
+  if (plansCache && Date.now() - plansCache.at < PLANS_CACHE_TTL_MS) return plansCache.promise;
+  const promise = request<PlansResponse>('/plans');
+  plansCache = { at: Date.now(), promise };
+  // Неудачный запрос не кэшируем — следующий вызов должен попробовать заново.
+  promise.catch(() => { if (plansCache?.promise === promise) plansCache = null; });
+  return promise;
+}
+
 // ─── Авторизация ────────────────────────────────────────────────────────────
 export const api = {
   auth: {
@@ -196,7 +211,7 @@ export const api = {
   },
 
   payments: {
-    plans: () => request<PlansResponse>('/plans'),
+    plans: fetchPlansCached,
     create: (data: { plan: string; billing?: 'monthly' | 'yearly'; promoCode?: string }) =>
       request<{ paymentId: string; paymentUrl: string; discountPercent: number }>('/payments/create', {
         method: 'POST',

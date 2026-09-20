@@ -236,7 +236,7 @@ export default function GalleryPage() {
                 <button
                   key={d}
                   onClick={() => setDomainFilter(d)}
-                  className="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors"
+                  className="inline-flex items-center min-h-[44px] md:min-h-0 px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors"
                   style={{
                     background: domainFilter === d ? 'var(--accent-dim)' : 'transparent',
                     color: domainFilter === d ? 'var(--accent)' : 'var(--text-secondary)',
@@ -252,7 +252,7 @@ export default function GalleryPage() {
                 <button
                   key={s}
                   onClick={() => setSort(s)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
+                  className="flex items-center gap-1.5 min-h-[44px] md:min-h-0 px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors"
                   style={{
                     background: sort === s ? 'var(--accent-dim)' : 'var(--panel-glass)',
                     color: sort === s ? 'var(--accent)' : 'var(--text-secondary)',

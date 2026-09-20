@@ -16,7 +16,7 @@ export function PlanFeatureList({ features, checkIcon, textClassName = 'text-sm'
   return (
     <ul className={className}>
       {features.map((f) => (
-        <li key={f} className={`${textClassName} text-[rgba(255,255,255,0.4)] flex items-center gap-2`}>
+        <li key={f} className={`${textClassName} text-[rgba(255,255,255,0.6)] flex items-center gap-2`}>
           {checkIcon} {f}
         </li>
       ))}

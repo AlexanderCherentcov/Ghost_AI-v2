@@ -75,7 +75,7 @@ export default function OnboardingStylePage() {
       <ProgressDots current={3} />
 
       <h1 className="text-3xl font-medium text-white mb-2">Как GhostLine должен отвечать?</h1>
-      <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">Выберите стиль. Его можно изменить в настройках.</p>
+      <p className="text-sm text-[rgba(255,255,255,0.55)] mb-8">Выберите стиль. Его можно изменить в настройках.</p>
 
       <div className="space-y-3 mb-8">
         {STYLES.map((s) => {
@@ -97,7 +97,7 @@ export default function OnboardingStylePage() {
                 </span>
                 {active && <span className="text-xs text-accent">✓</span>}
               </div>
-              <p className="text-xs text-[rgba(255,255,255,0.3)] mb-2">{s.desc}</p>
+              <p className="text-xs text-[rgba(255,255,255,0.55)] mb-2">{s.desc}</p>
               <p className="text-xs text-[rgba(255,255,255,0.5)] italic border-l-2 border-[var(--border)] pl-3">
                 «{s.preview}»
               </p>

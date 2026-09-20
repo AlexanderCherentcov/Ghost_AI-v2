@@ -94,7 +94,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
           <GhostIcon size={48} className="text-accent" />
           <p className="text-white font-medium">Не удалось войти через Telegram</p>
-          <p className="text-sm text-[rgba(255,255,255,0.4)]">Закройте и откройте приложение заново</p>
+          <p className="text-sm text-[rgba(255,255,255,0.6)]">Закройте и откройте приложение заново</p>
           <button
             onClick={() => { setTgError(false); setTgLoading(false); window.location.reload(); }}
             className="mt-2 px-6 py-2.5 rounded-xl bg-accent text-white text-sm font-medium"

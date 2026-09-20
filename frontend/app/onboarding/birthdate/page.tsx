@@ -47,7 +47,7 @@ export default function OnboardingBirthdatePage() {
       <ProgressDots current={1} />
 
       <h1 className="text-3xl font-medium text-white mb-2">Ваша дата рождения?</h1>
-      <p className="text-sm text-[rgba(255,255,255,0.3)] mb-8">Мы используем её для персонализации.</p>
+      <p className="text-sm text-[rgba(255,255,255,0.55)] mb-8">Мы используем её для персонализации.</p>
 
       <div className="flex items-center gap-3 mb-2">
         <input
@@ -57,7 +57,7 @@ export default function OnboardingBirthdatePage() {
           value={dd}
           onChange={(e) => setDd(e.target.value.replace(/\D/g, ''))}
         />
-        <span className="text-[rgba(255,255,255,0.3)] text-lg">/</span>
+        <span className="text-[rgba(255,255,255,0.55)] text-lg">/</span>
         <input
           className="input-ghost text-center w-20"
           placeholder="ММ"
@@ -65,7 +65,7 @@ export default function OnboardingBirthdatePage() {
           value={mm}
           onChange={(e) => setMm(e.target.value.replace(/\D/g, ''))}
         />
-        <span className="text-[rgba(255,255,255,0.3)] text-lg">/</span>
+        <span className="text-[rgba(255,255,255,0.55)] text-lg">/</span>
         <input
           className="input-ghost text-center w-28"
           placeholder="ГГГГ"
@@ -74,7 +74,7 @@ export default function OnboardingBirthdatePage() {
           onChange={(e) => setYyyy(e.target.value.replace(/\D/g, ''))}
         />
       </div>
-      <p className="text-xs text-[rgba(255,255,255,0.2)] mb-8">Не передаётся третьим лицам</p>
+      <p className="text-xs text-[rgba(255,255,255,0.5)] mb-8">Не передаётся третьим лицам</p>
 
       <div className="flex gap-3">
         <button onClick={() => router.back()} className="btn btn-ghost h-12 flex-1">
@@ -88,7 +88,7 @@ export default function OnboardingBirthdatePage() {
           {loading ? 'Сохранение...' : 'Далее →'}
         </button>
       </div>
-      <button onClick={() => router.push('/onboarding/purpose')} className="w-full mt-3 text-sm text-[rgba(255,255,255,0.25)] hover:text-white text-center transition-colors">
+      <button onClick={() => router.push('/onboarding/purpose')} className="w-full mt-3 text-sm text-[rgba(255,255,255,0.5)] hover:text-white text-center transition-colors">
         Пропустить
       </button>
     </motion.div>

@@ -116,11 +116,15 @@ export function startVisionWorker() {
 
   worker.on('failed', async (job, err) => {
     if (job) {
-      await prisma.generateJob.update({
-        where: { id: job.data.jobId },
+      // Возврат — только тому, кто реально перевёл статус: сверка зависших задач
+      // (services/job-reconciler.ts) закрывает те же строки и иначе вернула бы повторно.
+      const claimed = await prisma.generateJob.updateMany({
+        where: { id: job.data.jobId, status: { in: ['pending', 'processing'] } },
         data: { status: 'failed', error: friendlyGenerationError(err.message) },
       });
-      await refundCaspers(job.data.userId, job.data.caspersSpent, job.data.modelId).catch(() => {});
+      if (claimed.count === 1) {
+        await refundCaspers(job.data.userId, job.data.caspersSpent, job.data.modelId).catch(() => {});
+      }
     }
     console.error(`[VisionWorker] Job ${job?.id} failed:`, err.message);
   });

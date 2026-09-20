@@ -21,13 +21,18 @@ function requireSecret(envVar: string): string {
  * bot-эндпоинтам, обычное `!==` даёт микроскопическую, но ненулевую утечку
  * через тайминг посимвольного сравнения.
  */
-function makeSecretChecker(secret: string, headerName: string) {
+function makeSecretMatcher(secret: string, headerName: string) {
   const secretBuf = Buffer.from(secret);
-  return function check(request: any, reply: any): boolean {
+  return function matches(request: any): boolean {
     const provided = (request.headers[headerName] ?? '') as string;
     const buf = Buffer.from(provided);
-    const matches = buf.length === secretBuf.length && timingSafeEqual(buf, secretBuf);
-    if (!matches) {
+    return buf.length === secretBuf.length && timingSafeEqual(buf, secretBuf);
+  };
+}
+
+function makeSecretChecker(matches: (request: any) => boolean) {
+  return function check(request: any, reply: any): boolean {
+    if (!matches(request)) {
       reply.code(401).send({ error: 'Unauthorized' });
       return false;
     }
@@ -39,7 +44,20 @@ export const BOT_SECRET = requireSecret('BOT_SECRET');
 export const ADMIN_BOT_SECRET = requireSecret('ADMIN_BOT_SECRET');
 export const SUPPORT_BOT_SECRET = requireSecret('SUPPORT_BOT_SECRET');
 
+const matchesBotSecret = makeSecretMatcher(BOT_SECRET, 'x-bot-secret');
+const matchesAdminSecret = makeSecretMatcher(ADMIN_BOT_SECRET, 'x-admin-bot-secret');
+const matchesSupportSecret = makeSecretMatcher(SUPPORT_BOT_SECRET, 'x-support-bot-secret');
+
 /** true — секрет верный, можно продолжать. Иначе сама отправляет 401 и возвращает false. */
-export const checkBotSecret = makeSecretChecker(BOT_SECRET, 'x-bot-secret');
-export const checkAdminSecret = makeSecretChecker(ADMIN_BOT_SECRET, 'x-admin-bot-secret');
-export const checkSupportBotSecret = makeSecretChecker(SUPPORT_BOT_SECRET, 'x-support-bot-secret');
+export const checkBotSecret = makeSecretChecker(matchesBotSecret);
+export const checkAdminSecret = makeSecretChecker(matchesAdminSecret);
+export const checkSupportBotSecret = makeSecretChecker(matchesSupportSecret);
+
+/**
+ * Запрос пришёл от нашего бота (любой из трёх секретов верный) — без отправки ответа.
+ * Нужен rate-limit'у: боты ходят в backend напрямую, у всех один IP контейнера, и
+ * общий лимит 20/мин на IP душил бы всех пользователей бота разом.
+ */
+export function hasInternalBotSecret(request: any): boolean {
+  return matchesBotSecret(request) || matchesAdminSecret(request) || matchesSupportSecret(request);
+}

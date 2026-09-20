@@ -32,6 +32,11 @@ import { startVisionWorker } from './workers/vision.worker.js';
 import { startSoundWorker } from './workers/sound.worker.js';
 import { startReelWorker } from './workers/reel.worker.js';
 import { startCleanupWorker } from './services/cleanup.js';
+import { startJobReconciler } from './services/job-reconciler.js';
+import { visionQueue, soundQueue, reelQueue } from './lib/bullmq.js';
+import { hasInternalBotSecret } from './lib/bot-auth.js';
+import type { FastifyInstance } from 'fastify';
+import type { Worker } from 'bullmq';
 
 // ─── Сборка приложения ──────────────────────────────────────────────────────
 
@@ -121,6 +126,8 @@ export async function buildApp() {
       max: 20,
       timeWindow: '1 minute',
       skipOnError: true,
+      // Боты ходят напрямую (общий IP контейнера) — без этого весь бот делил бы один бакет 20/мин.
+      allowList: (req) => hasInternalBotSecret(req),
       keyGenerator: (req) =>
         (process.env.TRUST_PROXY === 'true' ? (req.headers['x-real-ip'] as string) : undefined) || req.ip,
       errorResponseBuilder: (_req, context) => ({
@@ -325,9 +332,11 @@ async function start() {
   await initVectorCache();
 
   // Запускаем воркеры BullMQ
-  startVisionWorker();
-  startSoundWorker();
-  startReelWorker();
+  runtime.fastify = fastify;
+  runtime.workers = [startVisionWorker(), startSoundWorker(), startReelWorker()];
+
+  // Закрывает генерации, которые остались processing после убитого процесса (с возвратом Caspers)
+  startJobReconciler();
 
   // Запускаем автоочистку по TTL (раз в день)
   startCleanupWorker();
@@ -340,11 +349,49 @@ async function start() {
   fastify.log.info(`GhostLine backend running on http://${host}:${port}`);
 }
 
-// Плавное завершение работы
-process.on('SIGINT', async () => {
-  await prisma.$disconnect();
-  await redis.disconnect();
-  process.exit(0);
+// ─── Плавное завершение ───────────────────────────────────────────────────────
+// Docker шлёт SIGTERM и через stop_grace_period (infra/docker-compose.yml, 30 с) — SIGKILL.
+// Раньше обрабатывался только SIGINT: каждый деплой рвал HTTP/WS и убивал воркеры посреди
+// генерации. Ждём завершения активных задач не дольше SHUTDOWN_TIMEOUT_MS — недоделанные
+// подберёт сверка зависших задач при следующем старте (services/job-reconciler.ts).
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+const runtime: { fastify?: FastifyInstance; workers: Worker[] } = { workers: [] };
+let shuttingDown = false;
+
+async function shutdown(reason: string, exitCode: number): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.info(`[Shutdown] ${reason} — останавливаемся`);
+
+  setTimeout(() => {
+    console.error('[Shutdown] Не успели за отведённое время — принудительный выход');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+
+  try {
+    await runtime.fastify?.close();
+    await Promise.all(runtime.workers.map((w) => w.close()));
+    await Promise.all([visionQueue.close(), soundQueue.close(), reelQueue.close()]);
+    await prisma.$disconnect();
+    await redis.quit();
+  } catch (err) {
+    console.error('[Shutdown] Ошибка при остановке:', err);
+    exitCode = 1;
+  }
+  process.exit(exitCode);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM', 0));
+process.on('SIGINT', () => void shutdown('SIGINT', 0));
+
+// Необработанный reject не должен ронять процесс с живыми генерациями — логируем и работаем дальше.
+process.on('unhandledRejection', (reason) => {
+  console.error('[UnhandledRejection]', reason);
+});
+// А после uncaughtException состояние процесса ненадёжно — останавливаемся штатно, Docker поднимет заново.
+process.on('uncaughtException', (err) => {
+  console.error('[UncaughtException]', err);
+  void shutdown('uncaughtException', 1);
 });
 
 start().catch((err) => {

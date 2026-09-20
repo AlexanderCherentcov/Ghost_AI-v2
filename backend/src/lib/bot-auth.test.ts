@@ -7,6 +7,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 let checkBotSecret: (request: any, reply: any) => boolean;
 let checkAdminSecret: (request: any, reply: any) => boolean;
 let checkSupportBotSecret: (request: any, reply: any) => boolean;
+let hasInternalBotSecret: (request: any) => boolean;
 
 beforeAll(async () => {
   process.env.BOT_SECRET = 'test-bot-secret-1';
@@ -16,6 +17,7 @@ beforeAll(async () => {
   checkBotSecret = mod.checkBotSecret;
   checkAdminSecret = mod.checkAdminSecret;
   checkSupportBotSecret = mod.checkSupportBotSecret;
+  hasInternalBotSecret = mod.hasInternalBotSecret;
 });
 
 function req(headers: Record<string, string>) {
@@ -77,5 +79,25 @@ describe('bot-auth — секреты трёх ботов независимы',
   it('пустая строка в заголовке отклоняется', () => {
     const rep = reply();
     expect(checkBotSecret(req({ 'x-bot-secret': '' }), rep)).toBe(false);
+  });
+});
+
+// Rate-limit auth-scope обходят только запросы с верным секретом одного из ботов —
+// иначе все пользователи бота делили бы один бакет 20/мин на IP контейнера.
+describe('hasInternalBotSecret', () => {
+  it('пропускает верный секрет любого из трёх ботов', () => {
+    expect(hasInternalBotSecret(req({ 'x-bot-secret': 'test-bot-secret-1' }))).toBe(true);
+    expect(hasInternalBotSecret(req({ 'x-admin-bot-secret': 'test-admin-secret-2' }))).toBe(true);
+    expect(hasInternalBotSecret(req({ 'x-support-bot-secret': 'test-support-secret-3' }))).toBe(true);
+  });
+
+  it('не пропускает неверный секрет, пустой заголовок и запрос без заголовков', () => {
+    expect(hasInternalBotSecret(req({ 'x-bot-secret': 'wrong' }))).toBe(false);
+    expect(hasInternalBotSecret(req({ 'x-bot-secret': '' }))).toBe(false);
+    expect(hasInternalBotSecret(req({}))).toBe(false);
+  });
+
+  it('не пропускает секрет одного бота в заголовке другого', () => {
+    expect(hasInternalBotSecret(req({ 'x-admin-bot-secret': 'test-bot-secret-1' }))).toBe(false);
   });
 });

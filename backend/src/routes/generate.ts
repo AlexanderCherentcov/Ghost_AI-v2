@@ -1,5 +1,6 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { STALE_JOB_MINUTES } from '../services/job-reconciler.js';
 import { prisma } from '../lib/prisma.js';
 import { checkResets, checkAndDeduct, refundCaspers } from '../services/tokens.js';
 import { CASPER_COSTS, planAtLeast } from '../config/plans.js';
@@ -27,11 +28,20 @@ import crypto from 'crypto';
 // успешно, БЕЗ ошибки, отгенерировал картинку за 372с (6.2 мин), это не
 // зависание, а реальная латентность модели. Порог короче таймаута означал бы,
 // что guard пропускает второй запрос, пока первый ещё легитимно работает.
-const STALE_JOB_MINUTES: Record<string, number> = {
-  vision: 12,
-  sound: 5,
-  reel: 15,
-};
+// (сами пороги — в services/job-reconciler.ts, их же использует сверка зависших задач)
+
+/**
+ * chatId приходит из тела запроса и пишется в Message — без проверки владельца можно было
+ * подсунуть сообщение в чужой чат (в routes/chat.ts такая проверка есть везде).
+ * Возвращает false и сама отвечает 404, если чат чужой или не существует.
+ */
+async function ensureChatOwned(chatId: string | undefined, userId: string, reply: FastifyReply): Promise<boolean> {
+  if (!chatId) return true;
+  const chat = await prisma.chat.findFirst({ where: { id: chatId, userId }, select: { id: true } });
+  if (chat) return true;
+  reply.code(404).send({ error: 'Чат не найден' });
+  return false;
+}
 
 async function findActiveJob(userId: string, mode: keyof typeof STALE_JOB_MINUTES) {
   const staleCutoff = new Date(Date.now() - STALE_JOB_MINUTES[mode] * 60_000);
@@ -120,6 +130,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, chatId, sourceImageUrl, model, imageAspectRatio } = generateSchema.parse(request.body);
       if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
+      if (!(await ensureChatOwned(chatId, userId, reply))) return;
 
       const modelId = model ?? DEFAULT_IMAGE_MODEL_ID;
       const spec = findModel('image', modelId);
@@ -260,6 +271,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, chatId, musicMode, musicDuration, lyrics, styleAudio, sunoStyle, sunoTitle, sunoInstrumental } = generateSchema.parse(request.body);
       if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
+      if (!(await ensureChatOwned(chatId, userId, reply))) return;
 
       // Сбрасываем счётчики, если период закончился
       await checkResets(userId);
@@ -359,6 +371,7 @@ export default async function generateRoutes(fastify: FastifyInstance) {
       const { userId } = request.user;
       const { prompt, chatId, model, videoDuration, videoAspectRatio, videoEnableAudio, videoResolution, videoImageUrl, negativePrompt, videoCameraPreset } = generateSchema.parse(request.body);
       if (!prompt?.trim()) return reply.code(400).send({ error: 'Промпт обязателен', code: 'INVALID_REQUEST' });
+      if (!(await ensureChatOwned(chatId, userId, reply))) return;
 
       const modelId = model ?? DEFAULT_VIDEO_MODEL_ID;
       const spec = findModel('video', modelId);
@@ -554,6 +567,7 @@ Return ONLY the lyrics text, nothing else.`;
         audioUrl: z.string().url(),
         chatId:   z.string().optional(),
       }).parse(request.body);
+      if (!(await ensureChatOwned(chatId, userId, reply))) return;
 
       // Только платные планы
       const userPlan = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } });
@@ -641,7 +655,7 @@ Return ONLY the lyrics text, nothing else.`;
     handler: async (request) => {
       const { userId } = request.user;
       const query = request.query as { mode?: string; page?: string };
-      const page = parseInt(query.page ?? '1');
+      const page = Math.max(1, parseInt(query.page ?? '1') || 1);
 
       const jobs = await prisma.generateJob.findMany({
         where: {

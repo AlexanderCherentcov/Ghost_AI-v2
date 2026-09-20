@@ -171,11 +171,14 @@ export function startSoundWorker() {
 
   worker.on('failed', async (job, err) => {
     if (job) {
-      await prisma.generateJob.update({
-        where: { id: job.data.jobId },
+      // См. комментарий в vision.worker.ts: возврат только при реальном переводе статуса.
+      const claimed = await prisma.generateJob.updateMany({
+        where: { id: job.data.jobId, status: { in: ['pending', 'processing'] } },
         data: { status: 'failed', error: friendlyGenerationError(err.message) },
       });
-      await refundCaspers(job.data.userId, job.data.caspersSpent, 'music_generate').catch(() => {});
+      if (claimed.count === 1) {
+        await refundCaspers(job.data.userId, job.data.caspersSpent, 'music_generate').catch(() => {});
+      }
     }
     console.error(`[SoundWorker] Job ${job?.id} failed:`, err.message);
   });

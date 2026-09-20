@@ -112,7 +112,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     handler: async (request) => {
       const { userId } = request.user;
       const query = request.query as { page?: string };
-      const page  = parseInt(query.page ?? '1');
+      const page  = Math.max(1, parseInt(query.page ?? '1') || 1); // ?page=abc раньше давал skip: NaN → 500
       const limit = 20;
       const [payments, total] = await prisma.$transaction([
         prisma.payment.findMany({
@@ -133,7 +133,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     handler: async (request) => {
       const { userId } = request.user;
       const query = request.query as { page?: string };
-      const page  = parseInt(query.page ?? '1');
+      const page  = Math.max(1, parseInt(query.page ?? '1') || 1); // ?page=abc раньше давал skip: NaN → 500
       const limit = 30;
       const [transactions, total] = await prisma.$transaction([
         prisma.casperTransaction.findMany({

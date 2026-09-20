@@ -11,6 +11,7 @@ import { streamOpenRouter, type ChatMessage } from '../services/providers/openro
 import { streamCloudflare } from '../services/providers/cloudflare.js';
 import { getSystemPrompt } from '../lib/prompts.js';
 import { encrypt, safeDecrypt } from '../lib/crypto.js';
+import { isUserBanned } from '../lib/ban.js';
 import { notifyApiError } from '../services/admin-notify.js';
 import { shouldRefundCaspers, resolveChatErrorMessage } from '../lib/chat-errors.js';
 import { generateChatTitle } from './dispatch.js';
@@ -239,7 +240,8 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       // Проверяем JWT
       let userId: string;
       try {
-        const payload = fastify.jwt.verify<{ userId: string }>(parsed.jwt ?? '');
+        const payload = fastify.jwt.verify<{ userId: string; type?: string }>(parsed.jwt ?? '');
+        if (payload.type === 'refresh') throw new Error('refresh token is not an access token');
         userId = payload.userId;
       } catch {
         send({ type: 'error', code: 'UNAUTHORIZED' });
@@ -247,14 +249,10 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       }
 
       // ── [H-01] Проверка бана через Redis ───────────────────────────────────
-      {
-        const redis = (await import('../lib/redis.js')).redis;
-        const isBanned = await redis.exists(`banned:${userId}`);
-        if (isBanned) {
-          send({ type: 'error', code: 'BANNED' });
-          socket.close();
-          return;
-        }
+      if (await isUserBanned(userId)) {
+        send({ type: 'error', code: 'BANNED' });
+        socket.close();
+        return;
       }
 
       // ── Rate limit на пользователя ──────────────────────────────────────────

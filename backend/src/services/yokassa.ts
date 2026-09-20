@@ -9,6 +9,7 @@ import { grantCaspers, reverseCaspersGrant, demoteIfDepleted } from './tokens.js
 import { notifyPayment } from './admin-notify.js';
 import { PLANS, calculateCasperPrice } from '../config/plans.js';
 import { previewDiscountPromo, finalizeDiscountRedemption } from './promo.js';
+import { computeNewExpiry } from '../lib/subscription.js';
 
 export type { PlanKey } from '../config/plans.js';
 export { PLANS, calculateCasperPrice };
@@ -228,12 +229,16 @@ export async function processWebhook(body: unknown): Promise<void> {
         // на сервере), а не из event.object.metadata — тело вебхука не подписано
         // и приходит с публичного эндпоинта, клиент может прислать туда что угодно.
         const billing = payment.billing ?? 'MONTHLY';
-        const expiresAt = new Date();
-        if (billing === 'YEARLY') {
-          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-        } else {
-          expiresAt.setMonth(expiresAt.getMonth() + 1);
-        }
+        const current = await tx.user.findUnique({
+          where: { id: payment.userId },
+          select: { plan: true, planExpiresAt: true },
+        });
+        const expiresAt = computeNewExpiry({
+          currentPlan: current?.plan ?? 'FREE',
+          currentExpiresAt: current?.planExpiresAt ?? null,
+          newPlan: payment.plan,
+          billing,
+        });
 
         await tx.user.update({
           where: { id: payment.userId },

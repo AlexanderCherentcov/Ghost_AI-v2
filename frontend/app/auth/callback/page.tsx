@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { api, setAccessToken } from '@/lib/api';
-import { GhostIcon } from '@/components/icons/GhostIcon';
+import { PageLoader } from '@/components/ui/PageLoader';
+import { safeRedirect } from '@/lib/safe-redirect';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function AuthCallbackPage() {
     const query = new URLSearchParams(window.location.search);
     const code = query.get('code') ?? '';
     if (code) {
-      return { access: '', refresh: '', code, redirect: decodeURIComponent(query.get('redirect') ?? '/chat') };
+      // URLSearchParams.get уже декодирует значение — повторный decodeURIComponent не нужен
+      // (и падал бы на «%» в адресе). safeRedirect не даёт увести пользователя на чужой сайт.
+      return { access: '', refresh: '', code, redirect: safeRedirect(query.get('redirect')) };
     }
 
     const w = window as any;
@@ -40,7 +43,7 @@ export default function AuthCallbackPage() {
       access: params.get('access') ?? '',
       refresh: params.get('refresh') ?? '',
       code: '',
-      redirect: decodeURIComponent(params.get('redirect') ?? '/chat'),
+      redirect: safeRedirect(params.get('redirect')),
     };
   });
 
@@ -80,10 +83,5 @@ export default function AuthCallbackPage() {
       });
   }, []);
 
-  return (
-    <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
-      <GhostIcon size={40} className="text-accent animate-float" animated />
-      <p className="text-sm text-[rgba(255,255,255,0.3)]">Входим в тень...</p>
-    </div>
-  );
+  return <PageLoader label="Входим" />;
 }

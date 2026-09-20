@@ -37,6 +37,14 @@ export interface WSMessage {
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// true после disconnectWS() (выход из аккаунта): onclose приходит асинхронно, уже ПОСЛЕ того,
+// как disconnectWS погасил таймер, — раньше он тут же заводил новый и сокет было не отключить.
+let intentionalClose = false;
+// Пауза между переподключениями растёт вдвое до потолка: при лежащем API фиксированные 3 с
+// давали ~20 запросов в минуту с каждой вкладки. Сбрасывается, когда соединение открылось.
+const RECONNECT_BASE_MS = 3_000;
+const RECONNECT_MAX_MS = 60_000;
+let reconnectAttempts = 0;
 // [H-07] флаг aborted: если true, входящие токен-чанки игнорируются
 let aborted = false;
 const listeners = new Set<(chunk: WSChunk) => void>();
@@ -47,21 +55,24 @@ export function connectWS(): WebSocket {
   // [H-08] Очищаем таймер переподключения перед созданием нового соединения
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
-  ws = new WebSocket(`${WS_URL}/api/chat/stream`);
+  intentionalClose = false;
+  const socket = new WebSocket(`${WS_URL}/api/chat/stream`);
+  ws = socket;
 
   // [H-15] Таймаут соединения — закрываем, если не открылось за 10 секунд
   const connectTimeout = setTimeout(() => {
-    if (ws && ws.readyState !== WebSocket.OPEN) {
+    if (socket.readyState !== WebSocket.OPEN) {
       console.warn('[WS] Connection timeout');
-      ws.close();
+      socket.close();
     }
   }, 10_000);
 
-  ws.addEventListener('open', () => {
+  socket.addEventListener('open', () => {
     clearTimeout(connectTimeout);
+    reconnectAttempts = 0;
   }, { once: true });
 
-  ws.onmessage = (event) => {
+  socket.onmessage = (event) => {
     try {
       const chunk = JSON.parse(event.data) as WSChunk;
       // [H-07] Если стрим прерван, игнорируем входящие токен-чанки
@@ -79,20 +90,27 @@ export function connectWS(): WebSocket {
     } catch {}
   };
 
-  ws.onclose = () => {
-    ws = null;
-    reconnectTimer = setTimeout(() => connectWS(), 3000);
+  socket.onclose = () => {
+    clearTimeout(connectTimeout);
+    // Сокет уже мог быть заменён новым — не трогаем чужое состояние.
+    if (ws === socket) ws = null;
+    if (intentionalClose) return;
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempts, RECONNECT_MAX_MS);
+    reconnectAttempts++;
+    reconnectTimer = setTimeout(() => connectWS(), delay);
   };
 
-  ws.onerror = (err) => {
+  socket.onerror = (err) => {
     console.error('[WS] Error', err);
   };
 
-  return ws;
+  return socket;
 }
 
 export function disconnectWS() {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
+  intentionalClose = true;
+  reconnectAttempts = 0;
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   ws?.close();
   ws = null;
 }

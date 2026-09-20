@@ -189,7 +189,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3 px-4 pt-5 pb-4 min-w-0">
           <Link href="/" className="flex items-center gap-3 min-w-0 flex-1">
             <img
-              src="/ghostline-logo-icon.png"
+              src="/ghostline-logo-icon-sm.png"
               alt="GhostLine"
               className="w-7 h-7 rounded-[7px] object-cover flex-shrink-0"
               style={{ filter: 'drop-shadow(0 0 8px rgba(123,92,240,.5))' }}
@@ -212,7 +212,7 @@ export function Sidebar() {
         <div className="flex flex-col items-center pt-4 pb-3 gap-3">
           <Link href="/">
             <img
-              src="/ghostline-logo-icon.png"
+              src="/ghostline-logo-icon-sm.png"
               alt="GhostLine"
               className="w-[22px] h-[22px] rounded-[6px] object-cover"
               style={{ filter: 'drop-shadow(0 0 8px rgba(123,92,240,.5))' }}

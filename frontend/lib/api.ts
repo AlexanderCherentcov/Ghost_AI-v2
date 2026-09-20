@@ -58,6 +58,33 @@ async function refreshAccessToken(): Promise<void> {
   }
 }
 
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
+
+function tokenExpiresSoon(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' && payload.exp * 1000 - Date.now() < TOKEN_REFRESH_MARGIN_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Токен для отправки по WebSocket. HTTP-запросы тихо обновляют протухший access-токен
+ * (см. request()), а WS-сообщение несёт токен внутри тела и такой возможности не имело:
+ * после 15+ минут простоя первое сообщение падало с «Не удалось отправить». Освежаем заранее.
+ */
+export async function ensureFreshAccessToken(): Promise<string | null> {
+  if (accessToken && refreshTokenValue && tokenExpiresSoon(accessToken)) {
+    try {
+      await refreshAccessToken();
+    } catch {
+      // Оставляем как есть — сервер ответит UNAUTHORIZED, и пользователь увидит понятную ошибку.
+    }
+  }
+  return accessToken;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},

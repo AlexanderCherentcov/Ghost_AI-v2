@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GhostIcon } from '@/components/icons/GhostIcon';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { AuthShell, ConsentCheckbox, OAuthButton } from '@/components/auth/AuthShell';
@@ -82,10 +83,7 @@ export default function LoginPage() {
   if (tgLoading) {
     return (
       <AuthShell>
-        <div className="flex flex-col items-center justify-center gap-4 py-10">
-          <GhostIcon size={48} className="text-accent animate-float" animated />
-          <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
-        </div>
+        <PageLoader fullscreen={false} label="Входим через Telegram" />
       </AuthShell>
     );
   }

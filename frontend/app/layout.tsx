@@ -90,12 +90,14 @@ export const metadata: Metadata = {
   // Реальный логотип GhostLine (капюшон, светящиеся глаза) — тот же файл, что уже
   // используется в сайдбаре/лендинге/AuthShell, раньше фавикон был старым placeholder'ом.
   icons: {
+    // icon-192.png (50 КБ), а не полноразмерный логотип 670×670 (505 КБ) — иконка вкладки
+    // грузится на каждой странице, а показывается размером 16-32 px.
     icon: [
-      { url: '/ghostline-logo-icon.png', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
-    shortcut: '/ghostline-logo-icon.png',
+    shortcut: '/icon-192.png',
     apple: [
-      { url: '/ghostline-logo-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
   },
 

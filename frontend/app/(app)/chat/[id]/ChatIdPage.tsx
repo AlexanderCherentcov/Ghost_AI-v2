@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { api, type Message } from '@/lib/api';
+import { api, ensureFreshAccessToken, type Message } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
@@ -779,7 +779,7 @@ export default function ChatConversationPage() {
         model,
         prompt,
         history,
-        jwt: accessToken,
+        jwt: (await ensureFreshAccessToken()) ?? accessToken,
         imageUrl,
         fileContent,
         fileName,

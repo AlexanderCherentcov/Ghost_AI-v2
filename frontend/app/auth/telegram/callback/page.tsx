@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { GhostIcon } from '@/components/icons/GhostIcon';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { api, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -33,10 +33,5 @@ export default function TelegramCallbackPage() {
       });
   }, []);
 
-  return (
-    <div className="min-h-screen bg-[var(--bg-void)] flex flex-col items-center justify-center gap-4">
-      <GhostIcon size={40} className="text-accent animate-float" animated />
-      <p className="text-sm text-[rgba(255,255,255,0.4)]">Входим через Telegram...</p>
-    </div>
-  );
+  return <PageLoader label="Входим через Telegram" />;
 }

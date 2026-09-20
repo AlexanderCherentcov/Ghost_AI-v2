@@ -7,10 +7,11 @@ import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '@/store/chat.store';
 import { useAuthStore } from '@/store/auth.store';
 import { greetingByHour, capitalizeFirst } from '@/lib/utils';
+import { PARTICLE_CYCLE_SHAPES } from '@/lib/model-icons';
 
 // Цикл лого-форм из мокапа (Chat.dc.html: CYCLE_SEQ) — используется и для простаивающего
 // hero (медленно, 4000/1200), и для индикатора «думаю» (быстро, 900/500).
-const CYCLE_SEQ = ['brainicon', 'claude', 'chatgpt', 'gemini', 'deepseek', 'kling', 'sora', 'perplexity'];
+const CYCLE_SEQ = PARTICLE_CYCLE_SHAPES;
 
 interface ChatWindowProps {
   onSuggestion?: (text: string) => void;

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { CheckIcon, XIcon } from '@/components/icons';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
 
 type Status = 'loading' | 'succeeded' | 'cancelled' | 'pending' | 'error';
 
@@ -28,7 +29,12 @@ export default function BillingSuccessPage() {
       try {
         const data = await api.payments.status(paymentId!);
         if (!mounted) return;
-        if (data.status === 'SUCCEEDED') { setStatus('succeeded'); return; }
+        if (data.status === 'SUCCEEDED') {
+          setStatus('succeeded');
+          // Без этого сайдбар до перезагрузки показывал старый план и баланс, хотя пишем «оплата прошла».
+          void useAuthStore.getState().refreshUser();
+          return;
+        }
         if (data.status === 'CANCELED' || data.status === 'CANCELLED') { setStatus('cancelled'); return; }
         if (++attempts < MAX) setTimeout(poll, 2000);
         else setStatus(data.status === 'PENDING' ? 'pending' : 'error');

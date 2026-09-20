@@ -193,7 +193,7 @@ export default function GalleryPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
             <img
-              src="/ghostline-logo-icon.png"
+              src="/ghostline-logo-icon-sm.png"
               alt="GhostLine"
               className="w-9 h-9 rounded-[9px] object-cover"
               style={{ filter: 'drop-shadow(0 0 10px rgba(123,92,240,.55))' }}

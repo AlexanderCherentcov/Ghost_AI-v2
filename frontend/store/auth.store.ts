@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@/lib/api';
 import { setAccessToken, setRefreshToken, registerTokenRefreshHandler, api } from '@/lib/api';
+import { disconnectWS } from '@/lib/socket';
 
 interface AuthState {
   user: User | null;
@@ -37,6 +38,8 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user }),
 
       clearAuth: () => {
+        // Без этого сокет после выхода жил вечно и каждые 3 с долбился в бэкенд.
+        disconnectWS();
         setAccessToken(null);
         setRefreshToken(null);
         set({ user: null, accessToken: null, refreshToken: null, isLoading: false });

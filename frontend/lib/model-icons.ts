@@ -56,6 +56,20 @@ const MODEL_ICON_MAP: Record<string, ModelIconEntry> = {
   'sora-2': { icon: '/models/sora.svg', particleShape: 'sora' },
 };
 
+/** Цикл лого-форм с подписями — его крутят пустой чат и экран загрузки (PageLoader),
+ *  чтобы название под анимацией совпадало с формой, в которую морфятся частицы. */
+export const PARTICLE_CYCLE: { shape: string; label: string }[] = [
+  { shape: 'brainicon', label: 'GhostLine' },
+  { shape: 'claude', label: 'Claude' },
+  { shape: 'chatgpt', label: 'ChatGPT' },
+  { shape: 'gemini', label: 'Gemini' },
+  { shape: 'deepseek', label: 'DeepSeek' },
+  { shape: 'kling', label: 'Kling' },
+  { shape: 'sora', label: 'Sora' },
+  { shape: 'perplexity', label: 'Perplexity' },
+];
+export const PARTICLE_CYCLE_SHAPES = PARTICLE_CYCLE.map((m) => m.shape);
+
 /** SVG-версия лого GhostLine для пункта «Авто» — растровый /ghostline-logo-icon.png
  *  использовать здесь нельзя: это UI-иконка в пилюле/списке моделей (ModelPill),
  *  а не полноразмерный бренд-логотип на лендинге. */

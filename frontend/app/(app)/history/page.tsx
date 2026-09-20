@@ -149,7 +149,7 @@ export default function HistoryPage() {
     <div className="flex flex-col flex-1 min-h-0">
       {/* Шапка */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-4 border-b border-[var(--border)]">
-        <img src="/ghostline-logo-icon.png" alt="" className="w-[22px] h-[22px] rounded-[6px] object-cover" />
+        <img src="/ghostline-logo-icon-sm.png" alt="" className="w-[22px] h-[22px] rounded-[6px] object-cover" />
         <span className="text-base font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Чаты</span>
         <button
           onClick={handleNewChat}

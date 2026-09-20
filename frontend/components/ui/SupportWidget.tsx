@@ -47,7 +47,7 @@ export function SupportWidget() {
         className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-accent shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 transition-transform"
         aria-label="Поддержка"
       >
-        <img src="/ghostline-logo-icon.png" alt="" className="w-7 h-7 rounded-[7px] object-cover" />
+        <img src="/ghostline-logo-icon-sm.png" alt="" className="w-7 h-7 rounded-[7px] object-cover" />
       </button>
 
       {/* Backdrop */}
@@ -77,7 +77,7 @@ export function SupportWidget() {
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <img src="/ghostline-logo-icon.png" alt="" className="w-[18px] h-[18px] rounded-[5px] object-cover" />
+                <img src="/ghostline-logo-icon-sm.png" alt="" className="w-[18px] h-[18px] rounded-[5px] object-cover" />
                 <span className="font-medium text-white text-sm">Поддержка</span>
               </div>
               <button

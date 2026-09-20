@@ -104,10 +104,11 @@ export default function BillingPage() {
         billing: billingCycle,
         ...(hasDiscount ? { promoCode: appliedPromoCode! } : {}),
       });
+      // loading НЕ сбрасываем при успехе: браузер ещё уходит на страницу оплаты, и кнопка,
+      // снова ставшая активной, давала второй клик → второй платёж в ЮKassa.
       window.location.href = paymentUrl;
     } catch (err: any) {
       show(err.message, 'error');
-    } finally {
       setLoading(null);
     }
   }
@@ -117,10 +118,9 @@ export default function BillingPage() {
     setLoading('caspers');
     try {
       const { paymentUrl } = await api.payments.createCaspers({ amount: casperSlider });
-      window.location.href = paymentUrl;
+      window.location.href = paymentUrl; // loading не сбрасываем — см. handleBuy
     } catch (err: any) {
       show(err.message, 'error');
-    } finally {
       setLoading(null);
     }
   }

@@ -41,7 +41,7 @@ export function MaintenancePage({ until }: { until: string | null }) {
 
       <div className="relative z-10 flex flex-col items-center text-center max-w-[480px]">
         <img
-          src="/ghostline-logo-icon.png"
+          src="/icon-192.png"
           alt=""
           className="w-20 h-20 rounded-3xl object-cover animate-float mb-7"
           style={{ filter: 'drop-shadow(0 0 28px rgba(123,92,240,.55))' }}

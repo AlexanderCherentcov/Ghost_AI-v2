@@ -25,7 +25,7 @@ export function AuthShell({ children, tagline }: { children: ReactNode; tagline?
         className="flex items-center gap-2.5 absolute top-7 left-8 max-[480px]:static max-[480px]:w-full max-[480px]:justify-center max-[480px]:mb-[22px]"
       >
         <img
-          src="/ghostline-logo-icon.png"
+          src="/ghostline-logo-icon-sm.png"
           alt="GhostLine"
           className="w-8 h-8 rounded-[8px] object-cover"
           style={{ filter: 'drop-shadow(0 0 10px rgba(123,92,240,.55))' }}

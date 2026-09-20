@@ -125,7 +125,7 @@ export default function InstallPage() {
       <header className="border-b border-[var(--panel-glass-border)] py-4 px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-sm text-[rgba(255,255,255,0.5)] hover:text-white transition-colors">
-            <img src="/ghostline-logo-icon.png" alt="" className="w-5 h-5 rounded-[5px] object-cover" />
+            <img src="/ghostline-logo-icon-sm.png" alt="" className="w-5 h-5 rounded-[5px] object-cover" />
             GhostLine AI
           </Link>
           <Link href="/chat" className="text-sm text-[#c4b5fd] hover:opacity-80 transition-opacity">

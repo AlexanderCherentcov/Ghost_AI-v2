@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { BottomNav } from '@/components/layout/BottomNav';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { useChatStore } from '@/store/chat.store';
 import { useUIStore } from '@/store/ui.store';
 import { api, setAccessToken } from '@/lib/api';
@@ -93,7 +94,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  if (isLoading && !user) return null;
+  if (isLoading && !user) return <PageLoader />;
 
   return (
     /*

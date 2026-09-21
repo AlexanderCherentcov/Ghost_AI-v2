@@ -1,5 +1,7 @@
 'use client';
 
+
+import type { UpgradeInfo } from '@/components/ui/LimitPopup';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,7 +37,7 @@ export function ModelPill({
   model: string;
   setModel: (id: string) => void;
   userPlan?: string;
-  onUpgradeRequired?: () => void;
+  onUpgradeRequired?: (info?: UpgradeInfo) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ChatModelOption[]>([]);
@@ -134,7 +136,7 @@ export function ModelPill({
                   key={opt.id}
                   type="button"
                   onClick={() => {
-                    if (locked) { onUpgradeRequired?.(); setOpen(false); return; }
+                    if (locked) { onUpgradeRequired?.({ modelLabel: opt.label, minPlan: opt.minPlan }); setOpen(false); return; }
                     setModel(opt.id);
                     setOpen(false);
                   }}

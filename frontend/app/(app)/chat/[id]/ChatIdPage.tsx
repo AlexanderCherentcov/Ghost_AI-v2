@@ -9,7 +9,7 @@ import { connectWS, onToken, abortStream, type WSChunk } from '@/lib/socket';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { InputBar, type ChatMode, type VideoOptions, type MusicMode } from '@/components/chat/InputBar';
 import { useToast } from '@/components/ui/Toast';
-import { LimitPopup, type LimitType } from '@/components/ui/LimitPopup';
+import { LimitPopup, type LimitType, type UpgradeInfo } from '@/components/ui/LimitPopup';
 import { getFileCategory } from '@/components/chat/InputBar';
 import { REF_KEYWORDS, isImageEditRequest, extractImagePrompt } from '@/lib/image-intent';
 
@@ -85,6 +85,7 @@ export default function ChatConversationPage() {
   } = useChatStore();
 
   const [limitType, setLimitType] = useState<LimitType>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
   const [fillPrompt, setFillPrompt] = useState('');
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
@@ -480,8 +481,11 @@ export default function ChatConversationPage() {
       patchOrAppendMessage(placeholder, { content: 'Ошибка генерации видео', mediaUrl: null });
       if (err.code === 'LIMIT_VIDEOS') {
         setLimitType('LIMIT_VIDEOS');
-      } else if (err.code === 'LIMIT_VIDEOS_UNAVAILABLE') {
-        setLimitType('LIMIT_VIDEOS_UNAVAILABLE');
+      } else if (err.code === 'LIMIT_VIDEOS_UNAVAILABLE' || err.code === 'LIMIT_VIDEOS_FREE_PLAN' || err.code === 'FREE_LOCKED') {
+        setLimitType(user?.plan === 'FREE' ? 'FREE_LOCKED' : 'LIMIT_VIDEOS_UNAVAILABLE');
+      } else if (err.code === 'PLAN_RESTRICTED') {
+        setUpgradeInfo(null);
+        setLimitType(user?.plan === 'FREE' ? 'FREE_LOCKED' : 'MODEL_LOCKED');
       } else {
         showToast(err.message ?? 'Ошибка генерации видео', 'error');
       }
@@ -559,9 +563,8 @@ export default function ChatConversationPage() {
         setLimitType('LIMIT_MUSIC');
       } else if (err.code === 'LIMIT_MUSIC_UNAVAILABLE') {
         setLimitType('LIMIT_MUSIC_UNAVAILABLE');
-      } else if (err.code === 'PLAN_RESTRICTED') {
-        showToast('Генерация музыки доступна только на платных тарифах', 'error');
-        router.push('/billing');
+      } else if (err.code === 'PLAN_RESTRICTED' || err.code === 'FREE_LOCKED') {
+        setLimitType('FREE_LOCKED');
       } else {
         showToast(err.message ?? 'Ошибка генерации музыки', 'error');
       }
@@ -816,8 +819,8 @@ export default function ChatConversationPage() {
       } else if (err.code === 'FREE_LOCKED') {
         setLimitType('FREE_LOCKED');
       } else if (err.code === 'PLAN_RESTRICTED') {
-        showToast('Эта функция доступна только на платных тарифах', 'error');
-        router.push('/billing');
+        setUpgradeInfo(null);
+        setLimitType(user?.plan === 'FREE' ? 'FREE_LOCKED' : 'MODEL_LOCKED');
       } else if (err.code === 'TASK_IN_PROGRESS') {
         showToast('Подождите — предыдущий запрос ещё выполняется', 'warning');
       } else if (err.code === 'RATE_LIMITED') {
@@ -846,7 +849,7 @@ export default function ChatConversationPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <LimitPopup type={limitType} onClose={() => setLimitType(null)} />
+      <LimitPopup type={limitType} onClose={() => setLimitType(null)} upgrade={upgradeInfo} userPlan={user?.plan} />
 
       <ChatWindow onSuggestion={handleSend} onUsePrompt={handleUsePrompt} isLoading={isLoading} />
 
@@ -875,7 +878,11 @@ export default function ChatConversationPage() {
         model={model}
         setModel={setModel}
         userPlan={user?.plan}
-        onUpgradeRequired={() => setLimitType('FREE_LOCKED')}
+        onUpgradeRequired={(info) => {
+          setUpgradeInfo(info ?? null);
+          // Бесплатный тариф — только чат: общий текст; на платном показываем, какая именно модель закрыта.
+          setLimitType(user?.plan === 'FREE' || !info ? 'FREE_LOCKED' : 'MODEL_LOCKED');
+        }}
         chatMode={chatMode}
         setChatMode={handleSetChatMode}
         dispatchResult={dispatchResult}

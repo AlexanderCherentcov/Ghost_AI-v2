@@ -1,5 +1,7 @@
 'use client';
 
+
+import type { UpgradeInfo } from '@/components/ui/LimitPopup';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { VideoIcon, CasperCoin, SoundIcon, MuteIcon, SettingsIcon } from '@/components/icons';
@@ -35,7 +37,7 @@ export function VideoWidget({
   userVideos?: number;
   casperCosts: CasperCosts;
   videoModels: VideoModelOption[];
-  onUpgradeRequired?: () => void;
+  onUpgradeRequired?: (info?: UpgradeInfo) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const cost = getCostDisplay('video', options, casperCosts, userPlan, undefined, undefined, userVideos, undefined, undefined, videoModels);

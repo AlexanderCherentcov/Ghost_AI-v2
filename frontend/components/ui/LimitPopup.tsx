@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ComponentType } from 'react';
+import { lockedModelText } from '@/lib/plan-lock-text';
 import { ChatIcon, ThinkIcon, AttachIcon, VisionIcon, VideoIcon, MusicIcon, BoltIcon } from '@/components/icons';
 
 export type LimitType =
@@ -15,7 +16,14 @@ export type LimitType =
   | 'LIMIT_MUSIC'
   | 'LIMIT_MUSIC_UNAVAILABLE'
   | 'FREE_LOCKED'
+  | 'MODEL_LOCKED'
   | null;
+
+/** Что именно закрыто тарифом — подставляется в текст попапа MODEL_LOCKED. */
+export interface UpgradeInfo {
+  modelLabel?: string;
+  minPlan?: string;
+}
 
 const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
   icon: ComponentType<{ size?: number; className?: string }>;
@@ -82,8 +90,15 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
   },
   FREE_LOCKED: {
     icon: BoltIcon,
-    title: 'Функция недоступна',
-    desc: 'Картинки, файлы и видео доступны с платного тарифа.',
+    title: 'Недоступно на бесплатном тарифе',
+    desc: 'На бесплатном тарифе доступен только чат. Картинки, видео, музыка и файлы открываются на платных тарифах.',
+    btn1: 'Посмотреть тарифы',
+    btn2: 'Закрыть',
+  },
+  MODEL_LOCKED: {
+    icon: BoltIcon,
+    title: 'Модель недоступна на вашем тарифе',
+    desc: 'Эта модель открывается на более высоком тарифе.',
     btn1: 'Посмотреть тарифы',
     btn2: 'Закрыть',
   },
@@ -92,48 +107,56 @@ const LIMIT_CONFIG: Record<NonNullable<LimitType>, {
 interface Props {
   type: LimitType;
   onClose: () => void;
+  /** Что закрыто тарифом — для типа MODEL_LOCKED. */
+  upgrade?: UpgradeInfo | null;
+  userPlan?: string;
 }
 
-export function LimitPopup({ type, onClose }: Props) {
+export function LimitPopup({ type, onClose, upgrade, userPlan }: Props) {
   const router = useRouter();
 
   if (!type) return null;
   const cfg = LIMIT_CONFIG[type];
+  const desc = type === 'MODEL_LOCKED' ? lockedModelText(upgrade?.modelLabel, upgrade?.minPlan, userPlan) : cfg.desc;
 
   return (
     <AnimatePresence>
       {type && (
-        <>
+        // Центрирование — flex-контейнером, а не translate(-50%, -50%): framer-motion пишет свой inline
+        // transform (scale/y) и затирал Tailwind-translate, из-за чего на телефоне карточка уезжала
+        // за правый/нижний край экрана. Контейнер ещё и не даёт карточке выйти за экран по высоте.
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="absolute inset-0 bg-black/60" onClick={onClose} />
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50"
-            onClick={onClose}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
+            initial={{ opacity: 0, scale: 0.94, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 20 }}
+            exit={{ opacity: 0, scale: 0.94, y: 16 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(360px,90vw)] bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6 shadow-2xl"
+            className="relative w-full max-w-[360px] max-h-[calc(100dvh-2rem)] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6 shadow-2xl"
           >
             <cfg.icon size={28} className="mb-3 text-accent" />
             <h3 className="text-white font-medium text-base mb-1">{cfg.title}</h3>
-            <p className="text-[rgba(255,255,255,0.45)] text-sm mb-5">{cfg.desc}</p>
+            <p className="text-[rgba(255,255,255,0.6)] text-sm mb-5">{desc}</p>
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => { router.push('/billing'); onClose(); }}
-                className="w-full py-2.5 px-4 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity"
               >
                 {cfg.btn1}
               </button>
-              <button onClick={onClose} className="text-xs text-[rgba(255,255,255,0.5)] hover:text-[rgba(255,255,255,0.5)] transition-colors mt-1">
+              <button onClick={onClose} className="min-h-[44px] text-xs text-[rgba(255,255,255,0.6)] hover:text-white transition-colors">
                 {cfg.btn2}
               </button>
             </div>
           </motion.div>
-        </>
+        </motion.div>
       )}
     </AnimatePresence>
   );

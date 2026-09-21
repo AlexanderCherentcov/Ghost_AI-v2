@@ -1,5 +1,7 @@
 'use client';
 
+
+import type { UpgradeInfo } from '@/components/ui/LimitPopup';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ImageIcon, CasperCoin, SettingsIcon } from '@/components/icons';
@@ -22,7 +24,7 @@ export function ImageWidget({
   setImageModel: (id: string) => void;
   aspectRatio?: string;
   setAspectRatio: (v: string | undefined) => void;
-  onUpgradeRequired?: () => void;
+  onUpgradeRequired?: (info?: UpgradeInfo) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const selected = imageModels.find((m) => m.id === imageModel);

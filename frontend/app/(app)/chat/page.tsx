@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LimitPopup, type LimitType, type UpgradeInfo } from '@/components/ui/LimitPopup';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type PlansResponse } from '@/lib/api';
 import { useChatStore } from '@/store/chat.store';
@@ -414,6 +415,8 @@ export default function ChatPage() {
   const { addChat, model, setModel } = useChatStore();
   const { user } = useAuthStore();
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
+  const [limitType, setLimitType] = useState<LimitType>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
   // Восстанавливаем последний режим после монтирования (не лениво в initial-state,
   // чтобы не разойтись с серверным рендером — hydration mismatch). См. тот же
   // приём и подробный комментарий в ChatIdPage.tsx.
@@ -709,7 +712,10 @@ export default function ChatPage() {
               model={model}
               setModel={setModel}
               userPlan={user?.plan}
-              onUpgradeRequired={() => router.push('/billing')}
+              onUpgradeRequired={(info) => {
+                setUpgradeInfo(info ?? null);
+                setLimitType(user?.plan === 'FREE' || !info ? 'FREE_LOCKED' : 'MODEL_LOCKED');
+              }}
               chatMode={chatMode}
               setChatMode={setChatMode}
               presetImageModel={presetImageModel}
@@ -728,6 +734,8 @@ export default function ChatPage() {
         onClose={() => setDetailsItem(null)}
         onTry={(id) => pickModel(detailsItem!.domain, id)}
       />
+
+      <LimitPopup type={limitType} onClose={() => setLimitType(null)} upgrade={upgradeInfo} userPlan={user?.plan} />
     </div>
   );
 }

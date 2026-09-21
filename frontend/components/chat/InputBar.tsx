@@ -1,9 +1,11 @@
 'use client';
 
+
+import type { UpgradeInfo } from '@/components/ui/LimitPopup';
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SendIcon, ChatIcon, ImageIcon, VideoIcon, MusicIcon, MicIcon, AttachIcon } from '@/components/icons';
-import { cn } from '@/lib/utils';
+import { cn, planAtLeast } from '@/lib/utils';
 import { api, type ChatModelOption, type ImageModelOption, type VideoModelOption } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
 
@@ -72,7 +74,7 @@ interface InputBarProps {
   model?: string;
   setModel?: (id: string) => void;
   userPlan?: string;
-  onUpgradeRequired?: () => void;
+  onUpgradeRequired?: (info?: UpgradeInfo) => void;
   chatMode?: ChatMode;
   setChatMode?: (m: ChatMode) => void;
   // Автозаполнение от диспетчера, приходит от родителя
@@ -328,6 +330,20 @@ export function InputBar({
   function handleSend() {
     const trimmed = value.trim();
     if ((!trimmed && !attachedFile) || disabled || sendingRef.current) return;
+
+    // Бесплатный тариф — только чат: картинки, видео и музыка закрыты целиком (даже при наличии Caspers).
+    // Раньше кнопка «отправить» просто уходила на сервер, а отказ приходил ошибкой прямо в чат.
+    if (userPlan === 'FREE' && chatMode !== 'chat') {
+      onUpgradeRequired?.();
+      return;
+    }
+    // Выбранная модель картинок/видео закрыта тарифом — говорим об этом до запроса.
+    const pickedModel = chatMode === 'images' ? selectedImageModel : chatMode === 'video' ? selectedVideoSpec : undefined;
+    if (userPlan && pickedModel && !planAtLeast(userPlan, pickedModel.minPlan)) {
+      onUpgradeRequired?.({ modelLabel: pickedModel.label, minPlan: pickedModel.minPlan });
+      return;
+    }
+
     sendingRef.current = true;
 
     if (chatMode === 'video') {

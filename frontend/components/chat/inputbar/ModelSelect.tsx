@@ -1,5 +1,7 @@
 'use client';
 
+
+import type { UpgradeInfo } from '@/components/ui/LimitPopup';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,7 +33,7 @@ export function ModelSelect({
   options: ModelSelectOption[];
   onChange: (id: string) => void;
   userPlan?: string;
-  onUpgradeRequired?: () => void;
+  onUpgradeRequired?: (info?: UpgradeInfo) => void;
   triggerIcon?: React.ReactNode;
   direction?: 'up' | 'down';
 }) {
@@ -85,13 +87,16 @@ export function ModelSelect({
               }}
             >
               {options.map((opt) => {
-                const locked = !planAtLeast(userPlan, opt.minPlan);
+                // Бесплатный тариф — только чат: модели картинок и видео закрыты целиком,
+                // даже те, у которых в реестре minPlan FREE, и даже если на балансе есть Caspers.
+                const onFree = userPlan === 'FREE';
+                const locked = onFree || !planAtLeast(userPlan, opt.minPlan);
                 return (
                   <button
                     key={opt.id}
                     type="button"
                     onClick={() => {
-                      if (locked) { onUpgradeRequired?.(); setOpen(false); return; }
+                      if (locked) { onUpgradeRequired?.({ modelLabel: opt.label, minPlan: opt.minPlan }); setOpen(false); return; }
                       onChange(opt.id);
                       setOpen(false);
                     }}
@@ -109,7 +114,7 @@ export function ModelSelect({
                     </span>
                     <span className="flex-shrink-0 mt-0.5">
                       {locked ? (
-                        <span className="text-[10px] text-[rgba(123,92,240,0.7)]">{opt.minPlan}</span>
+                        <span className="text-[10px] text-[rgba(123,92,240,0.85)]">{onFree ? 'Недоступно' : opt.minPlan}</span>
                       ) : opt.cost}
                     </span>
                   </button>

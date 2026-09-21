@@ -125,13 +125,14 @@ describe('checkAndDeduct — платные операции', () => {
     expect(h.tx.casperTransaction.create).toHaveBeenCalledWith({ data: { userId: 'u1', amount: -8, reason: 'image_gemini' } });
   });
 
-  it('видео на FREE недоступно даже при большом балансе — и до списания не доходит', async () => {
+  it.each(['image', 'video', 'music'] as const)('%s на FREE недоступно даже при большом балансе — до списания не доходит (на FREE только чат)', async (domain) => {
     h.tx.user.findUnique.mockResolvedValue(user({ plan: 'FREE', caspers_balance: 9999 }));
 
-    const err = await rejection(checkAndDeduct('u1', 'video', 100, 'video_kling'));
+    const err = await rejection(checkAndDeduct('u1', domain, 100, 'gen'));
 
-    expect(err.code).toBe('LIMIT_VIDEOS_FREE_PLAN');
+    expect(err.code).toBe('FREE_LOCKED');
     expect(h.tx.user.updateMany).not.toHaveBeenCalled();
+    expect(h.tx.casperTransaction.create).not.toHaveBeenCalled();
   });
 
   it('несуществующий пользователь — UNAUTHORIZED', async () => {
@@ -154,7 +155,7 @@ describe('checkAndDeduct — балансовая демоция', () => {
       where: { id: 'u1', plan: { not: 'FREE' }, caspers_balance: { lte: 0 } },
       data: { plan: 'FREE', caspers_monthly: 0 },
     });
-    expect(err.code).toBe('LIMIT_VIDEOS_FREE_PLAN');
+    expect(err.code).toBe('FREE_LOCKED');
   });
 
   it('если баланс успели пополнить (демоция count 0) — план остаётся, операция идёт по платному пути', async () => {

@@ -59,6 +59,23 @@ function patchOrAppendMessage(placeholder: Message, patch: Partial<Message>) {
   }
 }
 
+// Раньше при сбое (таймаут стрима, недоступен провайдер) пользователь видел только тост,
+// который мог не заметить, — сообщение оставалось в чате без всякого ответа и выглядело как
+// «зависло». Теперь сбой ещё и пишется прямо в переписку — по прямому запросу Александра
+// после реального инцидента (лежал прокси до ИИ-провайдеров).
+function addFailureMessage(text: string) {
+  useChatStore.getState().addMessage({
+    id: `msg-${Date.now()}-fail`,
+    role: 'assistant',
+    content: `⚠️ ${text}`,
+    mode: 'chat',
+    tokensCost: 0,
+    cacheHit: false,
+    mediaUrl: null,
+    createdAt: new Date().toISOString(),
+  });
+}
+
 async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -826,10 +843,10 @@ export default function ChatConversationPage() {
       } else if (err.code === 'RATE_LIMITED') {
         showToast('Слишком быстро! Подождите минуту.', 'warning');
       } else if (err.code === 'STREAM_TIMEOUT') {
-        showToast('Нет ответа от сервера, попробуйте ещё раз', 'error');
+        addFailureMessage('Сбой соединения. Попробуйте ещё раз чуть позже.');
       } else {
         // Незнакомый/новый код ошибки — не оставляем пользователя без обратной связи
-        showToast(err.message ?? 'Не удалось отправить сообщение', 'error');
+        addFailureMessage(err.message ?? 'Сбой. Попробуйте ещё раз чуть позже.');
       }
     }
   }, [id, messages, model, accessToken, isStreaming, generatingImage, generatingVideo, generatingMusic, chatMode, user, messagesReady, handleGenerateImage, handleGenerateVideo, handleGenerateMusic, showToast]);

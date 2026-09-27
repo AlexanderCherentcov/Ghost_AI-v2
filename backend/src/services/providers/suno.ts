@@ -16,6 +16,28 @@ function headers() {
   };
 }
 
+const firstNonEmpty = (...values: unknown[]): string | undefined =>
+  values.find((v): v is string => typeof v === 'string' && v.trim() !== '');
+
+/**
+ * Реальная структура sunoapi.org: data.response.sunoData[].audioUrl — но API отдаёт КАЖДОЕ
+ * поле в двух написаниях (audioUrl И audio_url), а sourceAudioUrl/source_audio_url на практике
+ * почти всегда пустая строка "", а не undefined. `??` пропускает только null/undefined, поэтому
+ * подставлял "" вместо рабочей ссылки из audio_url, шедшей ниже по цепочке. Живой инцидент
+ * 2026-09-27: Suno реально сгенерировал песню, а наш код бросал "no audio_url" и терял результат.
+ * Экспортирована отдельно от generateMusicSuno ради юнит-теста без реальных сетевых вызовов.
+ */
+export function extractAudioUrl(d: any): string | undefined {
+  const songs: any[] = d?.response?.sunoData ?? d?.response?.data ?? d?.response?.clips ?? [];
+  return firstNonEmpty(
+    songs[0]?.audioUrl,
+    songs[0]?.audio_url,
+    songs[0]?.sourceAudioUrl,
+    songs[0]?.source_audio_url,
+    d?.audio_url,
+  );
+}
+
 export interface SunoOptions {
   /** Стиль / жанр музыки (например, "Jazz", "Electronic"). Используется в custom mode. */
   style?: string;
@@ -153,14 +175,7 @@ export async function generateMusicSuno(
       for (const k of keys) { if (k !== 'param') filtered[k] = d[k]; }
       console.info(`[Suno] SUCCESS data (no param): ${JSON.stringify(filtered).slice(0, 2000)}`);
 
-      // Реальная структура sunoapi.org: data.response.sunoData[].audioUrl
-      const songs: any[] = d?.response?.sunoData ?? d?.response?.data ?? d?.response?.clips ?? [];
-
-      const audioUrl: string | undefined =
-        songs[0]?.sourceAudioUrl ??   // прямой URL с CDN Suno (предпочтительно)
-        songs[0]?.audioUrl ??         // прокси-URL
-        songs[0]?.audio_url ??        // устаревший snake_case
-        d?.audio_url;
+      const audioUrl = extractAudioUrl(d);
 
       if (!audioUrl) {
         throw new Error(`Suno SUCCESS but no audio_url: ${JSON.stringify(d).slice(0, 500)}`);

@@ -350,12 +350,21 @@ export function InputBar({
       // Прикреплённая картинка → источник для image-to-video
       onSend(trimmed, attachedFile ?? undefined, videoOptions);
     } else if (chatMode === 'music') {
-      // Приводим к старой сигнатуре: prompt=описание стиля, sunoTitle, sunoStyle, sunoInstrumental, lyrics
+      // Раньше, если пользователь заполнял название/стиль/текст песни в виджете выше,
+      // то, что он ДОПОЛНИТЕЛЬНО печатал в этом поле, молча пропадало (Suno в custom-режиме
+      // берёт текст песни из lyrics, а не отсюда) — путало: "текст ввёл, вокал выбрал, а
+      // сюда снизу что писать?". Теперь, если виджет уже заполнен, текст здесь добавляется
+      // к стилю как доп. пожелание, а не теряется. Простой сценарий (только это поле,
+      // виджет не трогали) работает как раньше.
+      const widgetEngaged = !!(musicOptions.style.trim() || musicOptions.title.trim() || musicOptions.lyrics.trim());
+      const effectiveStyle = widgetEngaged
+        ? [musicOptions.style.trim(), trimmed].filter(Boolean).join(', ') || undefined
+        : musicOptions.style || undefined;
       onSend(
         trimmed || musicOptions.style || musicOptions.title || 'создай трек',
         undefined, undefined,
         'suno', undefined,
-        musicOptions.style || undefined,
+        effectiveStyle,
         musicOptions.title || undefined,
         musicOptions.instrumental,
         musicOptions.lyrics || undefined,
@@ -430,7 +439,9 @@ export function InputBar({
     : chatMode === 'video'
       ? 'Опишите сцену для видео...'
       : chatMode === 'music'
-        ? 'Опишите настроение или стиль...'
+        ? (musicOptions.style.trim() || musicOptions.title.trim() || musicOptions.lyrics.trim()
+            ? 'Дополнительно опишите идею трека (необязательно)...'
+            : 'Опишите настроение или стиль...')
         : placeholder ?? 'Напишите что-нибудь...';
 
   const modeSelector = (

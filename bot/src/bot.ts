@@ -271,6 +271,16 @@ async function mintMagicLink(from: TgFrom, redirectPath: string): Promise<string
 
 // ─── /start ────────────────────────────────────────────────────────────────────
 
+/**
+ * Экранирование для parse_mode: 'HTML' — единственные спецсимволы, которые
+ * Telegram там разбирает, это &, < и >. В отличие от MarkdownV2 (десяток
+ * зарезервированных символов — `.`, `-`, `!`, `(` и т.д.), это безопасно
+ * для вставки произвольного имени пользователя без риска уронить sendMessage.
+ */
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** Обычное приветствие /start — без ветки 'auth' (та актуальна только для самой команды). */
 async function sendStartWelcome(ctx: Context): Promise<void> {
   const tgName = ctx.from?.first_name ?? 'пользователь';
@@ -279,7 +289,7 @@ async function sendStartWelcome(ctx: Context): Promise<void> {
     ? await getUserPlan(ctx.from.id)
     : { plan: 'FREE', dbName: null, caspers: 0 };
 
-  const displayName = dbName ?? tgName;
+  const displayName = escHtml(dbName ?? tgName);
   const planLabel   = PLAN_LABELS[plan] ?? plan;
 
   const keyboard = new InlineKeyboard()
@@ -290,13 +300,13 @@ async function sendStartWelcome(ctx: Context): Promise<void> {
     .text('📦 Тарифы', 'show_plans');
 
   await ctx.reply(
-    `✨ *Твой личный ИИ\\-ассистент*\n\n` +
-    `Привет, *${displayName}*\\!\n` +
-    `Я готов к работе\\. Задавай вопросы, создавай изображения или генерируй видео в едином потоке\\.\n\n` +
-    `📦 Тариф: *${planLabel}*\n` +
-    `👻 Caspers: *${caspers}*`,
+    `✨ <b>Твой личный ИИ-ассистент</b>\n\n` +
+    `Привет, <b>${displayName}</b>!\n` +
+    `Я готов к работе. Задавай вопросы, создавай изображения или генерируй видео в едином потоке.\n\n` +
+    `📦 Тариф: <b>${planLabel}</b>\n` +
+    `👻 Caspers: <b>${caspers}</b>`,
     {
-      parse_mode: 'MarkdownV2',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     }
   );

@@ -8,8 +8,9 @@ interface ChatState {
   messages: Message[];
   isStreaming: boolean;
   streamContent: string;
-  // id модели чата из реестра (config/models.ts на бэкенде), 'auto' по умолчанию.
-  // Персистится в localStorage — выбор пользователя переживает перезагрузку страницы.
+  // id модели чата из реестра. Дефолт — бесплатный llama-3.1-fast, не 'auto':
+  // «Авто» стоит минимум 1 Casper, а у нового пользователя баланс 0.
+  // Персистится в localStorage — явный выбор переживает перезагрузку.
   model: string;
 
   setChats: (chats: Chat[]) => void;
@@ -36,7 +37,7 @@ export const useChatStore = create<ChatState>()(
       messages: [],
       isStreaming: false,
       streamContent: '',
-      model: 'auto',
+      model: 'llama-3.1-fast',
 
       setChats: (chats) => set({ chats }),
 

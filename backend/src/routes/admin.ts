@@ -9,6 +9,8 @@ import { createPromoCode, deletePromoCode, normalizePromoCode, PromoError } from
 import { checkAdminSecret } from '../lib/bot-auth.js';
 import { USAGE_COUNTERS_SELECT } from '../lib/user-select.js';
 import { getMaintenanceState, setMaintenanceState } from '../lib/maintenance.js';
+import { moscowDayStart, moscowMonthStart } from '../lib/msk-day.js';
+import { CHAT_MODELS } from '../config/models.js';
 
 // ─── Схемы ─────────────────────────────────────────────────────────────────────
 
@@ -256,12 +258,12 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/admin/stats', async (request, reply) => {
     if (!checkAdminSecret(request, reply)) return;
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    // Сутки и месяц — по Москве, как и остальные часы в админ-боте.
+    // setHours(0,0,0,0) брал полночь контейнера (обычно UTC) и сдвигал «сегодня».
+    const now = new Date();
+    const todayStart = moscowDayStart(now);
+    const monthStart = moscowMonthStart(now);
+    const chatModelIds = CHAT_MODELS.map((m) => m.id);
 
     const [
       totalUsers,
@@ -269,6 +271,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       newThisMonth,
       messagesToday,
       chatToday,
+      chatUserRows,
+      newUsersChatted,
       proChatToday,
       imagesToday,
       musicToday,
@@ -287,7 +291,24 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.user.count({ where: { createdAt: { gte: monthStart } } }),
       prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user' } }),
       prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user', mode: 'chat' } }),
-      prisma.message.count({ where: { createdAt: { gte: todayStart }, role: 'user', mode: 'think' } }),
+      // Сколько разных людей написали в чат. Счётчик сообщений этого не показывает:
+      // 10 новых аккаунтов и 0 сообщений выглядели как «никто не пробует», хотя
+      // это могли быть и отказы до записи (см. дефолт модели), и просто /start.
+      prisma.message.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: todayStart }, role: 'user', mode: 'chat' },
+      }),
+      prisma.user.count({
+        where: {
+          createdAt: { gte: todayStart },
+          messages: { some: { createdAt: { gte: todayStart }, role: 'user', mode: 'chat' } },
+        },
+      }),
+      // Платный чат больше не пишется с mode:'think' — все сообщения mode:'chat'.
+      // Факт оплаты — отрицательная транзакция с reason = id модели из реестра.
+      prisma.casperTransaction.count({
+        where: { createdAt: { gte: todayStart }, amount: { lt: 0 }, reason: { in: chatModelIds } },
+      }),
       prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'vision' } }),
       prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'sound' } }),
       prisma.generateJob.count({ where: { createdAt: { gte: todayStart }, mode: 'reel' } }),
@@ -323,6 +344,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       newThisMonth,
       messagesToday,
       chatToday,
+      chatUsersToday: chatUserRows.length,
+      newUsersChatted,
       proChatToday,
       imagesToday,
       musicToday,

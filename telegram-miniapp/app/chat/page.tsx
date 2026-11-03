@@ -178,7 +178,7 @@ function ChatApp() {
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const [chatId, setChatId] = useState<string | null>(null);
-  const [model, setModel] = useState<ModelChoice>(undefined);
+  const [model, setModel] = useState<ModelChoice>('haiku');
   const [modelOpen, setModelOpen] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('chat');
   const [generatingVideo, setGeneratingVideo] = useState(false);
@@ -771,9 +771,14 @@ function ChatApp() {
       : historyBase;
 
     const token = getToken() ?? '';
+    // id из реестра бэкенда. «Стандарт» — бесплатная модель, «Авто» — платный
+    // диспетчер. Раньше оба уходили как preferredModel/пусто и резолвились в auto,
+    // поэтому первое сообщение при нулевом балансе не сохранялось.
+    const chatModelId = model === 'deepseek' ? 'deepseek-v3.2' : model === 'haiku' ? 'llama-3.1-fast' : 'auto';
     wsRef.current?.send(JSON.stringify({
       chatId: activeChatId,
       mode: 'chat',
+      model: chatModelId,
       prompt: prompt || (fileName ? `[Файл: ${fileName}]` : ''),
       history,
       jwt: token,

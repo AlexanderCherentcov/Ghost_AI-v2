@@ -624,7 +624,7 @@ export default function ChatPage() {
                   <ModelDiscoveryRow
                     title="Чат"
                     domain="chat"
-                    items={models.chat.filter((m) => m.id !== 'llama-3.1-fast')}
+                    items={models.chat}
                     onPick={(id) => pickModel('chat', id)}
                     onDetails={(item) => setDetailsItem({ item, domain: 'chat' })}
                   />

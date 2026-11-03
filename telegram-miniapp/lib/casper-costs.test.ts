@@ -9,9 +9,9 @@ describe('videoDurationToBackend', () => {
 });
 
 describe('calcCasperCost', () => {
-  it('обычный чат бесплатный, Про-чат стоит chat_pro', () => {
+  it('стандартный чат бесплатный, «Авто» и Про стоят минимум chat_pro', () => {
     expect(calcCasperCost('chat', 'haiku', 5, DEFAULT_CASPER_COSTS)).toBe(0);
-    expect(calcCasperCost('chat', undefined, 5, DEFAULT_CASPER_COSTS)).toBe(0);
+    expect(calcCasperCost('chat', undefined, 5, DEFAULT_CASPER_COSTS)).toBe(DEFAULT_CASPER_COSTS.chat_pro);
     expect(calcCasperCost('chat', 'deepseek', 5, DEFAULT_CASPER_COSTS)).toBe(DEFAULT_CASPER_COSTS.chat_pro);
   });
 

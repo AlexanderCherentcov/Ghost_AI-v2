@@ -751,16 +751,20 @@ async function sendChatModelSettings(ctx: Context, session: UserSession, edit: b
   for (const m of models) {
     const locked = m.id !== 'auto' && !planAtLeast(plan, m.minPlan);
     const mark = session.chatModel === m.id ? '✅ ' : '';
-    const priceTag = m.id === 'auto' ? '✨' : locked ? `🔒${m.minPlan}` : m.cost > 0 ? `${m.cost}👻` : '';
-    kb.text(`${mark}${m.label}${priceTag ? ` · ${priceTag}` : ''}`, `cm:model:${m.id}`).row();
+    const priceTag = m.id === 'auto'
+      ? `от ${m.cost}👻`
+      : locked ? `🔒${m.minPlan}` : m.cost > 0 ? `${m.cost}👻` : 'бесплатно';
+    kb.text(`${mark}${m.label} · ${priceTag}`, `cm:model:${m.id}`).row();
   }
   kb.text('✅ Готово', 'cm:close');
 
   const current = models.find((m) => m.id === session.chatModel);
+  const autoCost = models.find((m) => m.id === 'auto')?.cost ?? 1;
   const text =
     `🧩 <b>Модель чата</b>\n\n` +
-    `Сейчас: <b>${current?.label ?? 'Авто'}</b>${current?.blurb ? ` — ${current.blurb}` : ''}\n\n` +
-    `«Авто» сама подбирает модель под сложность запроса и экономит Caspers. Выбранная явно модель — это всегда именно она, без подмены.`;
+    `Сейчас: <b>${current?.label ?? 'Стандартный чат'}</b>${current?.blurb ? ` — ${current.blurb}` : ''}\n\n` +
+    `«Стандартный чат» — бесплатно.\n` +
+    `«Авто» подбирает модель под запрос, но стоит от ${autoCost} Caspers даже на простом вопросе.`;
 
   const extra = { parse_mode: 'HTML' as const, reply_markup: kb };
   if (edit) await editMessageOrIgnore(ctx, text, extra);

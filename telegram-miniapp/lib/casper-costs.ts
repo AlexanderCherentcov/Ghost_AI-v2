@@ -30,7 +30,12 @@ export function calcCasperCost(
   videoDurationSeconds: 5 | 10,
   costs: CasperCosts,
 ): number {
-  if (mode === 'chat') return model === 'deepseek' ? costs.chat_pro : 0;
+  // undefined — пункт «Авто»: на бэкенде это платный диспетчер (минимум chat_pro),
+  // даже если под капотом выбрана бесплатная модель. «Стандарт» (haiku) — 0.
+  if (mode === 'chat') {
+    if (model === 'deepseek' || model === undefined) return costs.chat_pro;
+    return 0;
+  }
   if (mode === 'images') return costs.image_generate;
   if (mode === 'music') return costs.music_generate;
   if (mode === 'video') {

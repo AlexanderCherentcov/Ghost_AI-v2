@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { resolveChatModel } from '../services/ai-router.js';
-import { AUTO_MODEL_ID, findChatModelByProviderModel, type ChatModelSpec } from '../config/models.js';
+import { findChatModelByProviderModel, type ChatModelSpec } from '../config/models.js';
+import { resolveLegacyModelId } from '../lib/legacy-chat-model.js';
 import { getTextCached, setTextCached, isShortPrompt } from '../services/cache.js';
 import { getVectorCached, setVectorCached } from '../services/vector-cache.js';
 import { checkResets, checkAndDeduct, refundCaspers, sanitizeInput } from '../services/tokens.js';
@@ -26,7 +27,7 @@ const createChatSchema = z.object({
 
 const wsMessageSchema = z.object({
   chatId: z.string(),
-  // id модели из реестра (config/models.ts), 'auto' по умолчанию.
+  // id модели из реестра. Если поля нет — см. resolveLegacyModelId.
   model: z.string().optional(),
   prompt: z.string().min(0).max(32000),
   // max(10) — фронтенд и так режет историю до последних 10 сообщений
@@ -52,11 +53,6 @@ const wsMessageSchema = z.object({
   fileLang: z.string().max(32).optional(),
 });
 
-/** Легаси mode/preferredModel → id модели из реестра. Убрать вместе со схемой выше. */
-function resolveLegacyModelId(mode?: 'chat' | 'think', preferredModel?: 'haiku' | 'deepseek'): string {
-  if (mode === 'think' || preferredModel === 'deepseek') return 'deepseek-v3.2';
-  return AUTO_MODEL_ID;
-}
 
 // ─── Плагин ───────────────────────────────────────────────────────────────────
 
@@ -575,7 +571,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
 
         // Отправляем пользователю сообщение (никогда не раскрываем детали провайдера/модели)
-        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: resolveChatErrorMessage(err.code, err.message) });
+        send({ type: 'error', code: err.code ?? 'SERVER_ERROR', message: resolveChatErrorMessage(err.code, err.message, modelId) });
       } finally {
         await releaseChatLock(userId).catch(() => {});
       }

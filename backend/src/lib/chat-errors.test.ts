@@ -34,6 +34,11 @@ describe('chat-errors — классификация кодов ошибок WS-
       .toBe('Недостаточно Caspers для про-сообщения');
   });
 
+  it('resolveChatErrorMessage: «Авто» без Caspers подсказывает бесплатный стандартный чат', () => {
+    expect(resolveChatErrorMessage('LIMIT_PRO_MESSAGES', 'Недостаточно Caspers', 'auto'))
+      .toContain('Стандартный чат');
+  });
+
   it('resolveChatErrorMessage: для лимита без текста — дефолт "Лимит исчерпан"', () => {
     expect(resolveChatErrorMessage('LIMIT_IMAGES', undefined)).toBe('Лимит исчерпан');
   });

@@ -297,6 +297,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       prisma.message.groupBy({
         by: ['userId'],
         where: { createdAt: { gte: todayStart }, role: 'user', mode: 'chat' },
+        orderBy: { userId: 'asc' },
       }),
       prisma.user.count({
         where: {

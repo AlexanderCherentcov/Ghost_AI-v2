@@ -23,8 +23,9 @@ export interface ChatMsg {
 
 // Id модели из реестра backend/src/config/models.ts — единственный источник правды.
 // Дефолты ниже совпадают с DEFAULT_* там же. Чат — бесплатный «Стандартный чат»
-// (llama-3.1-fast), не «Авто»: у нового пользователя 0 Caspers, а «Авто» списывает
-// минимум 1 и первое сообщение падает до записи в статистику.
+// (llama-3.1-fast = FREE_CHAT_MODEL_ID на бэкенде), не «Авто»: у нового
+// пользователя 0 Caspers, а «Авто» списывает минимум 1 и первое сообщение
+// падает до записи в статистику.
 export const FALLBACK_CHAT_MODEL_ID = 'llama-3.1-fast';
 export const FALLBACK_VIDEO_MODEL_ID = 'kling-v2.5';
 export const FALLBACK_IMAGE_MODEL_ID = 'gemini-flash-image';

@@ -8,8 +8,9 @@ interface ChatState {
   messages: Message[];
   isStreaming: boolean;
   streamContent: string;
-  // id модели чата из реестра. Дефолт — бесплатный llama-3.1-fast, не 'auto':
-  // «Авто» стоит минимум 1 Casper, а у нового пользователя баланс 0.
+  // id модели чата из реестра. Дефолт — бесплатный llama-3.1-fast
+  // (FREE_CHAT_MODEL_ID на бэкенде), не 'auto': «Авто» стоит минимум 1 Casper,
+  // а у нового пользователя баланс 0.
   // Персистится в localStorage — явный выбор переживает перезагрузку.
   model: string;
 

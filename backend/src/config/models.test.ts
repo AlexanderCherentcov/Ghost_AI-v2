@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CHAT_MODELS, IMAGE_MODELS, VIDEO_MODELS,
-  AUTO_MODEL_ID, DEFAULT_CHAT_MODEL_ID, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID,
+  AUTO_MODEL_ID, DEFAULT_CHAT_MODEL_ID, FREE_CHAT_MODEL_ID, DEFAULT_IMAGE_MODEL_ID, DEFAULT_VIDEO_MODEL_ID,
   findModel, autoEligibleChatModels,
 } from './models.js';
 
@@ -22,7 +22,11 @@ describe('реестр моделей — целостность id', () => {
   });
 
   it('дефолтные id ссылаются на реально существующие модели', () => {
-    expect(DEFAULT_CHAT_MODEL_ID).toBe(AUTO_MODEL_ID);
+    // Дефолт — бесплатный чат, не «Авто»: у нового пользователя 0 Caspers,
+    // а «Авто» всегда стоит минимум AUTO_MIN_COST.
+    expect(DEFAULT_CHAT_MODEL_ID).toBe(FREE_CHAT_MODEL_ID);
+    expect(DEFAULT_CHAT_MODEL_ID).not.toBe(AUTO_MODEL_ID);
+    expect(findModel('chat', DEFAULT_CHAT_MODEL_ID)?.cost).toBe(0);
     expect(findModel('image', DEFAULT_IMAGE_MODEL_ID)).toBeDefined();
     expect(findModel('video', DEFAULT_VIDEO_MODEL_ID)).toBeDefined();
   });

@@ -87,10 +87,11 @@ export function fmtStats(s: any): string {
   return (
     `📊 <b>Статистика GhostLine</b>\n\n` +
     `👥 Всего пользователей: <b>${s.totalUsers}</b>\n` +
-    `🆕 Новых сегодня: <b>${s.newToday}</b> · за месяц: <b>${s.newThisMonth}</b>\n\n` +
-    `📈 <b>Использование сегодня:</b>\n` +
-    `  💬 Чат: <b>${s.chatToday ?? 0}</b>\n` +
-    `  🧠 Про-чат: <b>${s.proChatToday ?? 0}</b>\n` +
+    `🆕 Новых сегодня: <b>${s.newToday}</b> · за месяц: <b>${s.newThisMonth}</b>\n` +
+    `💬 Из новых написали в чат: <b>${s.newUsersChatted ?? 0}</b> из <b>${s.newToday}</b>\n\n` +
+    `📈 <b>Использование сегодня (МСК):</b>\n` +
+    `  💬 Чат: <b>${s.chatToday ?? 0}</b> сообщ. · <b>${s.chatUsersToday ?? 0}</b> чел.\n` +
+    `  🧠 Платный чат: <b>${s.proChatToday ?? 0}</b>\n` +
     `  🖼 Картинки: <b>${s.imagesToday ?? 0}</b>\n` +
     `  🎵 Музыка: <b>${s.musicToday ?? 0}</b>\n` +
     `  🎬 Видео: <b>${s.videosToday ?? 0}</b>\n` +
@@ -100,7 +101,7 @@ export function fmtStats(s: any): string {
     `  За месяц: <b>${s.paymentsThisMonth}</b> · <b>${(s.revenueThisMonth ?? 0).toLocaleString('ru')} ₽</b>\n` +
     `  Всего: <b>${(s.revenueTotal ?? 0).toLocaleString('ru')} ₽</b>\n\n` +
     `📦 <b>Распределение планов:</b>\n${planLines}\n\n` +
-    `🕐 ${new Date().toLocaleTimeString('ru')}`
+    `🕐 ${new Date().toLocaleString('ru', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} МСК`
   );
 }
 

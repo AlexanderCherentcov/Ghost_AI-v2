@@ -48,11 +48,11 @@ export function ModelPill({
   const { triggerRef, panelRef, rect } = useFloatingPanel(open, 'up');
 
   useEffect(() => {
-    // llama-3.1-fast — бесплатная модель для «Авто», не показываем её отдельным
-    // именованным пунктом в списке выбора (не модель для явного выбора, а внутренний
-    // вариант диспетчера).
+    // «Стандартный чат» (llama-3.1-fast) — единственный бесплатный явный выбор.
+    // Прятать его нельзя: «Авто» платный, и без этого пункта новый пользователь
+    // с нулевым балансом не может отправить ни одного сообщения.
     api.payments.plans()
-      .then((data) => setOptions(data.models.chat.filter((m) => m.id !== 'llama-3.1-fast')))
+      .then((data) => setOptions(data.models.chat))
       .catch(() => {});
   }, []);
 
@@ -104,7 +104,7 @@ export function ModelPill({
               переносилось на 2-3 строки и ломало высоту пилюли. Пилюля теперь на мобильном
               стоит на своей отдельной строке тулбара (не делит ряд с кнопкой отправки),
               поэтому ширина здесь щедрее, чем раньше. */}
-          <span className="truncate max-w-[110px] sm:max-w-[160px]">{current?.label ?? 'GhostLine'}</span>
+          <span className="truncate max-w-[110px] sm:max-w-[160px]">{current?.label ?? (model === 'llama-3.1-fast' ? 'Стандартный чат' : 'GhostLine')}</span>
           {/* Цена/статус — пилюля теперь на своей строке, места хватает и на мобильном,
               прятать больше незачем. */}
           {current && <span className="flex flex-shrink-0 whitespace-nowrap">{costLabel(current)}</span>}

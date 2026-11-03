@@ -30,7 +30,16 @@ export function shouldRefundCaspers(code: string | undefined): boolean {
 }
 
 /** Текст, который увидит пользователь — точная причина для лимитов, иначе общий текст. */
-export function resolveChatErrorMessage(code: string | undefined, rawMessage: string | undefined): string {
+export function resolveChatErrorMessage(
+  code: string | undefined,
+  rawMessage: string | undefined,
+  requestedModel?: string,
+): string {
+  // «Авто» стоит минимум 1 Casper. Новый пользователь с нулевым балансом иначе
+  // видит голое «Недостаточно Caspers» и не узнаёт, что стандартный чат бесплатный.
+  if (code === 'LIMIT_PRO_MESSAGES' && requestedModel === 'auto') {
+    return 'Для «Авто» нужен хотя бы 1 Casper. Бесплатно доступен «Стандартный чат» — выберите его в списке моделей.';
+  }
   if (isChatLimitCode(code)) return rawMessage ?? 'Лимит исчерпан';
   return 'Сервера перегружены, попробуйте другую модель или повторите чуть позже';
 }

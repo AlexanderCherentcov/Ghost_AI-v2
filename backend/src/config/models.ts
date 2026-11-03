@@ -152,7 +152,13 @@ export type ModelSpec = ChatModelSpec | ImageModelSpec | VideoModelSpec;
 // в CHAT_MODELS не входит.
 
 export const AUTO_MODEL_ID = 'auto';
-export const DEFAULT_CHAT_MODEL_ID = AUTO_MODEL_ID;
+// Дефолт для нового диалога — бесплатный «Стандартный чат», не «Авто».
+// «Авто» списывает AUTO_MIN_COST даже когда под капотом выбрана бесплатная Llama,
+// а приветственный баланс новых пользователей — 0. Если дефолт оставить «Авто»,
+// первое сообщение падает с «Недостаточно Caspers» ещё до записи в историю,
+// и в статистике это выглядит как «зашёл и даже не попробовал чат».
+export const FREE_CHAT_MODEL_ID = 'llama-3.1-fast';
+export const DEFAULT_CHAT_MODEL_ID = FREE_CHAT_MODEL_ID;
 
 // «Авто» само по себе — платная функция диспетчеризации, не способ получить
 // стандартный чат бесплатно через чёрный ход. По прямому решению Александра:
@@ -173,7 +179,7 @@ export const CHAT_MODELS: ChatModelSpec[] = [
     // так что добавление сюда сразу даёт реальную защиту, а не декорацию:
     // Cloudflare → Llama 3.1 8B (OpenRouter) → Llama 3.3 70B (OpenRouter, другая
     // версия модели, с большей вероятностью не упадёт одновременно с первой).
-    id: 'llama-3.1-fast', domain: 'chat', label: 'Стандартный чат', blurb: 'Бесплатная модель', minPlan: 'FREE',
+    id: FREE_CHAT_MODEL_ID, domain: 'chat', label: 'Стандартный чат', blurb: 'Бесплатная модель', minPlan: 'FREE',
     provider: 'cloudflare', providerModel: '@cf/meta/llama-3.1-8b-instruct-fast',
     fallbackModels: ['meta-llama/llama-3.1-8b-instruct', 'meta-llama/llama-3.3-70b-instruct'],
     cost: 0, autoEligible: true, capabilities: {},

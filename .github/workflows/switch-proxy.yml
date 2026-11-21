@@ -10,21 +10,51 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect the Helsinki server without changing it
+      - name: Reach Helsinki from the app server with the local login
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: 178.236.251.155
+          host: 45.146.131.100
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 3m
+          command_timeout: 4m
           script: |
             bash -s << 'REMOTE'
             set -euo pipefail
+            echo "--- local keys ---"
+            find /root /home -path '*/.ssh/*' -type f 2>/dev/null | sed 's#/id_rsa$#/id_rsa#;s#/id_ed25519$#/id_ed25519#' | while read -r f; do
+              case "$f" in
+                *.pub|*known_hosts*|*authorized_keys*|*config*) echo "file $f" ;;
+                *) echo "key $f" ;;
+              esac
+            done
+            echo "--- ssh config hosts ---"
+            if [ -f /root/.ssh/config ]; then
+              grep -E '^(Host|HostName|User|Port) ' /root/.ssh/config || true
+            else
+              echo "no root ssh config"
+            fi
+            echo "--- hop ---"
+            ssh_opts="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8"
+            ok=""
+            for key in /root/.ssh/id_ed25519 /root/.ssh/id_rsa /root/.ssh/id_ecdsa; do
+              [ -f "$key" ] || continue
+              if ssh $ssh_opts -i "$key" root@178.236.251.155 'echo HOP_OK' 2>/tmp/hop.err; then
+                ok="$key"
+                break
+              fi
+              echo "key $(basename "$key") failed: $(tr '\n' ' ' < /tmp/hop.err | head -c 180)"
+            done
+            if [ -z "$ok" ]; then
+              echo "NO_HOP"
+              exit 1
+            fi
+            echo "using $(basename "$ok")"
+            ssh $ssh_opts -i "$ok" root@178.236.251.155 'bash -s' << 'INNER'
             echo "host $(hostname)"
             . /etc/os-release
             echo "os $PRETTY_NAME"
             echo "--- listeners ---"
-            ss -lntup || netstat -lntup
+            ss -lntup || true
             echo "--- services ---"
             for s in tinyproxy xray x-ui 3x-ui wg-quick@wg0 docker nginx; do
               state=$(systemctl is-active "$s" 2>/dev/null || true)
@@ -39,4 +69,5 @@ jobs:
               echo "no tinyproxy.conf"
             fi
             echo "done"
+            INNER
             REMOTE

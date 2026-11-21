@@ -24,6 +24,16 @@ async function setupTrialForNewUser(userId: string): Promise<void> {
   }).catch(() => {});
 }
 
+// create() возвращает строку ДО начисления бонуса. Если отдать её в ответ и в
+// уведомление админам, баланс остаётся 0, пока клиент не перечитает пользователя
+// (на сайте это происходит только после первого сообщения).
+async function finalizeNewUser(user: { id: string }, source: string, telegramUsername?: string | null) {
+  await setupTrialForNewUser(user.id);
+  const fresh = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+  notifyNewUser({ ...fresh, source, telegramUsername }).catch(() => {});
+  return fresh;
+}
+
 // ─── Схемы ─────────────────────────────────────────────────────────────────────
 
 const telegramWebAppSchema = z.object({
@@ -157,8 +167,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           // (в отличие от OAuth ниже). Пусть решает бот-гейт при первом /start.
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-webapp', telegramUsername: tgUser.username }).catch(() => {});
+      user = await finalizeNewUser(user, 'telegram-webapp', tgUser.username);
     }
 
     const tokens = await issueTokens(fastify, user.id);
@@ -223,8 +232,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           termsAcceptedAt: new Date(),
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'yandex' }).catch(() => {});
+      user = await finalizeNewUser(user, 'yandex');
     } else if (!user.yandexId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -297,8 +305,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           termsAcceptedAt: new Date(),
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'google' }).catch(() => {});
+      user = await finalizeNewUser(user, 'google');
     } else if (!user.googleId) {
       user = await prisma.user.update({
         where: { id: user.id },
@@ -333,8 +340,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: body.photo_url ?? null,
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-bot', telegramUsername: body.username }).catch(() => {});
+      user = await finalizeNewUser(user, 'telegram-bot', body.username);
     }
 
     const tokens = await issueTokens(fastify, user.id);
@@ -447,8 +453,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-verify', telegramUsername: fields.username }).catch(() => {});
+      user = await finalizeNewUser(user, 'telegram-verify', fields.username);
     }
 
     const tokens = await issueTokens(fastify, user.id);
@@ -497,8 +502,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           avatarUrl: fields.photo_url ?? null,
         },
       });
-      await setupTrialForNewUser(user.id);
-      notifyNewUser({ ...user, source: 'telegram-oauth', telegramUsername: fields.username }).catch(() => {});
+      user = await finalizeNewUser(user, 'telegram-oauth', fields.username);
     }
 
     const { accessToken, refreshToken } = await issueTokens(fastify, user.id);

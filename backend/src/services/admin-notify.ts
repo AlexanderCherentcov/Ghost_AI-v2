@@ -5,10 +5,7 @@
  * Fail-silent: никогда не бросает исключение — основной поток не должен ломаться, если Telegram недоступен.
  */
 
-import axios from 'axios';
-
-// Должен обходить HTTP_PROXY — глобальный прокси некорректно проксирует HTTPS (та же проблема, что и у YooKassa)
-const notifyAxios = axios.create({ proxy: false });
+import { callTelegramApi } from '../lib/telegram-api.js';
 
 const TOKEN  = process.env.ADMIN_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
 const ADMINS = (process.env.ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -17,11 +14,17 @@ type InlineKeyboard = { inline_keyboard: { text: string; callback_data: string }
 
 async function send(chatId: string, text: string, replyMarkup?: InlineKeyboard): Promise<void> {
   if (!TOKEN) return;
-  await notifyAxios.post(
-    `https://api.telegram.org/bot${TOKEN}/sendMessage`,
-    { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) },
-    { timeout: 5000 },
-  ).catch(err => console.error(`[AdminNotify] Failed to notify ${chatId}:`, err.message));
+  // Тот же прокси, что у grammY-ботов: прямой IP сервера Telegram режет.
+  await callTelegramApi(TOKEN, 'sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[AdminNotify] Failed to notify ${chatId}:`, message);
+  });
 }
 
 export async function notifyAdmins(text: string, replyMarkup?: InlineKeyboard): Promise<void> {
@@ -38,6 +41,7 @@ export async function notifyNewUser(user: {
   telegramUsername?: string | null;
   email: string | null;
   plan: string;
+  caspers_balance?: number;
   createdAt: Date;
   source?: string;
 }): Promise<void> {
@@ -51,6 +55,7 @@ export async function notifyNewUser(user: {
     `👤 ${name}${tg}${mail}\n` +
     `🆔 ID: <code>${user.id}</code>\n` +
     `📦 План: ${user.plan}\n` +
+    `👻 Caspers: <b>${user.caspers_balance ?? 0}</b>\n` +
     `🔑 Источник: ${src}`,
   );
 }

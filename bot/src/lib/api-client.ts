@@ -158,9 +158,9 @@ export async function startReelJob(
   return data.jobId;
 }
 
-// ─── Профиль и оплата ───────────────────────────────────────────────────────
-// Тот же GET /me и POST /payments/*, которыми пользуется сайт — бот не дублирует
-// логику тарифов/оплаты, только вызывает существующие эндпоинты от имени пользователя.
+// ─── Профиль ────────────────────────────────────────────────────────────────
+// Оплату бот больше не создаёт: Telegram запретил платежи в боте, ЮKassa
+// открывается только на сайте по одноразовой ссылке (см. mintMagicLink в bot.ts).
 
 export interface MeInfo {
   plan: string;
@@ -176,18 +176,6 @@ export interface MeInfo {
 export async function getMe(session: UserSession): Promise<MeInfo> {
   const { data } = await client(session).get('/me');
   return data;
-}
-
-/** Создаёт платёж за тариф и возвращает прямую ссылку на оплату ЮKassa. */
-export async function createPlanPayment(session: UserSession, plan: string, billing: 'monthly' | 'yearly' = 'monthly'): Promise<string> {
-  const { data } = await client(session).post('/payments/create', { plan, billing });
-  return data.paymentUrl;
-}
-
-/** Создаёт платёж на докупку Caspers и возвращает прямую ссылку на оплату ЮKassa. */
-export async function createCasperPayment(session: UserSession, amount: number): Promise<string> {
-  const { data } = await client(session).post('/payments/caspers/create', { amount });
-  return data.paymentUrl;
 }
 
 // ─── История списания/начисления Caspers (GET /payments/caspers/history) ────

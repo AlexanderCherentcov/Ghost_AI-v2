@@ -7,7 +7,7 @@ import {
 import {
   listChats, createChat, deleteChat, getChatMessages,
   startVisionJob, startSoundJob, startReelJob, pollJob, generateLyrics,
-  getMe, createPlanPayment, createCasperPayment, getModels, getCasperHistory, shareToGallery,
+  getMe, getModels, getCasperHistory, shareToGallery,
   type ChatModelOption, type ImageModelOption, type VideoModelOption,
 } from './lib/api-client.js';
 import { streamChat, ChatStreamError } from './lib/chat-ws.js';
@@ -230,6 +230,24 @@ const KB_MODE_MAP: Partial<Record<string, Mode>> = Object.fromEntries(
   (Object.keys(MODE_LABELS) as Mode[]).map((m) => [MODE_LABELS[m], m])
 );
 
+let freeChatDailyCache: { value: number; fetchedAt: number } | null = null;
+
+/** Дневной лимит бесплатного чата с /plans. null — бэкенд не ответил, цифру не выдумываем. */
+async function freeChatDailyLimit(): Promise<number | null> {
+  if (freeChatDailyCache && Date.now() - freeChatDailyCache.fetchedAt < 60_000) {
+    return freeChatDailyCache.value;
+  }
+  try {
+    const { data } = await api.get('/plans');
+    const daily = data?.free?.limits?.chat_daily;
+    if (typeof daily !== 'number') return null;
+    freeChatDailyCache = { value: daily, fetchedAt: Date.now() };
+    return daily;
+  } catch {
+    return null;
+  }
+}
+
 async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string | null; caspers: number }> {
   try {
     const res = await api.get('/bot/user-info', { params: { tgId: String(tgId) } });
@@ -239,11 +257,10 @@ async function getUserPlan(tgId: number): Promise<{ plan: string; dbName: string
   }
 }
 
-// ─── Magic-link авторизация (общая для /start auth и опции "промокод/год" в /plans) ───
-// Выпускает свежую пару access/refresh токенов и возвращает URL, который сразу
-// логинит пользователя на нужной странице сайта. Обычная покупка тарифа/Caspers
-// идёт напрямую через ЮKassa (см. buyCaspers/buy: callback) без захода на сайт —
-// сюда бот приводит только за тем, чего нет в самом боте (промокод, оплата за год).
+// ─── Вход на сайт без токенов в ссылке ──────────────────────────────────────
+// POST /auth/telegram-bot кладёт одноразовый код в Redis на 120 секунд.
+// В URL только этот код и внутренний путь — не JWT. Код сгорает при первом
+// открытии, чужой сайт в redirect отсекает safeRedirect на фронтенде.
 
 interface TgFrom {
   id: number;
@@ -285,9 +302,34 @@ function escHtml(s: string): string {
 async function sendStartWelcome(ctx: Context): Promise<void> {
   const tgName = ctx.from?.first_name ?? 'пользователь';
 
-  const { plan, dbName, caspers } = ctx.from
-    ? await getUserPlan(ctx.from.id)
-    : { plan: 'FREE', dbName: null, caspers: 0 };
+  let plan = 'FREE';
+  let dbName: string | null = null;
+  let caspers = 0;
+  let freeChatLine = '';
+
+  if (ctx.from) {
+    try {
+      // Сначала создаём пользователя, потом читаем /me — тот же баланс, что
+      // появится в заметке после сообщения, а не 0 из ещё не созданной строки.
+      const session = await ensureSession(ctx.from);
+      const [info, me] = await Promise.all([getUserPlan(ctx.from.id), getMe(session)]);
+      plan = me.plan || info.plan;
+      dbName = info.dbName;
+      caspers = me.caspers_balance;
+      if (plan === 'FREE') {
+        const daily = await freeChatDailyLimit();
+        if (daily != null) {
+          const left = Math.max(0, daily - me.std_messages_today);
+          freeChatLine = `\n💬 Бесплатный чат сегодня: <b>${left}</b> из ${daily}`;
+        }
+      }
+    } catch {
+      const info = await getUserPlan(ctx.from.id);
+      plan = info.plan;
+      dbName = info.dbName;
+      caspers = info.caspers;
+    }
+  }
 
   const displayName = escHtml(dbName ?? tgName);
   const planLabel   = PLAN_LABELS[plan] ?? plan;
@@ -304,7 +346,7 @@ async function sendStartWelcome(ctx: Context): Promise<void> {
     `Привет, <b>${displayName}</b>!\n` +
     `Я готов к работе. Задавай вопросы, создавай изображения или генерируй видео в едином потоке.\n\n` +
     `📦 Тариф: <b>${planLabel}</b>\n` +
-    `👻 Caspers: <b>${caspers}</b>`,
+    `👻 Caspers: <b>${caspers}</b>${freeChatLine}`,
     {
       parse_mode: 'HTML',
       reply_markup: keyboard,
@@ -375,11 +417,11 @@ async function sendHelp(ctx: Context): Promise<void> {
     `/settings — настройки текущего режима: модель чата/картинки, параметры видео (модель, разрешение, длительность...) или музыки (название, стиль, вокал/инструментал)\n` +
     `/balance — баланс Caspers, лимиты и цены на все операции\n` +
     `/history — история начислений и списаний Caspers\n` +
-    `/plans — тарифы, оплата сразу через ЮKassa\n` +
-    `/caspers <количество> — докупить Caspers\n` +
+    `/plans — тарифы, оплата на сайте\n` +
+    `/caspers — докупить Caspers на сайте\n` +
     `/promo <код> — активировать промокод на Caspers\n\n` +
     `*Режимы работы:*\n` +
-    `💬 Чат — текстовый диалог (модель выбирается в /settings, по умолчанию «Авто»)\n` +
+    `💬 Чат — текстовый диалог (модель выбирается в /settings, по умолчанию бесплатный «Стандартный чат»)\n` +
     `🎨 Картинка — генерация изображений\n` +
     `🎵 Музыка — генерация музыки\n` +
     `🎬 Видео — генерация видео\n\n` +
@@ -392,7 +434,32 @@ async function sendHelp(ctx: Context): Promise<void> {
 
 bot.command('help', sendHelp);
 
-// ─── /plans — тарифы, оплата сразу через ЮKassa ────────────────────────────────
+// ─── Оплата только на сайте ─────────────────────────────────────────────────
+// Telegram запретил платежи в боте. Ссылка — одноразовый код на /billing,
+// без JWT. Старые кнопки «Оплатить» и «N Caspers» в истории чата ведут сюда же.
+
+const BILLING_LINK_TEXT =
+  'Оплата проходит на сайте — Telegram больше не проводит платежи в боте.\n\n' +
+  'Кнопка действует 2 минуты, один раз входит в ваш аккаунт и повторно не откроется. Никому её не пересылайте.';
+
+async function sendBillingLink(ctx: Context, lead = BILLING_LINK_TEXT): Promise<void> {
+  if (!ctx.from) return;
+  let link: string | null = null;
+  try {
+    link = await mintMagicLink(ctx.from, '/billing');
+  } catch {
+    await ctx.reply('❌ Не удалось открыть оплату. Попробуйте ещё раз через минуту.');
+    return;
+  }
+  if (!link) {
+    await ctx.reply('⏳ Ссылка на оплату одноразовая. Подождите немного и откройте тарифы ещё раз.');
+    return;
+  }
+  await ctx.reply(lead, {
+    parse_mode: 'HTML',
+    reply_markup: new InlineKeyboard().url('💳 Оплатить на сайте', link),
+  });
+}
 
 async function sendPlans(ctx: Context): Promise<void> {
   if (!ctx.from) return;
@@ -404,19 +471,24 @@ async function sendPlans(ctx: Context): Promise<void> {
       return `${PLAN_LABELS[p.key] ?? p.key} — <b>${p.price.toLocaleString('ru')} ₽/мес</b> · ${p.caspers_monthly} Caspers/мес\n${featureLines}`;
     }).join('\n\n');
 
-    const kb = new InlineKeyboard();
-    for (const p of plans) {
-      kb.text(`💳 ${PLAN_LABELS[p.key] ?? p.key} — ${p.price.toLocaleString('ru')} ₽`, `buy:${p.key}`).row();
+    let link: string | null = null;
+    try {
+      link = await mintMagicLink(ctx.from, '/billing');
+    } catch {
+      link = null;
     }
-    // Промокод и оплата за год доступны только на сайте — не дублируем логику билинга в боте
-    const link = await mintMagicLink(ctx.from, '/billing');
-    if (link) kb.url('⚙️ Промокод / оплата за год', link);
+    const kb = link ? new InlineKeyboard().url('💳 Оплатить на сайте', link) : undefined;
+    const payNote = link
+      ? BILLING_LINK_TEXT
+      : 'Оплата проходит на сайте — Telegram больше не проводит платежи в боте.';
 
     await ctx.reply(
-      `📦 <b>Тарифы GhostLine</b>\n\n${lines}\n\n` +
-      `Выбери тариф — оплата сразу через ЮKassa, без входа на сайт:`,
-      { parse_mode: 'HTML', reply_markup: kb },
+      `📦 <b>Тарифы GhostLine</b>\n\n${lines}\n\n${payNote}`,
+      { parse_mode: 'HTML', ...(kb ? { reply_markup: kb } : {}) },
     );
+    if (!link) {
+      await ctx.reply('⏳ Не удалось выдать ссылку прямо сейчас. Подождите немного и откройте тарифы ещё раз.');
+    }
   } catch {
     await ctx.reply('❌ Не удалось загрузить тарифы. Попробуйте позже.');
   }
@@ -428,73 +500,19 @@ bot.callbackQuery('show_plans', async (ctx) => {
   await sendPlans(ctx);
 });
 
-bot.callbackQuery(/^buy:([A-Z]+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery('Формирую ссылку на оплату...');
-  if (!ctx.from) return;
-  const plan = ctx.match[1];
-  try {
-    const session = await ensureSession(ctx.from);
-    const paymentUrl = await createPlanPayment(session, plan, 'monthly');
-    await ctx.reply(
-      `💳 Оплата тарифа <b>${PLAN_LABELS[plan] ?? plan}</b> — жми кнопку, откроется ЮKassa:`,
-      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().url('💳 Оплатить через ЮKassa', paymentUrl) },
-    );
-  } catch (err: any) {
-    const msg = apiErrorMessage(err, 'Не удалось создать платёж. Попробуй позже.');
-    await ctx.reply(`❌ ${msg}`);
-  }
+bot.callbackQuery(/^buy:([A-Z_]+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendBillingLink(ctx);
 });
 
-// ─── /caspers — докупить Caspers, оплата сразу через ЮKassa ────────────────────
-
-const CASPER_PRESETS = [100, 300, 500, 1000];
-
-async function sendCaspersMenu(ctx: Context): Promise<void> {
-  const kb = new InlineKeyboard();
-  CASPER_PRESETS.forEach((amount, i) => {
-    kb.text(`${amount} Caspers`, `caspers:${amount}`);
-    if (i % 2 === 1) kb.row();
-  });
-  await ctx.reply(
-    '👻 Сколько Caspers докупить? (доступно с активной подпиской)\n\n' +
-    'Своё количество — просто напиши: /caspers 250',
-    { reply_markup: kb },
-  );
-}
-
 bot.command('caspers', async (ctx) => {
-  const argText = (ctx.match ?? '').trim();
-  if (argText) {
-    const amount = parseInt(argText, 10);
-    if (!Number.isFinite(amount) || amount < 10 || amount > 1000) {
-      await ctx.reply('❌ Количество Caspers — от 10 до 1000. Пример: /caspers 250');
-      return;
-    }
-    await buyCaspers(ctx, amount);
-    return;
-  }
-  await sendCaspersMenu(ctx);
+  await sendBillingLink(ctx, `👻 Докупка Caspers — на сайте, в том же разделе, что и тарифы.\n\n${BILLING_LINK_TEXT}`);
 });
 
 bot.callbackQuery(/^caspers:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
-  await buyCaspers(ctx, Number(ctx.match[1]));
+  await sendBillingLink(ctx, `👻 Докупка Caspers — на сайте, в том же разделе, что и тарифы.\n\n${BILLING_LINK_TEXT}`);
 });
-
-async function buyCaspers(ctx: Context, amount: number): Promise<void> {
-  if (!ctx.from) return;
-  try {
-    const session = await ensureSession(ctx.from);
-    const paymentUrl = await createCasperPayment(session, amount);
-    await ctx.reply(
-      `💳 Докупка <b>${amount}</b> Caspers — жми кнопку, откроется ЮKassa:`,
-      { parse_mode: 'HTML', reply_markup: new InlineKeyboard().url('💳 Оплатить через ЮKassa', paymentUrl) },
-    );
-  } catch (err: any) {
-    const msg = apiErrorMessage(err, 'Не удалось создать платёж. Попробуй позже.');
-    await ctx.reply(`❌ ${msg}`);
-  }
-}
 
 // ─── /balance — баланс Caspers и лимиты ────────────────────────────────────────
 
@@ -508,7 +526,7 @@ async function casperPriceList(): Promise<string> {
     const range = (arr: number[]) => arr.length ? (Math.min(...arr) === Math.max(...arr) ? `${arr[0]}` : `${Math.min(...arr)}–${Math.max(...arr)}`) : '?';
     return (
       `\n\n💰 <b>Цены в Caspers:</b>\n` +
-      `💬 Чат — ${range(chatCosts)} / сообщ. (зависит от модели, «Авто» бесплатнее)\n` +
+      `💬 Чат — ${range(chatCosts)} / сообщ. (стандартный чат бесплатный)\n` +
       `🎨 Картинка — ${range(imageCosts)} / шт (зависит от модели)\n` +
       `🎵 Музыка — ${costs.music_generate ?? '?'} / трек\n` +
       `🎬 Видео — ${range(videoCosts)} (зависит от модели и длительности)`
@@ -516,6 +534,14 @@ async function casperPriceList(): Promise<string> {
   } catch {
     return '';
   }
+}
+
+async function freeChatBalanceLine(me: { plan: string; std_messages_today: number }): Promise<string> {
+  if (me.plan !== 'FREE') return `💬 Сообщений стандартного чата: ${me.std_messages_today}`;
+  const daily = await freeChatDailyLimit();
+  if (daily == null) return `💬 Сообщений стандартного чата сегодня: ${me.std_messages_today}`;
+  const left = Math.max(0, daily - me.std_messages_today);
+  return `💬 Бесплатный чат сегодня: ${left} из ${daily}`;
 }
 
 async function sendBalance(ctx: Context): Promise<void> {
@@ -531,7 +557,7 @@ async function sendBalance(ctx: Context): Promise<void> {
       `📦 Тариф: <b>${planLabel}</b>\n` +
       `👻 Caspers: <b>${me.caspers_balance.toLocaleString('ru')}</b>` +
       (isFree ? '' : ` (+${me.caspers_monthly.toLocaleString('ru')}/мес)`) +
-      `\n\n📊 <b>Сегодня:</b>\n💬 Бесплатных сообщений: ${me.std_messages_today}\n💎 Платных моделей: ${me.pro_messages_today}`;
+      `\n\n📊 <b>Сегодня:</b>\n${await freeChatBalanceLine(me)}\n💎 Платных моделей: ${me.pro_messages_today}`;
 
     if (isFree) {
       text +=
@@ -616,7 +642,7 @@ bot.callbackQuery(/^hist:page:(\d+)$/, async (ctx) => {
 bot.command('balance', sendBalance);
 bot.callbackQuery('show_caspers', async (ctx) => {
   await ctx.answerCallbackQuery();
-  await sendCaspersMenu(ctx);
+  await sendBillingLink(ctx, `👻 Докупка Caspers — на сайте, в том же разделе, что и тарифы.\n\n${BILLING_LINK_TEXT}`);
 });
 
 // ─── /promo ────────────────────────────────────────────────────────────────────
@@ -1660,8 +1686,8 @@ async function registerCommands(): Promise<void> {
     { command: 'mode',    description: 'Сменить режим текущего диалога' },
     { command: 'settings', description: 'Настройки видео/музыки' },
     { command: 'balance', description: 'Баланс Caspers и лимиты' },
-    { command: 'plans',   description: 'Тарифы — оплата через ЮKassa' },
-    { command: 'caspers', description: 'Докупить Caspers' },
+    { command: 'plans',   description: 'Тарифы — оплата на сайте' },
+    { command: 'caspers', description: 'Докупить Caspers на сайте' },
     { command: 'promo',   description: 'Активировать промокод' },
   ]);
 }

@@ -35,6 +35,9 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     if (loadedChatsForRef.current === user.id) return; // уже загружено для этого пользователя
     loadedChatsForRef.current = user.id;
     api.chats.list().then(({ chats }) => setChats(chats)).catch(() => {});
+    // Логин кладёт в стор снимок пользователя до начисления баланса. Без этого
+    // сайдбар показывает 0, пока не отправится первое сообщение (там свой refreshUser).
+    void useAuthStore.getState().refreshUser();
   }, [user?.id, accessToken]);
 
   // ── Telegram Mini App: сигнал готовности + разворачивание на весь экран ──

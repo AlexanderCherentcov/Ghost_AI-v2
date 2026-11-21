@@ -26,13 +26,34 @@ jobs:
             cid=$(docker compose ps -q backend)
             docker inspect -f 'started={{.State.StartedAt}} image={{.Config.Image}}' "$cid"
             echo "--- telegram log lines ---"
-            docker logs --since 2026-11-20T19:00:00Z "$cid" 2>&1 | grep -E 'AdminNotify|Bot API via proxy|Telegram API' | sed -E 's/bot[0-9]+:[A-Za-z0-9_-]+/bot***/g' | tail -n 80
-            echo "--- log count ---"
-            docker logs --since 2026-11-20T19:00:00Z "$cid" 2>&1 | grep -c 'AdminNotify' || true
+            docker logs --since 2026-11-20T19:00:00Z "$cid" 2>&1 | grep -E 'AdminNotify|Bot API via proxy|Telegram API' | sed -E 's/bot[0-9]+:[A-Za-z0-9_-]+/bot***/g' | tail -n 40 || true
             echo "--- users created since 21 Nov 00:00 YEKT ---"
-            set -a
-            # shellcheck disable=SC1091
-            . ./.env
-            set +a
-            docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_char(\"createdAt\" AT TIME ZONE 'Asia/Yekaterinburg', 'YYYY-MM-DD HH24:MI') AS created_yekt, plan, (\"telegramId\" IS NOT NULL) AS has_tg, (email IS NOT NULL) AS has_mail FROM \"User\" WHERE \"createdAt\" >= '2026-11-20 19:00:00+00' ORDER BY \"createdAt\";"
+            python3 - << 'PY'
+            import os, subprocess
+            from pathlib import Path
+            env = {}
+            for raw in Path(".env").read_text().splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip().strip('"').strip("'")
+            sql = """
+            SELECT to_char("createdAt" AT TIME ZONE 'Asia/Yekaterinburg', 'YYYY-MM-DD HH24:MI') AS created_yekt,
+                   plan,
+                   ("telegramId" IS NOT NULL) AS has_tg,
+                   (email IS NOT NULL) AS has_mail,
+                   ("createdAt" < '2026-11-21 06:16:47+00') AS before_restart
+            FROM "User"
+            WHERE "createdAt" >= '2026-11-20 19:00:00+00'
+            ORDER BY "createdAt";
+            """
+            proc = subprocess.run(
+                ["docker", "compose", "exec", "-T", "postgres", "psql", "-U", env["POSTGRES_USER"], "-d", env["POSTGRES_DB"], "-c", sql],
+                capture_output=True, text=True,
+            )
+            print(proc.stdout)
+            print(proc.stderr[-400:])
+            raise SystemExit(proc.returncode)
+            PY
             REMOTE

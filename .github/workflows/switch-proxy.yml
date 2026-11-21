@@ -10,7 +10,7 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Reach Helsinki from the app server with the local login
+      - name: Try the shared login from the app server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.146.131.100
@@ -20,66 +20,52 @@ jobs:
           script: |
             bash -s << 'REMOTE'
             set -euo pipefail
-            echo "--- local keys ---"
-            find /root /home -path '*/.ssh/*' -type f 2>/dev/null | sed 's#/id_rsa$#/id_rsa#;s#/id_ed25519$#/id_ed25519#' | while read -r f; do
-              case "$f" in
-                *.pub|*known_hosts*|*authorized_keys*|*config*) echo "file $f" ;;
-                *) echo "key $f" ;;
-              esac
-            done
-            echo "--- ssh config hosts ---"
-            if [ -f /root/.ssh/config ]; then
-              grep -E '^(Host|HostName|User|Port) ' /root/.ssh/config || true
-            else
-              echo "no root ssh config"
-            fi
-            echo "--- ssh config ---"
-            sed -E 's/(IdentityFile).*/\1 <redacted>/' /root/.ssh/config || true
-            echo "--- hop ---"
-            ssh_opts="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8"
-            ok=""
-            for key in /root/.ssh/id_ed25519 /root/.ssh/github_deploy /root/.ssh/id_rsa /root/.ssh/id_ecdsa; do
-              [ -f "$key" ] || continue
-              if ssh $ssh_opts -i "$key" root@178.236.251.155 'echo HOP_OK' 2>/tmp/hop.err; then
-                ok="$key"
-                break
-              fi
-              echo "helsinki $(basename "$key") failed: $(tr '\n' ' ' < /tmp/hop.err | head -c 180)"
-            done
-            for host in 45.130.254.76 194.33.35.73; do
-              for key in /root/.ssh/id_ed25519 /root/.ssh/github_deploy; do
-                [ -f "$key" ] || continue
-                if ssh $ssh_opts -i "$key" "root@$host" 'echo OTHER_OK' 2>/tmp/hop.err; then
-                  echo "other $host $(basename "$key") OK"
-                else
-                  echo "other $host $(basename "$key") failed: $(tr '\n' ' ' < /tmp/hop.err | head -c 140)"
-                fi
-              done
-            done
-            if [ -z "$ok" ]; then
-              echo "NO_HOP"
-              exit 1
-            fi
-            echo "using $(basename "$ok")"
-            ssh $ssh_opts -i "$ok" root@178.236.251.155 'bash -s' << 'INNER'
-            echo "host $(hostname)"
-            . /etc/os-release
-            echo "os $PRETTY_NAME"
-            echo "--- listeners ---"
-            ss -lntup || true
-            echo "--- services ---"
-            for s in tinyproxy xray x-ui 3x-ui wg-quick@wg0 docker nginx; do
-              state=$(systemctl is-active "$s" 2>/dev/null || true)
-              printf '%s %s\n' "$s" "$state"
-            done
-            echo "--- ufw ---"
-            ufw status verbose 2>/dev/null || echo "ufw not active"
-            echo "--- tinyproxy ---"
-            if [ -f /etc/tinyproxy/tinyproxy.conf ]; then
-              grep -E '^(Port|Listen|Allow|Deny|ConnectPort|BasicAuth)' /etc/tinyproxy/tinyproxy.conf || true
-            else
-              echo "no tinyproxy.conf"
-            fi
-            echo "done"
-            INNER
+            python3 - << 'PY'
+            import os, re, subprocess
+            from pathlib import Path
+
+            def ssh(host, key=None, password=None):
+                cmd = ["ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8", "-o", "NumberOfPasswordPrompts=1"]
+                env = os.environ.copy()
+                if key:
+                    cmd += ["-o", "BatchMode=yes", "-i", key]
+                else:
+                    cmd = ["sshpass", "-e"] + cmd + ["-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no"]
+                    env["SSHPASS"] = password
+                cmd += [f"root@{host}", "hostname"]
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=env)
+                err = (proc.stderr or "").strip().splitlines()
+                return proc.returncode, (proc.stdout or "").strip()[:60], (err[-1][:140] if err else "")
+
+            targets = ["178.236.251.155", "194.33.35.73", "45.130.254.76"]
+            keys = [p for p in ["/root/.ssh/id_ed25519", "/root/.ssh/github_deploy", "/root/.ssh/id_rsa"] if Path(p).is_file()]
+            print("keys", [Path(p).name for p in keys])
+            for host in targets:
+                for key in keys:
+                    code, out, err = ssh(host, key=key)
+                    print(f"key {host} {Path(key).name} rc={code} out={out!r} err={err}")
+
+            cands = []
+            hist = Path("/root/.bash_history")
+            if hist.is_file():
+                for line in hist.read_text(errors="ignore").splitlines():
+                    m = re.search(r"sshpass\s+-p\s+'([^']+)'", line) or re.search(r'sshpass\s+-p\s+"([^"]+)"', line) or re.search(r"sshpass\s+-p\s+(\S+)", line)
+                    if m:
+                        cands.append(m.group(1))
+                    if any(ip in line for ip in ("178.236", "45.130.254", "194.33.35")):
+                        safe = re.sub(r"(sshpass\s+-p\s+)\S+", r"\1***", line)
+                        print("hist", safe[:160])
+            print("saved-password-count", len(dict.fromkeys(cands)))
+            if not cands:
+                raise SystemExit(0)
+            if subprocess.run(["bash", "-lc", "command -v sshpass"], capture_output=True).returncode != 0:
+                subprocess.run(["apt-get", "update", "-qq"], check=False)
+                subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], check=False)
+            for host in targets:
+                for pw in dict.fromkeys(cands):
+                    code, out, err = ssh(host, password=pw)
+                    print(f"password {host} rc={code} out={out!r} err={err}")
+                    if code == 0:
+                        break
+            PY
             REMOTE

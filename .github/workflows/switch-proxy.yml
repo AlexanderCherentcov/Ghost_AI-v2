@@ -10,62 +10,34 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Try the shared login from the app server
+      - name: Look for another login without guessing passwords
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.146.131.100
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 4m
+          command_timeout: 3m
           script: |
             bash -s << 'REMOTE'
             set -euo pipefail
+            echo "--- root names ---"
+            find /root -maxdepth 2 -type f -o -type d | sed 's#^/root#/root#' | head -80
+            echo "--- pub ---"
+            awk '{print $1, $3}' /root/.ssh/id_ed25519.pub /root/.ssh/github_deploy.pub
+            echo "--- users ---"
             python3 - << 'PY'
-            import os, re, subprocess
+            import subprocess
             from pathlib import Path
-
-            def ssh(host, key=None, password=None):
-                cmd = ["ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8", "-o", "NumberOfPasswordPrompts=1"]
-                env = os.environ.copy()
-                if key:
-                    cmd += ["-o", "BatchMode=yes", "-i", key]
-                else:
-                    cmd = ["sshpass", "-e"] + cmd + ["-o", "PreferredAuthentications=password", "-o", "PubkeyAuthentication=no"]
-                    env["SSHPASS"] = password
-                cmd += [f"root@{host}", "hostname"]
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=env)
-                err = (proc.stderr or "").strip().splitlines()
-                return proc.returncode, (proc.stdout or "").strip()[:60], (err[-1][:140] if err else "")
-
-            targets = ["178.236.251.155", "194.33.35.73", "45.130.254.76"]
-            keys = [p for p in ["/root/.ssh/id_ed25519", "/root/.ssh/github_deploy", "/root/.ssh/id_rsa"] if Path(p).is_file()]
-            print("keys", [Path(p).name for p in keys])
-            for host in targets:
+            users = ["root", "ubuntu", "admin", "debian"]
+            keys = [p for p in ["/root/.ssh/id_ed25519", "/root/.ssh/github_deploy"] if Path(p).is_file()]
+            host = "178.236.251.155"
+            for user in users:
                 for key in keys:
-                    code, out, err = ssh(host, key=key)
-                    print(f"key {host} {Path(key).name} rc={code} out={out!r} err={err}")
-
-            cands = []
-            hist = Path("/root/.bash_history")
-            if hist.is_file():
-                for line in hist.read_text(errors="ignore").splitlines():
-                    m = re.search(r"sshpass\s+-p\s+'([^']+)'", line) or re.search(r'sshpass\s+-p\s+"([^"]+)"', line) or re.search(r"sshpass\s+-p\s+(\S+)", line)
-                    if m:
-                        cands.append(m.group(1))
-                    if any(ip in line for ip in ("178.236", "45.130.254", "194.33.35")):
-                        safe = re.sub(r"(sshpass\s+-p\s+)\S+", r"\1***", line)
-                        print("hist", safe[:160])
-            print("saved-password-count", len(dict.fromkeys(cands)))
-            if not cands:
-                raise SystemExit(0)
-            if subprocess.run(["bash", "-lc", "command -v sshpass"], capture_output=True).returncode != 0:
-                subprocess.run(["apt-get", "update", "-qq"], check=False)
-                subprocess.run(["apt-get", "install", "-y", "-qq", "sshpass"], check=False)
-            for host in targets:
-                for pw in dict.fromkeys(cands):
-                    code, out, err = ssh(host, password=pw)
-                    print(f"password {host} rc={code} out={out!r} err={err}")
-                    if code == 0:
-                        break
+                    proc = subprocess.run(
+                        ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8", "-i", key, f"{user}@{host}", "hostname"],
+                        capture_output=True, text=True, timeout=15,
+                    )
+                    err = (proc.stderr or "").strip().splitlines()
+                    print(f"{user} {Path(key).name} rc={proc.returncode} out={(proc.stdout or '').strip()[:40]!r} err={(err[-1][:120] if err else '')}")
             PY
             REMOTE

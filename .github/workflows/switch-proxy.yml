@@ -10,34 +10,41 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Look for another login without guessing passwords
+      - name: Read the proxy backup and the public key
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.146.131.100
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 3m
+          command_timeout: 2m
           script: |
             bash -s << 'REMOTE'
             set -euo pipefail
-            echo "--- root names ---"
-            find /root -maxdepth 2 -type f -o -type d | sed 's#^/root#/root#' | head -80
-            echo "--- pub ---"
-            awk '{print $1, $3}' /root/.ssh/id_ed25519.pub /root/.ssh/github_deploy.pub
-            echo "--- users ---"
+            echo "--- backup dir ---"
+            find /root/backup-20260920 -maxdepth 2 -type f -printf '%p\n'
+            echo "--- proxy lines ---"
             python3 - << 'PY'
-            import subprocess
+            import re
             from pathlib import Path
-            users = ["root", "ubuntu", "admin", "debian"]
-            keys = [p for p in ["/root/.ssh/id_ed25519", "/root/.ssh/github_deploy"] if Path(p).is_file()]
-            host = "178.236.251.155"
-            for user in users:
-                for key in keys:
-                    proc = subprocess.run(
-                        ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=8", "-i", key, f"{user}@{host}", "hostname"],
-                        capture_output=True, text=True, timeout=15,
-                    )
-                    err = (proc.stderr or "").strip().splitlines()
-                    print(f"{user} {Path(key).name} rc={proc.returncode} out={(proc.stdout or '').strip()[:40]!r} err={(err[-1][:120] if err else '')}")
+            paths = list(Path("/root/backup-20260920").rglob("*"))
+            paths += [Path("/root/ghostline_v2/infra/.env"), Path("/root/ghostline_v2/.env")]
+            for path in paths:
+                if not path.is_file():
+                    continue
+                try:
+                    text = path.read_text(errors="ignore")
+                except Exception:
+                    continue
+                for line in text.splitlines():
+                    if "PROXY" in line or line.startswith("Allow ") or "178.236" in line or "45.130" in line or "194.33" in line:
+                        safe = re.sub(r"://([^:/@]+):[^@/]+@", r"://\1:***@", line)
+                        if "PASS" in safe.upper() or "SECRET" in safe.upper() or "TOKEN" in safe.upper() or "KEY" in safe.upper():
+                            if "PROXY" not in safe:
+                                continue
+                        print(f"{path}: {safe[:200]}")
             PY
+            echo "--- pubkey ---"
+            cat /root/.ssh/id_ed25519.pub
+            echo "--- ufw backup head ---"
+            sed -n '1,40p' /root/backup-20260920/ufw-before.txt 2>/dev/null || true
             REMOTE

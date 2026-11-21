@@ -1,0 +1,42 @@
+name: Switch Telegram proxy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/switch-proxy.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect the Helsinki server without changing it
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 178.236.251.155
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 3m
+          script: |
+            bash -s << 'REMOTE'
+            set -euo pipefail
+            echo "host $(hostname)"
+            . /etc/os-release
+            echo "os $PRETTY_NAME"
+            echo "--- listeners ---"
+            ss -lntup || netstat -lntup
+            echo "--- services ---"
+            for s in tinyproxy xray x-ui 3x-ui wg-quick@wg0 docker nginx; do
+              state=$(systemctl is-active "$s" 2>/dev/null || true)
+              printf '%s %s\n' "$s" "$state"
+            done
+            echo "--- ufw ---"
+            ufw status verbose 2>/dev/null || echo "ufw not active"
+            echo "--- tinyproxy ---"
+            if [ -f /etc/tinyproxy/tinyproxy.conf ]; then
+              grep -E '^(Port|Listen|Allow|Deny|ConnectPort|BasicAuth)' /etc/tinyproxy/tinyproxy.conf || true
+            else
+              echo "no tinyproxy.conf"
+            fi
+            echo "done"
+            REMOTE

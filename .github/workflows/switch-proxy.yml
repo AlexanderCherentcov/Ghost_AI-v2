@@ -1,7 +1,7 @@
 name: Switch Telegram proxy
 
-# Одноразовый запуск: меняет хост HTTPS_PROXY на сервере и шлёт тест в админ-чат.
-# Файл удаляется следующим коммитом, чтобы не оставаться в репозитории.
+# Одноразовый запуск: проверяет новый прокси с боевого сервера и, если путь живой,
+# переключает HTTPS_PROXY и шлёт тест в админ-чат.
 on:
   push:
     branches: [master]
@@ -12,169 +12,149 @@ jobs:
   switch:
     runs-on: ubuntu-latest
     steps:
-      - name: Point the proxy at 178.236.251.155 and send a test message
+      - name: Reach 178.236.251.155 from the app server and send a test
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.146.131.100
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 20m
+          command_timeout: 10m
           script: |
             bash -s << 'REMOTE'
             set -euo pipefail
-            echo "Waiting until the image build from the other deploy is finished"
-            for i in $(seq 1 90); do
-              if ps -eo args | grep -E '[d]ocker compose build|[d]ocker-buildx|[d]ocker buildx build' >/dev/null; then
-                echo "build still running ($i)"
-                sleep 10
-              else
-                break
-              fi
-            done
             python3 - << 'PY'
             from __future__ import annotations
-            import json, re, subprocess
+            import json, re, socket, subprocess
             from pathlib import Path
             from urllib.parse import urlsplit, urlunsplit
 
             NEW_HOST = "178.236.251.155"
+            OLD_HOST = "194.33.35.73"
             ROOT = Path("/root/ghostline_v2")
 
             def mask(url: str) -> str:
                 return re.sub(r"://([^:/@]+):[^@/]*@", r"://\1:***@", url)
 
-            def load_env(path: Path) -> dict[str, str]:
-                env: dict[str, str] = {}
-                for raw in path.read_text().splitlines():
-                    line = raw.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, value = line.split("=", 1)
-                    env[key.strip()] = value.strip().strip('"').strip("'")
-                return env
+            def tcp(host: str, port: int, timeout: float = 5) -> str:
+                sock = socket.socket()
+                sock.settimeout(timeout)
+                try:
+                    sock.connect((host, port))
+                    return "open"
+                except Exception as exc:
+                    return type(exc).__name__
+                finally:
+                    sock.close()
+
+            print("route", subprocess.check_output(["ip", "route", "get", NEW_HOST], text=True).strip())
+            for port in (22, 80, 443, 8888, 3128, 8080, 8443):
+                print(f"tcp {NEW_HOST}:{port} {tcp(NEW_HOST, port)}")
+            print(f"tcp {OLD_HOST}:8888 {tcp(OLD_HOST, 8888)}")
 
             env_files = [p for p in (ROOT / ".env", ROOT / "infra" / ".env") if p.is_file()]
-            if not env_files:
-                raise SystemExit("no .env found")
-            # Контейнеры читают env_file рядом с compose, это infra/.env, если он есть.
             primary = ROOT / "infra" / ".env"
             if not primary.is_file():
                 primary = env_files[0]
-            env = load_env(primary)
-            current = env.get("HTTPS_PROXY") or env.get("HTTP_PROXY")
+            env: dict[str, str] = {}
+            for raw in primary.read_text().splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                env[key.strip()] = value.strip().strip('"').strip("'")
+            current = env.get("HTTPS_PROXY") or env.get("HTTP_PROXY") or ""
             token = env.get("ADMIN_BOT_TOKEN") or env.get("TELEGRAM_BOT_TOKEN") or ""
             admins = [a.strip() for a in env.get("ADMIN_IDS", "").split(",") if a.strip()]
-            if not current or not token or not admins:
-                raise SystemExit(f"missing fields proxy={bool(current)} token={bool(token)} admins={len(admins)} file={primary}")
-
             parts = urlsplit(current)
-            if not parts.hostname:
-                raise SystemExit("HTTPS_PROXY has no host")
-            current_port = parts.port or (443 if parts.scheme == "https" else 80)
-            ports: list[int] = []
-            for port in (current_port, 8888, 443, 80):
-                if port not in ports:
-                    ports.append(port)
+            print(f"current proxy {mask(current) if current else 'MISSING'} file {primary}")
+            if not token or not admins:
+                raise SystemExit("admin token or ADMIN_IDS missing")
 
-            def build_url(port: int, with_auth: bool) -> str:
-                auth = ""
-                if with_auth and parts.username:
-                    auth = parts.username
-                    if parts.password:
-                        auth += ":" + parts.password
-                    auth += "@"
-                return urlunsplit((parts.scheme or "http", f"{auth}{NEW_HOST}:{port}", "", "", ""))
-
-            def curl(proxy: str, url: str, payload: dict | None = None) -> tuple[int, str, str]:
-                cmd = ["curl", "-sS", "--max-time", "25", "-x", proxy, "-w", "\n%{http_code}"]
-                if payload is not None:
-                    cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
-                cmd.append(url)
-                proc = subprocess.run(cmd, capture_output=True, text=True)
+            def curl(proxy: str) -> tuple[int, bool, str]:
+                proc = subprocess.run(
+                    ["curl", "-4", "-sS", "--connect-timeout", "8", "--max-time", "15",
+                     "-x", proxy, "-w", "\n%{http_code}",
+                     f"https://api.telegram.org/bot{token}/getMe"],
+                    capture_output=True, text=True,
+                )
                 err = re.sub(r"://[^@\s/]+:[^@\s/]*@", "://***@", proc.stderr).strip()
                 out = proc.stdout or ""
-                if "\n" in out:
-                    body, code_s = out.rsplit("\n", 1)
-                else:
-                    body, code_s = out, "0"
+                body, _, code_s = out.rpartition("\n")
                 try:
-                    code = int(code_s.strip() or "0")
+                    code = int((code_s or "0").strip() or "0")
                 except ValueError:
                     code = 0
-                return code, body, err
-
-            candidates: list[str] = []
-            for port in ports:
-                candidates.append(build_url(port, True))
-            if parts.username:
-                for port in ports:
-                    candidates.append(build_url(port, False))
-
-            chosen = None
-            for proxy in candidates:
-                code, body, err = curl(proxy, f"https://api.telegram.org/bot{token}/getMe")
                 ok = False
-                username = ""
                 try:
-                    data = json.loads(body)
-                    ok = bool(data.get("ok"))
-                    username = str((data.get("result") or {}).get("username") or "")
+                    ok = bool(json.loads(body).get("ok"))
                 except json.JSONDecodeError:
                     ok = False
-                print(f"try {mask(proxy)} -> http {code} ok={ok} {err[:180]}")
+                return code, ok, err[:160]
+
+            open_ports = [p for p in (8888, 80, 443, 3128, 8080, 8443) if tcp(NEW_HOST, p, 4) == "open"]
+            print("open ports", open_ports or "none")
+            chosen = None
+            for port in open_ports:
+                auth = ""
+                if parts.username:
+                    auth = parts.username + (":" + parts.password if parts.password else "") + "@"
+                proxy = urlunsplit((parts.scheme or "http", f"{auth}{NEW_HOST}:{port}", "", "", ""))
+                code, ok, err = curl(proxy)
+                print(f"try {mask(proxy)} http={code} ok={ok} {err}")
                 if ok:
                     chosen = proxy
-                    print(f"telegram account @{username}")
                     break
+                if parts.username:
+                    bare = urlunsplit(("http", f"{NEW_HOST}:{port}", "", "", ""))
+                    code, ok, err = curl(bare)
+                    print(f"try {mask(bare)} http={code} ok={ok} {err}")
+                    if ok:
+                        chosen = bare
+                        break
             if not chosen:
-                raise SystemExit("new proxy did not reach Telegram, .env left unchanged")
+                raise SystemExit("app server cannot use 178.236.251.155 to reach Telegram; .env unchanged")
 
-            text = (
-                "Тест: уведомления GhostLine идут через новый прокси "
-                "178.236.251.155 (Хельсинки). Путь до Telegram живой."
-            )
+            text = "Тест: уведомления GhostLine идут через новый прокси 178.236.251.155 (Хельсинки)."
             for chat in admins:
-                code, body, err = curl(
-                    chosen,
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    {"chat_id": chat, "text": text},
+                proc = subprocess.run(
+                    ["curl", "-4", "-sS", "--connect-timeout", "8", "--max-time", "20",
+                     "-x", chosen, "-H", "Content-Type: application/json",
+                     "-d", json.dumps({"chat_id": chat, "text": text}),
+                     "-w", "\n%{http_code}",
+                     f"https://api.telegram.org/bot{token}/sendMessage"],
+                    capture_output=True, text=True,
                 )
-                msg_id = ""
+                body, _, code_s = (proc.stdout or "").rpartition("\n")
                 try:
                     data = json.loads(body)
-                    msg_id = str((data.get("result") or {}).get("message_id") or "")
-                    ok = bool(data.get("ok"))
                 except json.JSONDecodeError:
-                    ok = False
-                print(f"send {chat}: http {code} ok={ok} message_id={msg_id} {err[:180]}")
-                if not ok:
-                    raise SystemExit("test message was not accepted")
+                    data = {}
+                print(f"send {chat} http={code_s.strip()} ok={data.get('ok')} message_id={(data.get('result') or {}).get('message_id')}")
+                if not data.get("ok"):
+                    raise SystemExit("Telegram did not accept the test message")
 
             def rewrite(path: Path) -> None:
                 raw = path.read_text()
-                def repl(match: re.Match[str]) -> str:
-                    key, value = match.group(1), match.group(2)
-                    if "://" not in value:
-                        return match.group(0)
-                    return f"{key}={chosen}"
-                updated, n = re.subn(r"^((?:HTTPS|HTTP)_PROXY)=(.*)$", repl, raw, flags=re.M)
+                updated, n = re.subn(
+                    r"^((?:HTTPS|HTTP)_PROXY)=.*$",
+                    lambda m: f"{m.group(1)}={chosen}",
+                    raw,
+                    flags=re.M,
+                )
                 if n:
                     path.write_text(updated)
                 print(f"rewrote {path} lines={n} -> {mask(chosen)}")
 
             for path in env_files:
                 rewrite(path)
-
-            compose = ROOT / "infra"
             proc = subprocess.run(
                 ["docker", "compose", "up", "-d", "--force-recreate", "--no-deps",
                  "backend", "bot", "admin-bot", "support-bot"],
-                cwd=compose, capture_output=True, text=True,
+                cwd=ROOT / "infra", capture_output=True, text=True,
             )
-            print(proc.stdout[-2000:])
-            print(proc.stderr[-2000:])
+            print((proc.stdout + proc.stderr)[-1500:])
             if proc.returncode != 0:
-                raise SystemExit(f"compose recreate failed: {proc.returncode}")
-            print("containers recreated with the new proxy")
+                raise SystemExit(f"compose recreate failed {proc.returncode}")
+            print("containers recreated")
             PY
             REMOTE

@@ -1,0 +1,76 @@
+name: Switch Telegram proxy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/switch-proxy.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trace today's Telegram signup
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 45.146.131.100
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 3m
+          script: |
+            bash -s << 'REMOTE'
+            set +e
+            cd /root/ghostline_v2/infra
+            python3 - << 'PY'
+            import subprocess
+            from pathlib import Path
+            env = {}
+            for raw in Path(".env").read_text().splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip().strip('"').strip("'")
+            sql = r"""
+            SELECT 'users_updated_today' AS what, count(*)::text
+            FROM "User" WHERE "updatedAt" >= '2026-11-20 19:00:00+00'
+            UNION ALL
+            SELECT 'users_terms_today', count(*)::text
+            FROM "User" WHERE "termsAcceptedAt" >= '2026-11-20 19:00:00+00'
+            UNION ALL
+            SELECT 'messages_today', count(*)::text
+            FROM "Message" WHERE "createdAt" >= '2026-11-20 19:00:00+00'
+            UNION ALL
+            SELECT 'welcome_today', count(*)::text
+            FROM "CasperTransaction" WHERE reason = 'welcome_bonus' AND "createdAt" >= '2026-11-20 19:00:00+00';
+
+            SELECT to_char("updatedAt" AT TIME ZONE 'Asia/Yekaterinburg', 'MM-DD HH24:MI') AS touched_yekt,
+                   to_char("createdAt" AT TIME ZONE 'Asia/Yekaterinburg', 'MM-DD HH24:MI') AS created_yekt,
+                   ("telegramId" IS NOT NULL) AS has_tg,
+                   onboarding_done
+            FROM (
+              SELECT "updatedAt", "createdAt", "telegramId", "onboardingDone" AS onboarding_done
+              FROM "User"
+              WHERE "updatedAt" >= '2026-11-20 19:00:00+00'
+                 OR "termsAcceptedAt" >= '2026-11-20 19:00:00+00'
+                 OR "day_start" >= '2026-11-20 19:00:00+00'
+              ORDER BY "updatedAt" DESC
+              LIMIT 12
+            ) t;
+            """
+            proc = subprocess.run(
+                ["docker", "compose", "exec", "-T", "postgres", "psql", "-U", env["POSTGRES_USER"], "-d", env["POSTGRES_DB"], "-c", sql],
+                capture_output=True, text=True,
+            )
+            print(proc.stdout)
+            print(proc.stderr[-600:])
+            PY
+            echo "--- backend auth lines ---"
+            cid=$(docker compose ps -q backend)
+            docker logs --since 2026-11-20T19:00:00Z "$cid" 2>&1 | grep -E 'telegram-bot|AdminNotify|auth/telegram' | sed -E 's/[0-9]{8,}/<id>/g' | tail -n 40
+            echo "--- bot lines ---"
+            bid=$(docker compose ps -q bot)
+            docker inspect -f 'bot_started={{.State.StartedAt}}' "$bid"
+            docker logs --since 2026-11-20T19:00:00Z "$bid" 2>&1 | grep -Ei 'error|telegram-bot|не удалось|401|403|500' | sed -E 's/[0-9]{8,}/<id>/g' | tail -n 40
+            echo "--- done ---"
+            REMOTE

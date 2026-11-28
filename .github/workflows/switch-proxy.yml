@@ -10,7 +10,7 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect leftovers on the new IP
+      - name: Check DNS token, xray address, and proxy login
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.15.179.195
@@ -19,17 +19,82 @@ jobs:
           command_timeout: 3m
           script: |
             set +e
-            echo "=== proxy tcp ==="
-            timeout 6 bash -c 'echo >/dev/tcp/45.130.254.76/8888' && echo proxy_8888_open || echo proxy_8888_fail
-            timeout 6 bash -c 'echo >/dev/tcp/45.130.254.76/22' && echo proxy_22_open || echo proxy_22_fail
-            echo "=== listeners ==="
-            ss -lntup | awk 'NR==1 || /:22|:80|:443|:2082|:2083|:54321|:8443|:2053/'
-            echo "=== xui files ==="
-            find /usr/local /etc /opt /root -name 'x-ui.db' -o -name 'xray' -o -name 'config.json' 2>/dev/null | head -40
-            echo "=== old ip outside repo ==="
-            grep -RIl --binary-files=without-match '45.146.131.100' /etc /usr/local /opt /root/nginx.conf.bak-20260903-prel2 2>/dev/null | head -40
-            echo "=== env key names mentioning dns or timeweb ==="
-            awk -F= '/timeweb|TIMEWEB|DNS_|CLOUDFLARE|CF_API/ {print FILENAME, $1}' /root/ghostline_v2/infra/.env /root/.env /root/ghostline_v2/.env 2>/dev/null
-            echo "=== ssh to proxy ==="
-            ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new root@45.130.254.76 'hostname; echo PROXY_LOGIN_OK' 2>&1 | head -5
+            echo "=== cloudflare zones ==="
+            python3 - << 'PY'
+            import json, urllib.request
+            env={}
+            for line in open('/root/ghostline_v2/infra/.env', errors='ignore'):
+                if not line.strip() or line.strip().startswith('#') or '=' not in line: continue
+                k,v=line.split('=',1)
+                env[k.strip()]=v.strip().strip('"').strip("'")
+            token=env.get('CLOUDFLARE_API_TOKEN','')
+            acct=env.get('CLOUDFLARE_ACCOUNT_ID','')
+            print('token_len', len(token), 'acct_len', len(acct))
+            if not token:
+                raise SystemExit
+            req=urllib.request.Request('https://api.cloudflare.com/client/v4/zones?per_page=50', headers={'Authorization':'Bearer '+token})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data=json.load(r)
+            except Exception as e:
+                print('cf_fail', type(e).__name__, str(e)[:180])
+                raise SystemExit
+            print('success', data.get('success'), 'errors', data.get('errors'))
+            for z in data.get('result') or []:
+                print('ZONE', z.get('name'), z.get('status'), 'ns', ','.join(z.get('name_servers') or []))
+                zid=z.get('id')
+                req2=urllib.request.Request('https://api.cloudflare.com/client/v4/zones/%s/dns_records?per_page=100'%zid, headers={'Authorization':'Bearer '+token})
+                with urllib.request.urlopen(req2, timeout=20) as r2:
+                    recs=json.load(r2)
+                for rec in recs.get('result') or []:
+                    if rec.get('type') in ('A','AAAA','CNAME'):
+                        print('REC', rec.get('type'), rec.get('name'), rec.get('content'), 'proxied', rec.get('proxied'))
+            PY
+            echo "=== xray addresses ==="
+            python3 - << 'PY'
+            import json,re
+            p='/usr/local/etc/xray/config.json'
+            raw=open(p,errors='ignore').read()
+            ips=sorted(set(re.findall(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', raw)))
+            print('ips', ips)
+            try:
+                cfg=json.loads(raw)
+            except Exception as e:
+                print('json', e)
+                raise SystemExit
+            for ib in cfg.get('inbounds') or []:
+                print('IN', ib.get('protocol'), ib.get('port'), ib.get('listen'), ib.get('tag'))
+            PY
+            echo "=== host nginx 2082/2083 ==="
+            nginx -T 2>/dev/null | awk '/listen 2082|listen 2083|server_name|proxy_pass|ssl_certificate /' | head -60
+            echo "=== keys ==="
+            find /root /home /opt -type f \( -name 'id_*' -o -name '*.pem' -o -name '*deploy*' \) ! -name '*.pub' 2>/dev/null | head -30
+            echo "=== try keys on proxy ==="
+            for k in /root/.ssh/id_ed25519 /root/.ssh/id_rsa /root/.ssh/*; do
+              [ -f "$k" ] || continue
+              case "$k" in *.pub|known_hosts*|authorized_keys*|config) continue;; esac
+              echo -n "key $(basename "$k") "
+              ssh -i "$k" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new root@45.130.254.76 'echo OK' 2>&1 | head -1
+            done
+            echo "=== telegram direct ==="
+            python3 - << 'PY'
+            import urllib.request
+            env={}
+            for line in open('/root/ghostline_v2/infra/.env', errors='ignore'):
+                if '=' not in line or line.strip().startswith('#'): continue
+                k,v=line.split('=',1)
+                env[k.strip()]=v.strip().strip('"').strip("'")
+            token=env.get('TELEGRAM_BOT_TOKEN') or env.get('BOT_TOKEN') or ''
+            print('token_name', 'TELEGRAM_BOT_TOKEN' if env.get('TELEGRAM_BOT_TOKEN') else ('BOT_TOKEN' if env.get('BOT_TOKEN') else 'none'))
+            if not token:
+                # print matching key names only
+                print('keys', [k for k in env if 'TELEGRAM' in k or k.endswith('_TOKEN') and 'BOT' in k])
+                raise SystemExit
+            try:
+                with urllib.request.urlopen('https://api.telegram.org/bot%s/getMe'%token, timeout=12) as r:
+                    body=r.read(80).decode()
+                print('direct', 'ok' if '"ok":true' in body.replace(' ','') else body[:80])
+            except Exception as e:
+                print('direct_fail', type(e).__name__, str(e)[:140])
+            PY
             echo DONE

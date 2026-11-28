@@ -20,7 +20,7 @@ jobs:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: 45.146.131.100
+          host: 45.15.179.195
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 15m

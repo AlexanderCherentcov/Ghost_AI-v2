@@ -7,10 +7,10 @@ on:
       - '.github/workflows/switch-proxy.yml'
 
 jobs:
-  inspect:
+  dns:
     runs-on: ubuntu-latest
     steps:
-      - name: Test providers and the 2082 router
+      - name: Point GhostLine DNS at the new address
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.15.179.195
@@ -19,18 +19,69 @@ jobs:
           command_timeout: 3m
           script: |
             set +e
-            echo "=== direct providers ==="
-            for url in https://openrouter.ai/api/v1/models https://api.openai.com/v1/models https://api.telegram.org; do
-              code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 15 "$url")
-              echo "$code $url"
-            done
-            echo "=== via proxy ==="
-            code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 12 -x http://45.130.254.76:8888 https://openrouter.ai/api/v1/models)
-            echo "$code via_proxy openrouter"
-            echo "=== stream map ==="
-            nginx -T 2>/dev/null | awk 'BEGIN{p=0} /stream \{/{p=1} p{print} /^}/{if(p){exit}}' | sed -E 's#(ssl_certificate_key|ssl_certificate)[[:space:]].*#\1 REDACTED#'
-            echo "=== timeweb files ==="
-            grep -RIl --binary-files=without-match -e timeweb -e TIMEWEB /root /opt /etc --exclude-dir=venv --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null | head -20
-            echo "=== bot proxy errors ==="
-            docker logs --tail 15 infra-bot-1 2>&1 | sed -E 's/[0-9]{8,}:[A-Za-z0-9_-]{20,}/TOKEN/g' | cut -c1-180
+            python3 - << 'PY'
+            import json, os, re, urllib.request, urllib.error
+            OLD="45.146.131.100"
+            NEW="45.15.179.195"
+            token=None
+            conf="/root/.acme.sh/account.conf"
+            names=[]
+            if os.path.exists(conf):
+                for line in open(conf, errors="ignore"):
+                    m=re.match(r"\s*(SAVED_)?([A-Za-z0-9_]+)=", line)
+                    if m and ("TW" in m.group(2) or "TIMEWEB" in m.group(2) or "TOKEN" in m.group(2).upper()):
+                        names.append(m.group(2))
+                    if token is None and re.match(r"\s*(SAVED_)?TW_Token=", line):
+                        token=line.split("=",1)[1].strip().strip("'").strip('"')
+            print("account_keys", names)
+            print("token", "yes" if token else "no")
+            if not token:
+                raise SystemExit(0)
+            def call(method, url, body=None):
+                data=None if body is None else json.dumps(body).encode()
+                req=urllib.request.Request(url, data=data, method=method, headers={
+                    "Authorization":"Bearer "+token,
+                    "Content-Type":"application/json",
+                })
+                try:
+                    with urllib.request.urlopen(req, timeout=25) as r:
+                        raw=r.read().decode()
+                        return r.status, json.loads(raw) if raw else {}
+                except urllib.error.HTTPError as e:
+                    err=e.read().decode()[:300]
+                    print("HTTP", e.code, method, url.split("/api/",1)[-1], err)
+                    return e.code, None
+            status, data = call("GET", "https://api.timeweb.cloud/api/v1/domains/ghostlineai.ru/dns-records?limit=100&offset=0")
+            print("list_status", status)
+            if not data:
+                raise SystemExit(0)
+            recs=data.get("dns_records") or data.get("result") or []
+            print("count", len(recs), "meta", data.get("meta"))
+            for rec in recs:
+                d=rec.get("data") or {}
+                print("REC", rec.get("id"), rec.get("type"), d.get("subdomain") or "@", d.get("value"), "ttl", rec.get("ttl"))
+            changed=0
+            for rec in recs:
+                d=rec.get("data") or {}
+                if rec.get("type")!="A" or d.get("value")!=OLD:
+                    continue
+                body={"type":"A","value":NEW}
+                if rec.get("ttl"):
+                    body["ttl"]=rec.get("ttl")
+                code, resp = call("PATCH", "https://api.timeweb.cloud/api/v2/domains/ghostlineai.ru/dns-records/%s"%rec.get("id"), body)
+                print("patch", rec.get("id"), d.get("subdomain") or "@", code)
+                if code and code<300:
+                    changed+=1
+            print("changed", changed)
+            status, data = call("GET", "https://api.timeweb.cloud/api/v1/domains/ghostlineai.ru/dns-records?limit=100&offset=0")
+            if data:
+                for rec in data.get("dns_records") or []:
+                    d=rec.get("data") or {}
+                    if rec.get("type")=="A":
+                        print("NOW", rec.get("id"), d.get("subdomain") or "@", d.get("value"))
+            PY
+            echo "=== auth ns ==="
+            dig +short A ghostlineai.ru @ns1.timeweb.ru
+            dig +short A www.ghostlineai.ru @ns1.timeweb.ru
+            dig +short A api.ghostlineai.ru @ns1.timeweb.ru
             echo DONE

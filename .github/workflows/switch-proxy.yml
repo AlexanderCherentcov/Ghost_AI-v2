@@ -10,7 +10,7 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect new server
+      - name: Inspect leftovers on the new IP
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 45.15.179.195
@@ -19,57 +19,17 @@ jobs:
           command_timeout: 3m
           script: |
             set +e
-            echo "=== identity ==="
-            hostname
-            date -u
-            ip -4 -br addr
-            echo "=== public ==="
-            curl -4 -s --max-time 8 https://ifconfig.me; echo
-            echo "=== repo ==="
-            cd /root/ghostline_v2 2>/dev/null && git rev-parse --short HEAD && git status -sb && git remote -v
-            echo "=== docker ==="
-            docker ps --format '{{.Names}} {{.Status}}' | sort
-            echo "=== old ip hits (paths only) ==="
-            grep -RIl --binary-files=without-match '45.146.131.100' /root/ghostline_v2 /etc /usr/local /opt 2>/dev/null | head -80
-            echo "=== proxy host masked ==="
-            python3 - << 'PY'
-            import os
-            p=None
-            for line in open('/root/ghostline_v2/infra/.env','r',errors='ignore'):
-                if line.startswith('HTTPS_PROXY=') or line.startswith('HTTP_PROXY='):
-                    v=line.split('=',1)[1].strip().strip('"').strip("'")
-                    import re
-                    print(line.split('=',1)[0], re.sub(r':[^:@/]*@', ':***@', v))
-            PY
-            echo "=== telegram via proxy ==="
-            python3 - << 'PY'
-            import os,re,urllib.request
-            proxy=None
-            for line in open('/root/ghostline_v2/infra/.env','r',errors='ignore'):
-                if line.startswith('HTTPS_PROXY='):
-                    proxy=line.split('=',1)[1].strip().strip('"').strip("'")
-            token=None
-            for line in open('/root/ghostline_v2/infra/.env','r',errors='ignore'):
-                if line.startswith('TELEGRAM_BOT_TOKEN=') or line.startswith('BOT_TOKEN='):
-                    token=line.split('=',1)[1].strip().strip('"').strip("'")
-                    break
-            if not token:
-                print('no bot token name found')
-            else:
-                handlers=[]
-                if proxy and not proxy.startswith('socks'):
-                    handlers.append(urllib.request.ProxyHandler({'http':proxy,'https':proxy}))
-                opener=urllib.request.build_opener(*handlers)
-                try:
-                    with opener.open('https://api.telegram.org/bot%s/getMe'%token, timeout=15) as r:
-                        body=r.read(200).decode()
-                    print('getMe', 'ok' if '"ok":true' in body.replace(' ','') else body[:120])
-                except Exception as e:
-                    print('getMe fail', type(e).__name__, str(e)[:160])
-            PY
-            echo "=== dns tools ==="
-            ls /root 2>/dev/null | head
-            command -v timewebctl; command -v tw; ls /root/.timeweb 2>/dev/null
-            echo "=== ufw ==="
-            ufw status 2>/dev/null | head -40
+            echo "=== proxy tcp ==="
+            timeout 6 bash -c 'echo >/dev/tcp/45.130.254.76/8888' && echo proxy_8888_open || echo proxy_8888_fail
+            timeout 6 bash -c 'echo >/dev/tcp/45.130.254.76/22' && echo proxy_22_open || echo proxy_22_fail
+            echo "=== listeners ==="
+            ss -lntup | awk 'NR==1 || /:22|:80|:443|:2082|:2083|:54321|:8443|:2053/'
+            echo "=== xui files ==="
+            find /usr/local /etc /opt /root -name 'x-ui.db' -o -name 'xray' -o -name 'config.json' 2>/dev/null | head -40
+            echo "=== old ip outside repo ==="
+            grep -RIl --binary-files=without-match '45.146.131.100' /etc /usr/local /opt /root/nginx.conf.bak-20260903-prel2 2>/dev/null | head -40
+            echo "=== env key names mentioning dns or timeweb ==="
+            awk -F= '/timeweb|TIMEWEB|DNS_|CLOUDFLARE|CF_API/ {print FILENAME, $1}' /root/ghostline_v2/infra/.env /root/.env /root/ghostline_v2/.env 2>/dev/null
+            echo "=== ssh to proxy ==="
+            ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new root@45.130.254.76 'hostname; echo PROXY_LOGIN_OK' 2>&1 | head -5
             echo DONE
